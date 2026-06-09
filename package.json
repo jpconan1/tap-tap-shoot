@@ -1,0 +1,9 @@
+{
+  "name": "tap-tap-shoot-prototype",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test"
+  }
+}
