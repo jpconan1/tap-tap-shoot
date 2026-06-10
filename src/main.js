@@ -98,6 +98,8 @@ const MOVE_ICON_FRAME_WIDTH = 128;
 const MOVE_ICON_FRAME_HEIGHT = 128;
 const TITLE_FRAME_WIDTH = 512;
 const TITLE_FRAME_HEIGHT = 256;
+const TITLE_BUTTON_FRAME_WIDTH = 256;
+const TITLE_BUTTON_FRAME_HEIGHT = 128;
 const REMATCH_BUTTON_FRAME_WIDTH = 256;
 const REMATCH_BUTTON_FRAME_HEIGHT = 128;
 const AP_SLOT_COUNT = 4;
@@ -306,6 +308,12 @@ function createPlayerState() {
 
 const app = document.querySelector('#app');
 const RANKED_PLAYER_ID_KEY = 'tapTapShoot.rankedPlayerId';
+const FINDING_MATCH_DOODLES = Object.freeze([
+  'title/findingmatch',
+  'title/findingmatch1',
+  'title/findingmatch2',
+  'title/findingmatch3',
+]);
 let state = createGameState();
 let screen = 'title';
 let playMode = 'local';
@@ -316,6 +324,8 @@ let p1QueuedMove = null;
 let rankedSocket = null;
 let rankedPlayerId = window.localStorage.getItem(RANKED_PLAYER_ID_KEY);
 let rankedSnapshot = null;
+let findingMatchStep = 0;
+let findingMatchTimer = null;
 let stagePresentation = { kind: 'doodle', name: 'reloading', flip: false };
 let lastSceneAudioKey = null;
 let lastMoves = {
@@ -447,6 +457,8 @@ function renderStagePresentation() {
 }
 
 function renderTitleScreen() {
+  stopFindingMatchTicker();
+
   app.innerHTML = `
     <section class="title-screen" aria-label="Title screen">
       <canvas
@@ -459,19 +471,31 @@ function renderTitleScreen() {
         aria-label="Tap Tap Shoot"
       ></canvas>
 
-      <button class="play-button" data-action="play" aria-label="Play">
-        <canvas
-          class="sprite-canvas play-button-art"
-          data-doodle="title/PLAY_BUTTON"
-          data-frame-width="${TITLE_FRAME_WIDTH}"
-          data-frame-height="${TITLE_FRAME_HEIGHT}"
-          width="${TITLE_FRAME_WIDTH}"
-          height="${TITLE_FRAME_HEIGHT}"
-          aria-hidden="true"
-        ></canvas>
-      </button>
+      <div class="title-actions">
+        <button class="play-button" data-action="play" aria-label="Play computer">
+          <canvas
+            class="sprite-canvas play-button-art"
+            data-doodle="title/playvcom"
+            data-frame-width="${TITLE_BUTTON_FRAME_WIDTH}"
+            data-frame-height="${TITLE_BUTTON_FRAME_HEIGHT}"
+            width="${TITLE_BUTTON_FRAME_WIDTH}"
+            height="${TITLE_BUTTON_FRAME_HEIGHT}"
+            aria-hidden="true"
+          ></canvas>
+        </button>
 
-      <button class="ghost ranked-button" data-action="ranked">Ranked</button>
+        <button class="play-button online-button" data-action="ranked" aria-label="Play online">
+          <canvas
+            class="sprite-canvas play-button-art"
+            data-doodle="title/playonline"
+            data-frame-width="${TITLE_BUTTON_FRAME_WIDTH}"
+            data-frame-height="${TITLE_BUTTON_FRAME_HEIGHT}"
+            width="${TITLE_BUTTON_FRAME_WIDTH}"
+            height="${TITLE_BUTTON_FRAME_HEIGHT}"
+            aria-hidden="true"
+          ></canvas>
+        </button>
+      </div>
     </section>
   `;
 
@@ -481,6 +505,8 @@ function renderTitleScreen() {
 }
 
 function renderQueueScreen() {
+  startFindingMatchTicker();
+
   app.innerHTML = `
     <section class="title-screen queue-screen" aria-label="Ranked queue">
       <canvas
@@ -492,7 +518,15 @@ function renderQueueScreen() {
         height="${TITLE_FRAME_HEIGHT}"
         aria-label="Tap Tap Shoot"
       ></canvas>
-      <p class="queue-copy">Finding ranked duel...</p>
+      <canvas
+        class="sprite-canvas finding-match-art"
+        data-doodle="${FINDING_MATCH_DOODLES[findingMatchStep]}"
+        data-frame-width="${TITLE_BUTTON_FRAME_WIDTH}"
+        data-frame-height="${TITLE_BUTTON_FRAME_HEIGHT}"
+        width="${TITLE_BUTTON_FRAME_WIDTH}"
+        height="${TITLE_BUTTON_FRAME_HEIGHT}"
+        aria-label="Finding match"
+      ></canvas>
       <button class="ghost" data-action="cancel-queue">Cancel</button>
     </section>
   `;
@@ -789,6 +823,7 @@ function startRankedFromTitle() {
   screen = 'queue';
   p1QueuedMove = null;
   rankedSnapshot = null;
+  findingMatchStep = 0;
   connectRankedSocket();
   render();
 }
@@ -846,6 +881,7 @@ function handleRankedMessage(message) {
 }
 
 function applyRankedSnapshot(snapshot) {
+  stopFindingMatchTicker();
   const previousPhase = rankedSnapshot?.phase;
   rankedSnapshot = snapshot;
   screen = 'playing';
@@ -961,12 +997,38 @@ function sendRankedMessage(message) {
 
 function leaveRanked() {
   closeRankedSocket();
+  stopFindingMatchTicker();
   playMode = 'local';
   rankedSnapshot = null;
   screen = 'title';
   roundPhase = 'idle';
   p1QueuedMove = null;
   render();
+}
+
+function startFindingMatchTicker() {
+  if (findingMatchTimer) {
+    return;
+  }
+
+  findingMatchTimer = setInterval(() => {
+    if (screen !== 'queue') {
+      stopFindingMatchTicker();
+      return;
+    }
+
+    findingMatchStep = (findingMatchStep + 1) % FINDING_MATCH_DOODLES.length;
+    render();
+  }, BEAT_MS);
+}
+
+function stopFindingMatchTicker() {
+  if (!findingMatchTimer) {
+    return;
+  }
+
+  clearInterval(findingMatchTimer);
+  findingMatchTimer = null;
 }
 
 function closeRankedSocket() {

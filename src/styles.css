@@ -87,8 +87,7 @@ button {
   padding-bottom: 54px;
 }
 
-.title-logo,
-.play-button-art {
+.title-logo {
   display: block;
   width: 512px;
   height: 256px;
@@ -102,10 +101,18 @@ button {
   transform: rotate(-0.3deg);
 }
 
+.title-actions {
+  display: flex;
+  gap: 24px;
+  align-items: center;
+  justify-content: center;
+  margin-top: 34px;
+}
+
 .play-button {
   display: block;
-  width: 512px;
-  height: 256px;
+  width: 256px;
+  height: 128px;
   min-width: 0;
   padding: 0;
   border: 0;
@@ -123,16 +130,19 @@ button {
   transform: translateY(3px) rotate(0.2deg);
 }
 
-.ranked-button {
-  margin-top: -42px;
-  font-size: 1.55rem;
+.play-button-art,
+.finding-match-art {
+  display: block;
+  width: 256px;
+  height: 128px;
+  min-height: 0;
+  object-fit: contain;
+  image-rendering: auto;
+  filter: drop-shadow(3px 6px 0 rgba(29, 27, 24, 0.1));
 }
 
-.queue-copy {
-  margin: -32px 0 12px;
-  color: var(--ink);
-  font-size: 1.35rem;
-  font-weight: 950;
+.finding-match-art {
+  margin-top: 34px;
 }
 
 .doodle-stage {
