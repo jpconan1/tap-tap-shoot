@@ -2409,8 +2409,23 @@ function mountSpriteRenderers(canvases) {
     flip: canvas.dataset.flip === 'true',
   }));
 
+  doodleRenderers.forEach(({ canvas, image }) => {
+    installSpriteFallback(canvas, image);
+  });
   drawDoodleFrame(performance.now());
   ensureDoodleLoop();
+}
+
+function installSpriteFallback(canvas, image) {
+  canvas.style.backgroundImage = `url("${image.src}")`;
+  canvas.style.backgroundPosition = 'top left';
+  canvas.style.backgroundRepeat = 'no-repeat';
+  canvas.style.backgroundSize = '100% auto';
+}
+
+function shouldKeepSpriteFallback() {
+  return /iPhone|iPad|iPod/.test(navigator.userAgent)
+    || (navigator.maxTouchPoints > 1 && /Safari/.test(navigator.userAgent));
 }
 
 function loadDoodleSheet(doodle) {
@@ -2472,5 +2487,9 @@ function drawDoodleFrame(now) {
       canvas.height,
     );
     context.restore();
+
+    if (!shouldKeepSpriteFallback()) {
+      canvas.style.backgroundImage = 'none';
+    }
   });
 }
