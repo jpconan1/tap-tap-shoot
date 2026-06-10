@@ -109,7 +109,18 @@ button {
   margin-top: 34px;
 }
 
-.play-button {
+.opponent-actions {
+  display: grid;
+  grid-template-columns: repeat(2, 256px);
+  gap: 18px 24px;
+  align-items: center;
+  justify-content: center;
+  margin-top: 22px;
+}
+
+.play-button,
+.opponent-button {
+  position: relative;
   display: block;
   width: 256px;
   height: 128px;
@@ -122,15 +133,22 @@ button {
   transition: transform 120ms ease, filter 120ms ease;
 }
 
-.play-button:hover {
+.opponent-button:nth-child(2n) {
+  transform: rotate(-0.35deg);
+}
+
+.play-button:hover,
+.opponent-button:hover {
   transform: translateY(-3px) rotate(0deg);
 }
 
-.play-button:active {
+.play-button:active,
+.opponent-button:active {
   transform: translateY(3px) rotate(0.2deg);
 }
 
 .play-button-art,
+.opponent-button-art,
 .finding-match-art {
   display: block;
   width: 256px;
@@ -139,6 +157,19 @@ button {
   object-fit: contain;
   image-rendering: auto;
   filter: drop-shadow(3px 6px 0 rgba(29, 27, 24, 0.1));
+}
+
+.crossed-opponent-mark {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 256px;
+  height: 128px;
+  min-height: 0;
+  object-fit: contain;
+  image-rendering: auto;
+  pointer-events: none;
+  filter: drop-shadow(2px 4px 0 rgba(29, 27, 24, 0.08));
 }
 
 .finding-match-art {
@@ -407,8 +438,8 @@ button {
   filter: drop-shadow(2px 4px 0 rgba(29, 27, 24, 0.1));
 }
 
-.rematch-button {
-  grid-column: 3 / span 2;
+.sheet-button {
+  grid-column: 2 / span 2;
   display: block;
   width: 256px;
   height: 128px;
@@ -421,15 +452,24 @@ button {
   transition: transform 120ms ease;
 }
 
-.rematch-button:hover {
+.sheet-button:nth-child(2) {
+  grid-column: 4 / span 2;
+  transform: rotate(0.45deg);
+}
+
+.sheet-button:only-child {
+  grid-column: 3 / span 2;
+}
+
+.sheet-button:hover {
   transform: translateY(-2px) rotate(0deg);
 }
 
-.rematch-button:active {
+.sheet-button:active {
   transform: translateY(2px) rotate(0.2deg);
 }
 
-.rematch-button-art {
+.sheet-button-art {
   display: block;
   width: 256px;
   height: 128px;

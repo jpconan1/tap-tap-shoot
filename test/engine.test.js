@@ -112,6 +112,23 @@ test('rival AI maps larger AP matchups onto strategy buckets', () => {
   assert.equal(chooseRivalMove(createStateWithAp(2, 3), fixedRoll(0.61)), 'shoot');
 });
 
+test('named rival AIs use distinct opening strategies', () => {
+  assert.equal(chooseRivalMove(createStateWithAp(1, 1), 'olJoe', fixedRoll(0)), 'shoot');
+  assert.equal(chooseRivalMove(createStateWithAp(1, 1), 'mackTheKnife', fixedRoll(0)), 'stab');
+  assert.equal(chooseRivalMove(createStateWithAp(1, 1), 'blastinDan', fixedRoll(0.69)), 'shoot');
+  assert.equal(chooseRivalMove(createStateWithAp(1, 1), 'katheyClever', fixedRoll(0.32)), 'block');
+});
+
+test('Kathey Clever reacts to the player last move', () => {
+  const state = {
+    ...createStateWithAp(1, 1),
+    history: [{ p1Move: 'stab' }],
+  };
+
+  assert.equal(chooseRivalMove(state, 'katheyClever', fixedRoll(0)), 'counterstab');
+  assert.equal(chooseRivalMove(state, 'katheyClever', fixedRoll(0.56)), 'block');
+});
+
 function createStateWithAp(rivalAp, playerAp) {
   return {
     players: {
