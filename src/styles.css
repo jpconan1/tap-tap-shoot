@@ -123,6 +123,18 @@ button {
   transform: translateY(3px) rotate(0.2deg);
 }
 
+.ranked-button {
+  margin-top: -42px;
+  font-size: 1.55rem;
+}
+
+.queue-copy {
+  margin: -32px 0 12px;
+  color: var(--ink);
+  font-size: 1.35rem;
+  font-weight: 950;
+}
+
 .doodle-stage {
   position: relative;
   display: grid;

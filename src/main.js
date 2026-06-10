@@ -61,6 +61,18 @@ const INTERACTION_DOODLES = Object.freeze({
   'block|counterstab': 'hiding',
   'counterstab|counterstab': 'hiding',
 });
+const SCENE_AUDIO = Object.freeze({
+  shooting: 'gunshot.wav',
+  stabbing: 'stab.wav',
+  hiding: 'nothing.wav',
+  clash: 'clash.wav',
+  collision: 'collision.wav',
+  counterstab: 'counterstab.wav',
+  dodge: 'wiff.wav',
+  reloading: 'reload.wav',
+  tricky: 'reload.wav',
+});
+const STARBURST_WIPE_AUDIO = 'starbust.wav';
 
 const DOODLE_FRAME_COUNT = 3;
 const DOODLE_FRAME_RATE = 8;
@@ -133,7 +145,12 @@ const RIVAL_POLICY = Object.freeze({
   '1-2': Object.freeze({ block: 32, counterstab: 28, shoot: 25, stab: 10, reload: 5 }),
 });
 const doodleSheets = new Map();
+const sceneAudio = new Map();
+const sceneAudioBuffers = new Map();
+const sceneAudioLoadPromises = new Map();
 let doodleRenderers = [];
+let sceneAudioContext = null;
+let sceneAudioUnlockPromise = null;
 
 function getMove(moveId) {
   return MOVES[moveId] ?? null;
@@ -288,13 +305,19 @@ function createPlayerState() {
 }
 
 const app = document.querySelector('#app');
+const RANKED_PLAYER_ID_KEY = 'tapTapShoot.rankedPlayerId';
 let state = createGameState();
 let screen = 'title';
+let playMode = 'local';
 let isTransitioning = false;
 let loopToken = 0;
 let roundPhase = 'idle';
 let p1QueuedMove = null;
+let rankedSocket = null;
+let rankedPlayerId = window.localStorage.getItem(RANKED_PLAYER_ID_KEY);
+let rankedSnapshot = null;
 let stagePresentation = { kind: 'doodle', name: 'reloading', flip: false };
+let lastSceneAudioKey = null;
 let lastMoves = {
   p1: 'reload',
   p2: 'reload',
@@ -322,7 +345,12 @@ function render() {
     return;
   }
 
-  const legalMoves = new Set(getPlayerLegalMoves(state, 'p1'));
+  if (screen === 'queue') {
+    renderQueueScreen();
+    return;
+  }
+
+  const legalMoves = new Set(getCurrentLegalMoves());
 
   app.innerHTML = `
     <section class="arena ${state.status}">
@@ -349,6 +377,7 @@ function render() {
   app.querySelector('[data-action="rematch"]')?.addEventListener('click', resetGame);
   app.querySelector('[data-action="reset"]').addEventListener('click', resetGame);
   mountSpriteRenderers(app.querySelectorAll('.sprite-canvas'));
+  playStageAudio();
 }
 
 function renderPickHistories() {
@@ -441,10 +470,34 @@ function renderTitleScreen() {
           aria-hidden="true"
         ></canvas>
       </button>
+
+      <button class="ghost ranked-button" data-action="ranked">Ranked</button>
     </section>
   `;
 
   app.querySelector('[data-action="play"]').addEventListener('click', startGameFromTitle);
+  app.querySelector('[data-action="ranked"]').addEventListener('click', startRankedFromTitle);
+  mountSpriteRenderers(app.querySelectorAll('.sprite-canvas'));
+}
+
+function renderQueueScreen() {
+  app.innerHTML = `
+    <section class="title-screen queue-screen" aria-label="Ranked queue">
+      <canvas
+        class="sprite-canvas title-logo"
+        data-doodle="title/LOGO"
+        data-frame-width="${TITLE_FRAME_WIDTH}"
+        data-frame-height="${TITLE_FRAME_HEIGHT}"
+        width="${TITLE_FRAME_WIDTH}"
+        height="${TITLE_FRAME_HEIGHT}"
+        aria-label="Tap Tap Shoot"
+      ></canvas>
+      <p class="queue-copy">Finding ranked duel...</p>
+      <button class="ghost" data-action="cancel-queue">Cancel</button>
+    </section>
+  `;
+
+  app.querySelector('[data-action="cancel-queue"]').addEventListener('click', leaveRanked);
   mountSpriteRenderers(app.querySelectorAll('.sprite-canvas'));
 }
 
@@ -595,6 +648,11 @@ function renderMoveButton(move, isLegal) {
 }
 
 function submitMove(p1Move) {
+  if (playMode === 'online') {
+    submitRankedMove(p1Move);
+    return;
+  }
+
   if (
     isTransitioning ||
     (roundPhase !== 'go' && roundPhase !== 'scene') ||
@@ -604,6 +662,7 @@ function submitMove(p1Move) {
     return;
   }
 
+  unlockSceneAudio();
   p1QueuedMove = p1Move;
   render();
   resolvePlayerSelection();
@@ -665,10 +724,16 @@ function pickWeightedRivalMove(weightedMoves) {
 }
 
 async function resetGame() {
+  if (playMode === 'online') {
+    leaveRanked();
+    return;
+  }
+
   if (isTransitioning) {
     return;
   }
 
+  unlockSceneAudio();
   loopToken += 1;
   isTransitioning = true;
   await playStarburstWipeTransition(setNewGame);
@@ -682,6 +747,8 @@ async function startGameFromTitle() {
     return;
   }
 
+  playMode = 'local';
+  unlockSceneAudio();
   isTransitioning = true;
   await playStarburstWipeTransition(setNewGame);
   isTransitioning = false;
@@ -692,14 +759,421 @@ async function startGameFromTitle() {
 function setNewGame() {
   state = createGameState();
   screen = 'playing';
+  rankedSnapshot = null;
   roundPhase = 'intro-scene';
   p1QueuedMove = null;
+  lastSceneAudioKey = null;
   lastMoves = {
     p1: 'reload',
     p2: 'reload',
   };
   stagePresentation = { kind: 'doodle', name: 'reloading', flip: false };
   render();
+}
+
+function getCurrentLegalMoves() {
+  if (playMode !== 'online' || !rankedSnapshot) {
+    return getPlayerLegalMoves(state, 'p1');
+  }
+
+  return rankedSnapshot.players[rankedSnapshot.playerKey].legalMoves;
+}
+
+function startRankedFromTitle() {
+  if (isTransitioning) {
+    return;
+  }
+
+  unlockSceneAudio();
+  playMode = 'online';
+  screen = 'queue';
+  p1QueuedMove = null;
+  rankedSnapshot = null;
+  connectRankedSocket();
+  render();
+}
+
+function connectRankedSocket() {
+  closeRankedSocket();
+
+  const socket = new WebSocket(getRankedSocketUrl());
+  rankedSocket = socket;
+
+  socket.addEventListener('message', (event) => {
+    const message = JSON.parse(event.data);
+    handleRankedMessage(message);
+  });
+
+  socket.addEventListener('close', () => {
+    if (playMode === 'online' && screen !== 'title' && rankedSocket === socket) {
+      screen = 'title';
+      rankedSnapshot = null;
+      rankedSocket = null;
+      render();
+    }
+  });
+}
+
+function getRankedSocketUrl() {
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const host = window.location.protocol === 'file:' ? 'localhost:8787' : window.location.host;
+  const url = new URL(`${protocol}//${host}/ws`);
+
+  if (rankedPlayerId) {
+    url.searchParams.set('playerId', rankedPlayerId);
+  }
+
+  return url.toString();
+}
+
+function handleRankedMessage(message) {
+  if (message.type === 'hello') {
+    rankedPlayerId = message.playerId;
+    window.localStorage.setItem(RANKED_PLAYER_ID_KEY, rankedPlayerId);
+    sendRankedMessage({ type: 'joinRanked' });
+    return;
+  }
+
+  if (message.type === 'queue') {
+    screen = 'queue';
+    render();
+    return;
+  }
+
+  if (message.type === 'matchState') {
+    applyRankedSnapshot(message);
+  }
+}
+
+function applyRankedSnapshot(snapshot) {
+  const previousPhase = rankedSnapshot?.phase;
+  rankedSnapshot = snapshot;
+  screen = 'playing';
+  state = getLocalStateFromRankedSnapshot(snapshot);
+  matchWins = getLocalScoreFromRankedSnapshot(snapshot);
+  roundPhase = getRoundPhaseFromRankedSnapshot(snapshot);
+  p1QueuedMove = snapshot.phase === 'choosing' ? p1QueuedMove : null;
+  lastSceneAudioKey = previousPhase === snapshot.phase ? lastSceneAudioKey : null;
+
+  if (snapshot.revealedMoves || snapshot.game.lastTurn) {
+    lastMoves = getLocalMovesFromRankedSnapshot(snapshot);
+    stagePresentation = getDoodlePresentation(lastMoves.p1, lastMoves.p2);
+  } else if (snapshot.phase === 'countdown') {
+    stagePresentation = { kind: 'cue', name: 'READY' };
+  } else if (snapshot.phase === 'choosing') {
+    stagePresentation = { kind: 'cue', name: 'GO' };
+  } else if (snapshot.phase === 'gameOver') {
+    stagePresentation = {
+      kind: 'doodle',
+      name: snapshot.winner === snapshot.playerKey ? 'winner' : 'loser',
+      flip: false,
+    };
+  }
+
+  render();
+}
+
+function getLocalStateFromRankedSnapshot(snapshot) {
+  const opponentKey = snapshot.opponentKey;
+  const playerKey = snapshot.playerKey;
+
+  return {
+    round: snapshot.game.round,
+    status: snapshot.phase === 'gameOver' ? 'finished' : 'playing',
+    winner: snapshot.winner === playerKey ? 'p1' : snapshot.winner === opponentKey ? 'p2' : null,
+    players: {
+      p1: {
+        ap: snapshot.players[playerKey].ap,
+        move: null,
+        hit: null,
+      },
+      p2: {
+        ap: snapshot.players[opponentKey].ap,
+        move: null,
+        hit: null,
+      },
+    },
+    history: snapshot.game.lastTurn ? [snapshot.game.lastTurn] : [],
+  };
+}
+
+function getLocalScoreFromRankedSnapshot(snapshot) {
+  return {
+    p1: snapshot.score[snapshot.playerKey],
+    p2: snapshot.score[snapshot.opponentKey],
+  };
+}
+
+function getRoundPhaseFromRankedSnapshot(snapshot) {
+  if (snapshot.phase === 'countdown') {
+    return 'ready';
+  }
+
+  if (snapshot.phase === 'choosing') {
+    return 'go';
+  }
+
+  if (snapshot.phase === 'revealed') {
+    return 'scene';
+  }
+
+  return 'game-over';
+}
+
+function getLocalMovesFromRankedSnapshot(snapshot) {
+  const moves = snapshot.revealedMoves ?? {
+    p1: snapshot.game.lastTurn?.p1Move ?? 'reload',
+    p2: snapshot.game.lastTurn?.p2Move ?? 'reload',
+  };
+
+  return {
+    p1: moves[snapshot.playerKey],
+    p2: moves[snapshot.opponentKey],
+  };
+}
+
+function submitRankedMove(moveId) {
+  if (
+    !rankedSocket ||
+    rankedSocket.readyState !== WebSocket.OPEN ||
+    !rankedSnapshot ||
+    rankedSnapshot.phase !== 'choosing' ||
+    p1QueuedMove ||
+    !rankedSnapshot.players[rankedSnapshot.playerKey].legalMoves.includes(moveId)
+  ) {
+    return;
+  }
+
+  p1QueuedMove = moveId;
+  sendRankedMessage({
+    type: 'submitMove',
+    matchId: rankedSnapshot.matchId,
+    moveId,
+  });
+  render();
+}
+
+function sendRankedMessage(message) {
+  if (rankedSocket?.readyState === WebSocket.OPEN) {
+    rankedSocket.send(JSON.stringify(message));
+  }
+}
+
+function leaveRanked() {
+  closeRankedSocket();
+  playMode = 'local';
+  rankedSnapshot = null;
+  screen = 'title';
+  roundPhase = 'idle';
+  p1QueuedMove = null;
+  render();
+}
+
+function closeRankedSocket() {
+  if (rankedSocket) {
+    rankedSocket.close();
+    rankedSocket = null;
+  }
+}
+
+function playStageAudio() {
+  if (isTransitioning || stagePresentation.kind !== 'doodle') {
+    return;
+  }
+
+  const fileName = SCENE_AUDIO[stagePresentation.name];
+
+  if (!fileName) {
+    return;
+  }
+
+  const audioKey = `${state.round}:${roundPhase}:${stagePresentation.name}:${stagePresentation.flip}`;
+
+  if (audioKey === lastSceneAudioKey) {
+    return;
+  }
+
+  lastSceneAudioKey = audioKey;
+  playSceneAudio(fileName, audioKey);
+}
+
+function playSceneAudio(fileName, audioKey) {
+  const context = getSceneAudioContext();
+
+  if (!context) {
+    playSceneHtmlAudio(fileName);
+    return;
+  }
+
+  const buffer = sceneAudioBuffers.get(fileName);
+
+  if (buffer) {
+    playSceneAudioBuffer(buffer, audioKey);
+    return;
+  }
+
+  loadSceneAudioBuffer(fileName).then((loadedBuffer) => {
+    if (loadedBuffer) {
+      playSceneAudioBuffer(loadedBuffer, audioKey);
+      return;
+    }
+
+    if (audioKey === lastSceneAudioKey) {
+      playSceneHtmlAudio(fileName);
+    }
+  });
+}
+
+function playOneShotAudio(fileName) {
+  const context = getSceneAudioContext();
+
+  if (!context) {
+    playSceneHtmlAudio(fileName);
+    return;
+  }
+
+  const buffer = sceneAudioBuffers.get(fileName);
+
+  if (buffer) {
+    startSceneAudioBuffer(context, buffer);
+    return;
+  }
+
+  loadSceneAudioBuffer(fileName).then((loadedBuffer) => {
+    if (loadedBuffer) {
+      startSceneAudioBuffer(context, loadedBuffer);
+      return;
+    }
+
+    playSceneHtmlAudio(fileName);
+  });
+}
+
+function playSceneHtmlAudio(fileName) {
+  const audio = getSceneAudio(fileName);
+  audio.muted = false;
+  audio.volume = 1;
+  audio.currentTime = 0;
+  audio.play().catch((error) => {
+    console.warn(`Could not play scene audio: ${fileName}`, error);
+  });
+}
+
+function unlockSceneAudio() {
+  if (sceneAudioUnlockPromise) {
+    return sceneAudioUnlockPromise;
+  }
+
+  const context = getSceneAudioContext();
+  const audioFiles = getAudioFiles();
+
+  if (!context) {
+    audioFiles.forEach((fileName) => getSceneAudio(fileName).load());
+    sceneAudioUnlockPromise = Promise.resolve();
+    return sceneAudioUnlockPromise;
+  }
+
+  sceneAudioUnlockPromise = context.resume()
+    .catch((error) => {
+      console.warn('Could not unlock scene audio context', error);
+    })
+    .then(() => Promise.all(audioFiles.map((fileName) => loadSceneAudioBuffer(fileName))))
+    .then(() => undefined);
+
+  return sceneAudioUnlockPromise;
+}
+
+function getAudioFiles() {
+  return [...new Set([...Object.values(SCENE_AUDIO), STARBURST_WIPE_AUDIO])];
+}
+
+function getSceneAudioContext() {
+  if (sceneAudioContext) {
+    return sceneAudioContext;
+  }
+
+  const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+
+  if (!AudioContextClass) {
+    return null;
+  }
+
+  sceneAudioContext = new AudioContextClass();
+  return sceneAudioContext;
+}
+
+function loadSceneAudioBuffer(fileName) {
+  if (sceneAudioBuffers.has(fileName) || sceneAudioLoadPromises.has(fileName)) {
+    return sceneAudioLoadPromises.get(fileName) ?? Promise.resolve(sceneAudioBuffers.get(fileName));
+  }
+
+  const context = getSceneAudioContext();
+
+  if (!context) {
+    return Promise.resolve(null);
+  }
+
+  const promise = fetch(`./assets/audio/${fileName}`)
+    .then((response) => {
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+
+      return response.arrayBuffer();
+    })
+    .then((arrayBuffer) => context.decodeAudioData(arrayBuffer))
+    .then((buffer) => {
+      sceneAudioBuffers.set(fileName, buffer);
+      return buffer;
+    })
+    .catch((error) => {
+      console.warn(`Could not load WebAudio scene audio: ${fileName}`, error);
+      return null;
+    });
+
+  sceneAudioLoadPromises.set(fileName, promise);
+  return promise;
+}
+
+function playSceneAudioBuffer(buffer, audioKey) {
+  const context = getSceneAudioContext();
+
+  if (!context || audioKey !== lastSceneAudioKey) {
+    return;
+  }
+
+  if (context.state !== 'running') {
+    context.resume()
+      .then(() => {
+        if (audioKey === lastSceneAudioKey && context.state === 'running') {
+          startSceneAudioBuffer(context, buffer);
+        }
+      })
+      .catch((error) => {
+        console.warn('Could not resume scene audio context', error);
+      });
+    return;
+  }
+
+  startSceneAudioBuffer(context, buffer);
+}
+
+function startSceneAudioBuffer(context, buffer) {
+  const source = context.createBufferSource();
+  source.buffer = buffer;
+  source.connect(context.destination);
+  source.start();
+}
+
+function getSceneAudio(fileName) {
+  if (sceneAudio.has(fileName)) {
+    return sceneAudio.get(fileName);
+  }
+
+  const audio = new Audio(`./assets/audio/${fileName}`);
+  audio.preload = 'auto';
+  sceneAudio.set(fileName, audio);
+  return audio;
 }
 
 function beginGameLoop() {
@@ -839,6 +1313,7 @@ function getFallbackMove(playerId) {
 }
 
 async function playStarburstWipeTransition(onCovered) {
+  playOneShotAudio(STARBURST_WIPE_AUDIO);
   await preloadStarburstWipe();
 
   let overlay = createWipeOverlay();
@@ -952,6 +1427,7 @@ function getDoodlePresentation(p1Move, p2Move) {
   const name = getDoodleForMoves(p1Move, p2Move);
 
   return {
+    kind: 'doodle',
     name,
     flip: shouldFlipDoodle(name, p1Move, p2Move),
   };

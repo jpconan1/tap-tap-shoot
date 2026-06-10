@@ -4,6 +4,7 @@ dist/
 coverage/
 .env
 .env.*
+.ranked-players.json
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
