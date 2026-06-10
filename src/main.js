@@ -322,7 +322,7 @@ let loopToken = 0;
 let roundPhase = 'idle';
 let p1QueuedMove = null;
 let rankedSocket = null;
-let rankedPlayerId = window.localStorage.getItem(RANKED_PLAYER_ID_KEY);
+let rankedPlayerId = readLocalStorage(RANKED_PLAYER_ID_KEY);
 let rankedSnapshot = null;
 let findingMatchStep = 0;
 let findingMatchTimer = null;
@@ -339,7 +339,11 @@ let matchWins = {
 
 updateFrameScale();
 window.addEventListener('resize', updateFrameScale);
-render();
+try {
+  render();
+} catch (error) {
+  console.error('Could not render title screen', error);
+}
 
 function updateFrameScale() {
   const margin = 28;
@@ -864,7 +868,7 @@ function getRankedSocketUrl() {
 function handleRankedMessage(message) {
   if (message.type === 'hello') {
     rankedPlayerId = message.playerId;
-    window.localStorage.setItem(RANKED_PLAYER_ID_KEY, rankedPlayerId);
+    writeLocalStorage(RANKED_PLAYER_ID_KEY, rankedPlayerId);
     sendRankedMessage({ type: 'joinRanked' });
     return;
   }
@@ -1035,6 +1039,22 @@ function closeRankedSocket() {
   if (rankedSocket) {
     rankedSocket.close();
     rankedSocket = null;
+  }
+}
+
+function readLocalStorage(key) {
+  try {
+    return window.localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function writeLocalStorage(key, value) {
+  try {
+    window.localStorage.setItem(key, value);
+  } catch {
+    // Ranked still works for this tab; it just cannot persist the player id.
   }
 }
 
