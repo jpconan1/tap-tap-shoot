@@ -1373,10 +1373,9 @@ function requestMusicTrack(trackId) {
 
   desiredMusicTrack = trackId;
 
-  const context = getSceneAudioContext();
+  const context = getExistingSceneAudioContext();
 
   if (!context) {
-    requestHtmlMusicTrack(trackId);
     return;
   }
 
@@ -1585,13 +1584,9 @@ function resumeInterruptedMusic(resumeSegment) {
 }
 
 function syncMusicTrack() {
-  const context = getSceneAudioContext();
+  const context = getExistingSceneAudioContext();
 
   if (!context) {
-    if (desiredMusicTrack) {
-      requestHtmlMusicTrack(desiredMusicTrack);
-    }
-
     return;
   }
 
@@ -2017,6 +2012,10 @@ function getSceneAudioContext() {
   }
 
   sceneAudioContext = new AudioContextClass();
+  return sceneAudioContext;
+}
+
+function getExistingSceneAudioContext() {
   return sceneAudioContext;
 }
 
