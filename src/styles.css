@@ -1,3 +1,11 @@
+@font-face {
+  font-family: "Pangolin";
+  src: url("../assets/Pangolin-Regular.ttf") format("truetype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
 :root {
   color-scheme: light;
   --paper: #f7efd9;
@@ -32,7 +40,7 @@ body {
   background-position: center;
   background-size: cover;
   color: var(--ink);
-  font-family: "Comic Sans MS", "Marker Felt", "Trebuchet MS", system-ui, sans-serif;
+  font-family: "Pangolin", "Comic Sans MS", "Marker Felt", "Trebuchet MS", system-ui, sans-serif;
   -webkit-touch-callout: none;
   user-select: none;
 }
@@ -106,6 +114,7 @@ button {
 
 .title-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 24px;
   align-items: center;
   justify-content: center;
@@ -138,6 +147,11 @@ button {
 
 .opponent-button:nth-child(2n) {
   transform: rotate(-0.35deg);
+}
+
+.opponent-button.back-button {
+  grid-column: 1 / -1;
+  justify-self: center;
 }
 
 .play-button:hover,
@@ -205,6 +219,98 @@ button {
   align-self: center;
 }
 
+.tutorial-stage {
+  padding-top: 104px;
+}
+
+.tutorial-nav {
+  position: absolute;
+  top: 330px;
+  right: 6px;
+  left: 6px;
+  z-index: 3;
+  display: flex;
+  justify-content: space-between;
+  pointer-events: none;
+}
+
+.tutorial-nav-button {
+  width: 192px;
+  height: 96px;
+  pointer-events: auto;
+}
+
+.tutorial-nav-button,
+.tutorial-nav-button:nth-child(2),
+.tutorial-nav-button:only-child {
+  grid-column: auto;
+}
+
+.tutorial-nav-button .sheet-button-art {
+  width: 192px;
+  height: 96px;
+}
+
+.tutorial-slide {
+  display: grid;
+  place-content: center;
+  width: 720px;
+  height: 256px;
+  min-height: 0;
+  color: var(--ink);
+  font-family: "Pangolin", "Comic Sans MS", "Marker Felt", "Trebuchet MS", system-ui, sans-serif;
+  font-size: 44px;
+  font-weight: 850;
+  line-height: 1.24;
+  text-align: center;
+  text-shadow: 1px 1px 0 rgba(255, 255, 255, 0.4);
+}
+
+.tutorial-slide p {
+  margin: 0;
+}
+
+.tutorial-slide strong {
+  font-size: 1.35em;
+  font-weight: 950;
+}
+
+.tutorial-slide-1,
+.tutorial-slide-4,
+.tutorial-slide-6 {
+  font-size: 45px;
+}
+
+.tutorial-slide-2,
+.tutorial-slide-3,
+.tutorial-slide-5,
+.tutorial-slide-9 {
+  font-size: 47px;
+}
+
+.tutorial-slide-7,
+.tutorial-slide-8 {
+  grid-template-columns: 360px 260px;
+  gap: 32px;
+  align-items: center;
+  justify-content: center;
+  font-size: 33px;
+}
+
+.tutorial-slide-7 strong,
+.tutorial-slide-8 strong {
+  font-size: 1.65em;
+}
+
+.tutorial-side-copy {
+  text-align: center;
+}
+
+.tutorial-art-slot {
+  width: 208px;
+  height: 172px;
+}
+
 .pick-history {
   position: absolute;
   top: 126px;
@@ -268,7 +374,7 @@ button {
   pointer-events: none;
 }
 
-.round-counter,
+.turn-counter,
 .ap-label,
 .wins-label,
 .win-mark {
@@ -279,7 +385,7 @@ button {
   filter: drop-shadow(2px 4px 0 rgba(29, 27, 24, 0.08));
 }
 
-.round-counter {
+.turn-counter {
   width: 256px;
   height: 128px;
   justify-self: center;
@@ -373,7 +479,7 @@ button {
 .moves {
   display: grid;
   grid-template-columns: repeat(6, 128px);
-  gap: 18px 24px;
+  gap: 25px 24px;
   justify-content: center;
   margin-top: 24px;
 }
@@ -399,26 +505,33 @@ button {
 }
 
 .move-card {
+  position: relative;
   display: block;
+  width: 256px;
+  height: 128px;
   min-width: 0;
   padding: 0;
   border: 0;
   background: transparent;
   cursor: pointer;
-  transform: rotate(-0.5deg);
-  transition: opacity 140ms ease, transform 140ms ease;
+  justify-self: center;
+  transition: opacity 140ms ease;
 }
 
-.move-card:nth-child(2n) {
+.move-card:nth-child(odd) .move-button-art {
+  transform: rotate(-0.5deg);
+}
+
+.move-card:nth-child(even) .move-button-art {
   transform: rotate(0.55deg);
 }
 
-.move-card:hover:not(:disabled) {
+.move-card:hover:not(:disabled) .move-button-art {
   transform: translateY(-2px) rotate(0deg);
 }
 
-.move-card:active:not(:disabled) {
-  transform: translateY(2px);
+.move-card:active:not(:disabled) .move-button-art {
+  transform: translateY(2px) rotate(0deg);
 }
 
 .move-card:disabled {
@@ -429,16 +542,63 @@ button {
 .move-card.selected {
   filter: drop-shadow(0 0 0 var(--ink)) drop-shadow(0 6px 0 rgba(40, 125, 84, 0.42));
   opacity: 1;
+}
+
+.move-card.selected .move-button-art {
   transform: translateY(-4px) rotate(0deg);
 }
 
+.move-interaction-outline {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: 0;
+  display: block;
+  width: 384px;
+  height: 192px;
+  min-height: 0;
+  object-fit: contain;
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+}
+
+.moves[data-hover-move="reload"] .move-card[data-reload-outline="beats"] .beats-outline,
+.moves[data-hover-move="shoot"] .move-card[data-shoot-outline="beats"] .beats-outline,
+.moves[data-hover-move="stab"] .move-card[data-stab-outline="beats"] .beats-outline,
+.moves[data-hover-move="block"] .move-card[data-block-outline="beats"] .beats-outline,
+.moves[data-hover-move="counterstab"] .move-card[data-counterstab-outline="beats"] .beats-outline,
+.moves[data-hover-move="reload"] .move-card[data-reload-outline="draws"] .draws-outline,
+.moves[data-hover-move="shoot"] .move-card[data-shoot-outline="draws"] .draws-outline,
+.moves[data-hover-move="stab"] .move-card[data-stab-outline="draws"] .draws-outline,
+.moves[data-hover-move="block"] .move-card[data-block-outline="draws"] .draws-outline,
+.moves[data-hover-move="counterstab"] .move-card[data-counterstab-outline="draws"] .draws-outline,
+.moves[data-hover-move="reload"] .move-card[data-reload-outline="loses"] .loses-outline,
+.moves[data-hover-move="shoot"] .move-card[data-shoot-outline="loses"] .loses-outline,
+.moves[data-hover-move="stab"] .move-card[data-stab-outline="loses"] .loses-outline,
+.moves[data-hover-move="block"] .move-card[data-block-outline="loses"] .loses-outline,
+.moves[data-hover-move="counterstab"] .move-card[data-counterstab-outline="loses"] .loses-outline {
+  opacity: 1;
+}
+
+.moves[data-hover-move="reload"] .move-card[data-move="reload"] .move-interaction-outline,
+.moves[data-hover-move="shoot"] .move-card[data-move="shoot"] .move-interaction-outline,
+.moves[data-hover-move="stab"] .move-card[data-move="stab"] .move-interaction-outline,
+.moves[data-hover-move="block"] .move-card[data-move="block"] .move-interaction-outline,
+.moves[data-hover-move="counterstab"] .move-card[data-move="counterstab"] .move-interaction-outline {
+  opacity: 0;
+}
+
 .move-button-art {
+  position: relative;
+  z-index: 1;
   display: block;
   width: 256px;
   height: 128px;
   min-height: 0;
   object-fit: contain;
   filter: drop-shadow(2px 4px 0 rgba(29, 27, 24, 0.1));
+  transition: transform 140ms ease;
 }
 
 .sheet-button {
@@ -462,6 +622,19 @@ button {
 
 .sheet-button:only-child {
   grid-column: 3 / span 2;
+}
+
+.tutorial-moves .move-card:nth-child(4) {
+  grid-column: 1 / span 2;
+}
+
+.tutorial-moves .move-card:nth-child(5) {
+  grid-column: 3 / span 2;
+}
+
+.tutorial-moves .next-button:not(:only-child),
+.tutorial-moves .quit-button:not(:only-child) {
+  grid-column: 5 / span 2;
 }
 
 .sheet-button:hover {

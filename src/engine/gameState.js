@@ -1,9 +1,9 @@
 import { getLegalMoves } from './moves.js';
-import { resolveRound } from './resolveRound.js';
+import { resolveTurn } from './resolveTurn.js';
 
-export function createGameState() {
+export function createRoundState() {
   return {
-    round: 0,
+    turn: 0,
     status: 'playing',
     players: {
       p1: createPlayerState(),
@@ -13,7 +13,7 @@ export function createGameState() {
   };
 }
 
-export function playRound(state, p1Move, p2Move) {
+export function playTurn(state, p1Move, p2Move) {
   if (state.status !== 'playing') {
     return {
       ok: false,
@@ -22,7 +22,7 @@ export function playRound(state, p1Move, p2Move) {
     };
   }
 
-  const result = resolveRound({
+  const result = resolveTurn({
     p1Move,
     p2Move,
     p1Ap: state.players.p1.ap,
@@ -39,8 +39,8 @@ export function playRound(state, p1Move, p2Move) {
 
   const nextState = {
     ...state,
-    round: result.isGameOver ? state.round : state.round + 1,
-    status: result.isGameOver ? 'finished' : 'playing',
+    turn: result.isRoundOver ? state.turn : state.turn + 1,
+    status: result.isRoundOver ? 'finished' : 'playing',
     winner: result.winner ?? state.winner,
     players: {
       p1: {
@@ -58,7 +58,7 @@ export function playRound(state, p1Move, p2Move) {
     },
     history: [
       {
-        round: state.round,
+        turn: state.turn,
         p1Move,
         p2Move,
         p1ApBefore: state.players.p1.ap,

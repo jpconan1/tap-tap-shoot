@@ -1,10 +1,10 @@
 import { randomUUID } from 'node:crypto';
 
-import { createGameState, getPlayerLegalMoves, playRound } from '../src/engine/gameState.js';
+import { createRoundState, getPlayerLegalMoves, playTurn } from '../src/engine/gameState.js';
 import { updateRatings } from './elo.js';
 import { MemoryPlayerStore } from './playerStore.js';
 
-const WIN_TARGET = 3;
+const GAME_TARGET_ROUNDS = 5;
 const DEFAULT_COUNTDOWN_MS = 3000;
 const DEFAULT_TURN_MS = 4500;
 const DEFAULT_REVEAL_MS = 1800;
@@ -151,11 +151,11 @@ export class RankedDuelService {
         p1: p1Session,
         p2: p2Session,
       },
-      score: {
+      roundWins: {
         p1: 0,
         p2: 0,
       },
-      gameState: createGameState(),
+      roundState: createRoundState(),
       pendingMoves: new Map(),
       timer: null,
       deadlineAt: this.now() + this.countdownMs,
@@ -180,7 +180,7 @@ export class RankedDuelService {
     room.pendingMoves.clear();
     room.deadlineAt = this.now() + this.turnMs;
     this.broadcastRoom(room);
-    this.setRoomTimer(room, () => this.resolveRoomRound(room), this.turnMs);
+    this.setRoomTimer(room, () => this.resolveRoomTurn(room), this.turnMs);
   }
 
   submitMove(session, moveId) {
@@ -191,7 +191,7 @@ export class RankedDuelService {
     }
 
     const playerKey = this.getPlayerKey(room, session);
-    const legalMoves = getPlayerLegalMoves(room.gameState, playerKey);
+    const legalMoves = getPlayerLegalMoves(room.roundState, playerKey);
 
     if (!legalMoves.includes(moveId)) {
       this.send(session, 'error', { message: 'illegal move' });
@@ -207,42 +207,42 @@ export class RankedDuelService {
     this.send(session, 'moveAccepted', { moveId });
 
     if (room.pendingMoves.size === 2) {
-      this.resolveRoomRound(room);
+      this.resolveRoomTurn(room);
     }
   }
 
-  resolveRoomRound(room) {
+  resolveRoomTurn(room) {
     if (room.phase !== 'choosing') {
       return;
     }
 
     this.clearRoomTimer(room);
 
-    const p1Move = room.pendingMoves.get('p1') ?? getFallbackMove(room.gameState, 'p1');
-    const p2Move = room.pendingMoves.get('p2') ?? getFallbackMove(room.gameState, 'p2');
-    const turn = playRound(room.gameState, p1Move, p2Move);
+    const p1Move = room.pendingMoves.get('p1') ?? getFallbackMove(room.roundState, 'p1');
+    const p2Move = room.pendingMoves.get('p2') ?? getFallbackMove(room.roundState, 'p2');
+    const turn = playTurn(room.roundState, p1Move, p2Move);
 
     if (!turn.ok) {
       throw new Error(turn.error);
     }
 
-    room.gameState = turn.state;
+    room.roundState = turn.state;
     room.phase = 'revealed';
 
-    if (room.gameState.winner) {
-      room.score[room.gameState.winner] += 1;
+    if (room.roundState.winner) {
+      room.roundWins[room.roundState.winner] += 1;
     }
 
     this.broadcastRoom(room, { revealedMoves: { p1: p1Move, p2: p2Move } });
 
-    if (room.score.p1 >= WIN_TARGET || room.score.p2 >= WIN_TARGET) {
-      this.finishRoom(room, room.score.p1 >= WIN_TARGET ? 'p1' : 'p2');
+    if (room.roundWins.p1 >= GAME_TARGET_ROUNDS || room.roundWins.p2 >= GAME_TARGET_ROUNDS) {
+      this.finishRoom(room, room.roundWins.p1 >= GAME_TARGET_ROUNDS ? 'p1' : 'p2');
       return;
     }
 
     this.setRoomTimer(room, () => {
-      if (room.gameState.status === 'finished') {
-        room.gameState = createGameState();
+      if (room.roundState.status === 'finished') {
+        room.roundState = createRoundState();
       }
 
       this.beginChoosing(room);
@@ -330,26 +330,26 @@ export class RankedDuelService {
       opponentKey,
       phase: room.phase,
       deadlineAt: room.deadlineAt,
-      score: room.score,
+      roundWins: room.roundWins,
       winner: room.winner,
       ratings: room.ratings,
       players: {
         p1: {
-          ap: room.gameState.players.p1.ap,
-          legalMoves: room.phase === 'choosing' ? getPlayerLegalMoves(room.gameState, 'p1') : [],
+          ap: room.roundState.players.p1.ap,
+          legalMoves: room.phase === 'choosing' ? getPlayerLegalMoves(room.roundState, 'p1') : [],
           rating: room.players.p1.player.rating,
         },
         p2: {
-          ap: room.gameState.players.p2.ap,
-          legalMoves: room.phase === 'choosing' ? getPlayerLegalMoves(room.gameState, 'p2') : [],
+          ap: room.roundState.players.p2.ap,
+          legalMoves: room.phase === 'choosing' ? getPlayerLegalMoves(room.roundState, 'p2') : [],
           rating: room.players.p2.player.rating,
         },
       },
-      game: {
-        round: room.gameState.round,
-        status: room.gameState.status,
-        winner: room.gameState.winner,
-        lastTurn: room.gameState.history[0] ?? null,
+      round: {
+        turn: room.roundState.turn,
+        status: room.roundState.status,
+        winner: room.roundState.winner,
+        lastTurn: room.roundState.history[0] ?? null,
       },
     };
   }

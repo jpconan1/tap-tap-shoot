@@ -1,99 +1,37 @@
-const MOVES = Object.freeze({
-  reload: Object.freeze({
-    id: 'reload',
-    label: 'Reload',
-    cost: 0,
-    gain: 1,
-  }),
-  shoot: Object.freeze({
-    id: 'shoot',
-    label: 'Shoot',
-    cost: 1,
-    gain: 0,
-  }),
-  stab: Object.freeze({
-    id: 'stab',
-    label: 'Stab',
-    cost: 1,
-    gain: 0,
-  }),
-  block: Object.freeze({
-    id: 'block',
-    label: 'Dodge',
-    cost: 0,
-    gain: 0,
-  }),
-  counterstab: Object.freeze({
-    id: 'counterstab',
-    label: 'Counterstab',
-    cost: 0,
-    gain: 0,
-  }),
-});
+import { MOVES, canAfford } from './engine/moves.js';
+import { createRoundState, getPlayerLegalMoves, playTurn } from './engine/gameState.js';
+import { chooseRivalMove as chooseAiMove, DEFAULT_RIVAL_ID, RIVALS } from './engine/rivalAi.js';
+import {
+  configureAudio,
+  getMusicTopperId,
+  installAudioUnlockListeners,
+  interruptMusicFileOnce,
+  LOSE_JINGLE_AUDIO,
+  playOneShotAudio,
+  playStageAudio,
+  queueMusicTrackOnce,
+  requestMusicTrack,
+  resetStageAudioKey,
+  restartMusicTrackOnce,
+  STARBURST_WIPE_AUDIO,
+  syncMusicTopper,
+  unlockSceneAudio,
+  WIN_SOUND_AUDIO,
+} from './audio.js';
+import { RankedClient } from './rankedClient.js';
+import {
+  DOODLE_FRAME_HEIGHT,
+  DOODLE_FRAME_WIDTH,
+  getDoodlePresentation,
+  mountSpriteRenderers,
+  playStarburstWipeTransition,
+} from './renderer.js';
 
-const MOVE_IDS = Object.freeze(Object.keys(MOVES));
-const HIT_TABLE = Object.freeze({
-  shoot: Object.freeze({
-    stab: 'shot',
-    counterstab: 'shot',
-    reload: 'shot',
-  }),
-  stab: Object.freeze({
-    block: 'stabbed',
-    reload: 'stabbed',
-  }),
-});
-
-const INTERACTION_DOODLES = Object.freeze({
-  'reload|reload': 'reloading',
-  'reload|shoot': 'shooting',
-  'reload|stab': 'stabbing',
-  'reload|block': 'tricky',
-  'reload|counterstab': 'tricky',
-  'shoot|shoot': 'collision',
-  'shoot|stab': 'shooting',
-  'shoot|block': 'dodge',
-  'shoot|counterstab': 'shooting',
-  'stab|stab': 'clash',
-  'stab|block': 'stabbing',
-  'stab|counterstab': 'counterstab',
-  'block|block': 'hiding',
-  'block|counterstab': 'hiding',
-  'counterstab|counterstab': 'hiding',
-});
-const SCENE_AUDIO = Object.freeze({
-  shooting: 'gunshot.wav',
-  stabbing: 'stab.wav',
-  hiding: 'nothing.wav',
-  clash: 'clash.wav',
-  collision: 'collision.wav',
-  counterstab: 'counterstab.wav',
-  dodge: 'wiff.wav',
-  reloading: 'reload.wav',
-  tricky: 'reload.wav',
-});
-const STARBURST_WIPE_AUDIO = 'starbust.wav';
-const LOSE_JINGLE_AUDIO = 'lose_jingle.wav';
-const WIN_SOUND_AUDIO = 'win_sound.wav';
-const MUSIC_TRACKS = Object.freeze({
-  title: 'title_loop.wav',
-  game: 'piano_loop.wav',
-  sax: 'sax_loop.wav',
-});
-const MUSIC_TOPPERS = Object.freeze({
-  tension: 'string_loop_topper.wav',
-  final: 'string_loop_topper2.wav',
-});
-
-const DOODLE_FRAME_COUNT = 3;
-const DOODLE_FRAME_RATE = 8;
 const BEAT_MS = 750;
-const DOODLE_FRAME_WIDTH = 512;
-const DOODLE_FRAME_HEIGHT = 256;
 const BUTTON_FRAME_WIDTH = 256;
 const BUTTON_FRAME_HEIGHT = 128;
-const ROUND_FRAME_WIDTH = 256;
-const ROUND_FRAME_HEIGHT = 128;
+const TURN_FRAME_WIDTH = 256;
+const TURN_FRAME_HEIGHT = 128;
 const AP_LABEL_FRAME_WIDTH = 234;
 const AP_LABEL_FRAME_HEIGHT = 33;
 const AP_ICON_FRAME_WIDTH = 64;
@@ -111,22 +49,21 @@ const TITLE_FRAME_WIDTH = 512;
 const TITLE_FRAME_HEIGHT = 256;
 const TITLE_BUTTON_FRAME_WIDTH = 256;
 const TITLE_BUTTON_FRAME_HEIGHT = 128;
+const TUTORIAL_SLIDE_COUNT = 9;
 const REMATCH_BUTTON_FRAME_WIDTH = 256;
 const REMATCH_BUTTON_FRAME_HEIGHT = 128;
 const CROSSED_FRAME_WIDTH = 384;
 const CROSSED_FRAME_HEIGHT = 192;
+const OUTLINE_FRAME_WIDTH = 384;
+const OUTLINE_FRAME_HEIGHT = 192;
 const AP_SLOT_COUNT = 4;
-const LAST_NUMBERED_ROUND = 21;
-const MATCH_TARGET_WINS = 5;
+const LAST_NUMBERED_TURN = 21;
+const GAME_TARGET_ROUNDS = 5;
 const FRAME_WIDTH = 1100;
 const FRAME_HEIGHT = 825;
-const WIPE_FRAME_WIDTH = 1100;
-const WIPE_FRAME_HEIGHT = 825;
-const WIPE_STEP_DURATION = 58;
 const SCENE_BEATS = 2;
-const GAME_OVER_SCENE_BEATS = 2;
+const ROUND_OVER_SCENE_BEATS = 2;
 const READY_BEATS = 3;
-const MUSIC_SCHEDULE_LOOKAHEAD_SECONDS = 0.08;
 const MOVE_BUTTON_DOODLES = Object.freeze({
   reload: 'reload_button',
   shoot: 'shoot_button',
@@ -141,258 +78,84 @@ const MOVE_ICON_DOODLES = Object.freeze({
   block: 'dodge_icon',
   counterstab: 'counterstab_icon',
 });
-const STARBURST_WIPE_STEPS = Object.freeze([
-  Object.freeze(['1_w']),
-  Object.freeze(['2_w', '1']),
-  Object.freeze(['3_w', '1', '2']),
-  Object.freeze(['4_w', '2', '3']),
-  Object.freeze(['4_w', '3']),
-  Object.freeze(['4_w']),
-  Object.freeze(['4', '3_w']),
-  Object.freeze(['3', '2_w']),
-  Object.freeze(['2', '1_w']),
-  Object.freeze(['1']),
-]);
-const OPPONENTS = Object.freeze({
-  olJoe: Object.freeze({
-    id: 'olJoe',
-    name: 'Ol Joe',
-    buttonDoodle: 'oljoe_button',
-    crossedDoodle: 'crossed1',
-    chooseMove: chooseOlJoeMove,
+const MOVE_OUTLINE_RELATIONS = Object.freeze({
+  reload: Object.freeze({
+    reload: 'draws',
+    shoot: 'loses',
+    stab: 'loses',
+    block: 'draws',
+    counterstab: 'draws',
   }),
-  mackTheKnife: Object.freeze({
-    id: 'mackTheKnife',
-    name: 'Mack the Knife',
-    buttonDoodle: 'mactheknife_button',
-    crossedDoodle: 'crossed2',
-    chooseMove: chooseMackTheKnifeMove,
+  shoot: Object.freeze({
+    reload: 'beats',
+    shoot: 'draws',
+    stab: 'beats',
+    block: 'draws',
+    counterstab: 'beats',
   }),
-  blastinDan: Object.freeze({
-    id: 'blastinDan',
-    name: 'Blastin Dan',
-    buttonDoodle: 'blastindan_button',
-    crossedDoodle: 'crossed3',
-    chooseMove: chooseBlastinDanMove,
+  stab: Object.freeze({
+    reload: 'beats',
+    shoot: 'loses',
+    stab: 'draws',
+    block: 'beats',
+    counterstab: 'draws',
   }),
-  katheyClever: Object.freeze({
-    id: 'katheyClever',
-    name: 'Kathey Clever',
-    buttonDoodle: 'katheyclever_button',
-    crossedDoodle: 'crossed4',
-    chooseMove: chooseKatheyCleverMove,
+  block: Object.freeze({
+    reload: 'draws',
+    shoot: 'draws',
+    stab: 'loses',
+    block: 'draws',
+    counterstab: 'draws',
+  }),
+  counterstab: Object.freeze({
+    reload: 'draws',
+    shoot: 'loses',
+    stab: 'draws',
+    block: 'draws',
+    counterstab: 'draws',
   }),
 });
-const OPPONENT_IDS = Object.freeze(['olJoe', 'mackTheKnife', 'blastinDan', 'katheyClever']);
-const DEFAULT_OPPONENT_ID = 'olJoe';
-const OL_JOE_POLICY = Object.freeze({
-  '0-0': Object.freeze({ reload: 100 }),
-  '1-1': Object.freeze({ shoot: 45, block: 35, stab: 15, reload: 5, counterstab: 0 }),
-  '1-0': Object.freeze({ shoot: 38, stab: 38, reload: 24 }),
-  '0-1': Object.freeze({ block: 45, counterstab: 45, reload: 10 }),
-  '2-1': Object.freeze({ shoot: 42, block: 24, stab: 18, reload: 16 }),
-  '1-2': Object.freeze({ block: 32, counterstab: 28, shoot: 25, stab: 10, reload: 5 }),
-});
-const doodleSheets = new Map();
-const sceneAudio = new Map();
-const sceneAudioBuffers = new Map();
-const sceneAudioLoadPromises = new Map();
-let doodleRenderers = [];
-let sceneAudioContext = null;
-let sceneAudioUnlockPromise = null;
-let desiredMusicTrack = null;
-let queuedMusicTrack = null;
-let queuedMusicSegment = null;
-let currentMusicSegment = null;
-let musicTopperSegment = null;
-let musicScheduleTimer = null;
-let htmlMusicAudio = null;
-let htmlMusicTrack = null;
-
-function getMove(moveId) {
-  return MOVES[moveId] ?? null;
-}
-
-function canAfford(moveId, ap) {
-  const move = getMove(moveId);
-  return Boolean(move) && ap >= move.cost;
-}
-
-function getLegalMoves(ap) {
-  return MOVE_IDS.filter((moveId) => canAfford(moveId, ap));
-}
-
-function resolveRound({ p1Move, p2Move, p1Ap, p2Ap }) {
-  const p1 = validateChoice('p1', p1Move, p1Ap);
-  const p2 = validateChoice('p2', p2Move, p2Ap);
-
-  if (!p1.ok || !p2.ok) {
-    return {
-      ok: false,
-      errors: [p1.error, p2.error].filter(Boolean),
-    };
-  }
-
-  const p1Hit = HIT_TABLE[p1Move]?.[p2Move] ?? null;
-  const p2Hit = HIT_TABLE[p2Move]?.[p1Move] ?? null;
-  const winner = p1Hit && !p2Hit ? 'p1' : p2Hit && !p1Hit ? 'p2' : null;
-
-  return {
-    ok: true,
-    p1Move,
-    p2Move,
-    p1Ap: spendAndGain(p1Ap, p1Move),
-    p2Ap: spendAndGain(p2Ap, p2Move),
-    p1Hit,
-    p2Hit,
-    winner,
-    isGameOver: winner !== null,
-    isTie: winner === null,
-  };
-}
-
-function createGameState() {
-  return {
-    round: 0,
-    status: 'playing',
-    players: {
-      p1: createPlayerState(),
-      p2: createPlayerState(),
-    },
-    history: [],
-  };
-}
-
-function playRound(state, p1Move, p2Move) {
-  if (state.status !== 'playing') {
-    return {
-      ok: false,
-      error: 'game is over',
-      state,
-    };
-  }
-
-  const result = resolveRound({
-    p1Move,
-    p2Move,
-    p1Ap: state.players.p1.ap,
-    p2Ap: state.players.p2.ap,
-  });
-
-  if (!result.ok) {
-    return {
-      ok: false,
-      error: result.errors.join(', '),
-      state,
-    };
-  }
-
-  const nextState = {
-    ...state,
-    round: result.isGameOver ? state.round : state.round + 1,
-    status: result.isGameOver ? 'finished' : 'playing',
-    winner: result.winner ?? state.winner,
-    players: {
-      p1: {
-        ...state.players.p1,
-        ap: result.p1Ap,
-        move: p1Move,
-        hit: result.p2Hit,
-      },
-      p2: {
-        ...state.players.p2,
-        ap: result.p2Ap,
-        move: p2Move,
-        hit: result.p1Hit,
-      },
-    },
-    history: [
-      {
-        round: state.round,
-        p1Move,
-        p2Move,
-        p1ApBefore: state.players.p1.ap,
-        p2ApBefore: state.players.p2.ap,
-        p1ApAfter: result.p1Ap,
-        p2ApAfter: result.p2Ap,
-        winner: result.winner,
-        p1Hit: result.p1Hit,
-        p2Hit: result.p2Hit,
-      },
-      ...state.history,
-    ],
-  };
-
-  return {
-    ok: true,
-    result,
-    state: nextState,
-  };
-}
-
-function getPlayerLegalMoves(state, playerId) {
-  return getLegalMoves(state.players[playerId].ap);
-}
-
-function validateChoice(player, moveId, ap) {
-  const move = getMove(moveId);
-
-  if (!move) {
-    return { ok: false, error: `${player} picked unknown move: ${moveId}` };
-  }
-
-  if (ap < move.cost) {
-    return { ok: false, error: `${player} cannot afford ${moveId}` };
-  }
-
-  return { ok: true };
-}
-
-function spendAndGain(ap, moveId) {
-  const move = getMove(moveId);
-  return ap - move.cost + move.gain;
-}
-
-function createPlayerState() {
-  return {
-    ap: 1,
-    move: null,
-    hit: null,
-  };
-}
+const OPPONENTS = RIVALS;
+const OPPONENT_IDS = Object.freeze(Object.keys(OPPONENTS));
+const DEFAULT_OPPONENT_ID = DEFAULT_RIVAL_ID;
 
 const app = document.querySelector('#app');
-const RANKED_PLAYER_ID_KEY = 'tapTapShoot.rankedPlayerId';
 const FINDING_MATCH_DOODLES = Object.freeze([
   'title/findingmatch',
   'title/findingmatch1',
   'title/findingmatch2',
   'title/findingmatch3',
 ]);
-let state = createGameState();
+let state = createRoundState();
 let screen = 'title';
 let playMode = 'local';
 let selectedOpponentId = DEFAULT_OPPONENT_ID;
 let isTransitioning = false;
 let loopToken = 0;
-let roundPhase = 'idle';
+let turnPhase = 'idle';
 let p1QueuedMove = null;
-let rankedSocket = null;
-let rankedPlayerId = readLocalStorage(RANKED_PLAYER_ID_KEY);
 let rankedSnapshot = null;
 let findingMatchStep = 0;
 let findingMatchTimer = null;
+let tutorialSlideIndex = 0;
+let tutorialStageMode = 'slide';
 let stagePresentation = { kind: 'doodle', name: 'reloading', flip: false };
-let lastSceneAudioKey = null;
 let lastMoves = {
   p1: 'reload',
   p2: 'reload',
 };
-let matchWins = {
+let roundWins = {
   p1: 0,
   p2: 0,
 };
 const defeatedOpponentIds = new Set();
+const rankedClient = new RankedClient({
+  onQueue: handleRankedQueue,
+  onSnapshot: applyRankedSnapshot,
+  onClose: handleRankedClose,
+});
+
+configureAudio({ getMusicTopperFile });
 
 updateFrameScale();
 window.addEventListener('resize', updateFrameScale);
@@ -427,6 +190,11 @@ function render() {
     return;
   }
 
+  if (screen === 'tutorial') {
+    renderTutorialScreen();
+    return;
+  }
+
   const legalMoves = new Set(getCurrentLegalMoves());
 
   app.innerHTML = `
@@ -447,16 +215,18 @@ function render() {
     </section>
   `;
 
-  app.querySelectorAll('[data-move]').forEach((button) => {
-    button.addEventListener('click', () => submitMove(button.dataset.move));
-  });
+  installMoveHoverHandlers();
 
-  app.querySelector('[data-action="continue"]')?.addEventListener('click', continueMatch);
-  app.querySelector('[data-action="rematch"]')?.addEventListener('click', restartMatch);
-  app.querySelector('[data-action="quit"]')?.addEventListener('click', quitLocalMatch);
-  app.querySelector('[data-action="reset"]').addEventListener('click', restartMatch);
+  app.querySelector('[data-action="continue"]')?.addEventListener('click', continueGame);
+  app.querySelector('[data-action="rematch"]')?.addEventListener('click', restartGame);
+  app.querySelector('[data-action="quit"]')?.addEventListener('click', quitLocalGame);
+  app.querySelector('[data-action="reset"]').addEventListener('click', restartGame);
   mountSpriteRenderers(app.querySelectorAll('.sprite-canvas'));
-  playStageAudio();
+  playStageAudio({
+    isTransitioning,
+    presentation: stagePresentation,
+    audioKey: `${state.turn}:${turnPhase}:${stagePresentation.name}:${stagePresentation.flip}`,
+  });
 }
 
 function renderPickHistories() {
@@ -565,13 +335,151 @@ function renderTitleScreen() {
             aria-hidden="true"
           ></canvas>
         </button>
+
+        <button class="play-button tutorial-button" data-action="tutorial" aria-label="Tutorial">
+          <canvas
+            class="sprite-canvas play-button-art"
+            data-doodle="title/tutorial_button"
+            data-frame-width="${TITLE_BUTTON_FRAME_WIDTH}"
+            data-frame-height="${TITLE_BUTTON_FRAME_HEIGHT}"
+            width="${TITLE_BUTTON_FRAME_WIDTH}"
+            height="${TITLE_BUTTON_FRAME_HEIGHT}"
+            aria-hidden="true"
+          ></canvas>
+        </button>
       </div>
     </section>
   `;
 
   app.querySelector('[data-action="play"]').addEventListener('click', startGameFromTitle);
   app.querySelector('[data-action="ranked"]').addEventListener('click', startRankedFromTitle);
+  app.querySelector('[data-action="tutorial"]').addEventListener('click', startTutorialFromTitle);
   mountSpriteRenderers(app.querySelectorAll('.sprite-canvas'));
+}
+
+function renderTutorialScreen() {
+  stopFindingMatchTicker();
+  requestMusicTrack('game');
+
+  app.innerHTML = `
+    <section class="arena tutorial-arena">
+      ${renderStageHud()}
+      ${renderPickHistories()}
+      ${renderTutorialNav()}
+      <figure class="doodle-stage tutorial-stage">
+        ${renderTutorialStage()}
+      </figure>
+    </section>
+
+    <section class="moves tutorial-moves" aria-label="Tutorial controls">
+      ${renderTutorialButtons()}
+    </section>
+  `;
+
+  installMoveHoverHandlers();
+  app.querySelector('[data-action="back-tutorial"]')?.addEventListener('click', goBackTutorial);
+  app.querySelector('[data-action="next-tutorial"]')?.addEventListener('click', advanceTutorialSlide);
+  app.querySelector('[data-action="quit"]')?.addEventListener('click', quitLocalGame);
+  mountSpriteRenderers(app.querySelectorAll('.sprite-canvas'));
+  playStageAudio({
+    isTransitioning: isTransitioning || tutorialStageMode !== 'scene',
+    presentation: stagePresentation,
+    audioKey: `tutorial:${state.turn}:${turnPhase}:${stagePresentation.name}:${stagePresentation.flip}`,
+  });
+}
+
+function renderTutorialStage() {
+  return tutorialStageMode === 'scene' ? renderStagePresentation() : renderTutorialSlide();
+}
+
+function renderTutorialNav() {
+  return `
+    <nav class="tutorial-nav" aria-label="Tutorial navigation">
+      ${renderSheetButton('back-tutorial', 'back_button', 'Back', 'tutorial-nav-button tutorial-back-button')}
+      ${tutorialSlideIndex === TUTORIAL_SLIDE_COUNT - 1
+        ? renderSheetButton('quit', 'quit_button', 'Return to menu', 'tutorial-nav-button tutorial-next-button')
+        : renderSheetButton('next-tutorial', 'tutorial/next_button', 'Next', 'tutorial-nav-button tutorial-next-button')}
+    </nav>
+  `;
+}
+
+function renderTutorialSlide() {
+  const slideNumber = tutorialSlideIndex + 1;
+  const slides = [
+    `
+      <p><strong>Tap Tap Shoot!</strong></p>
+      <p>is a simultaneous reveal</p>
+      <p>guessing game, like</p>
+      <p><strong>Rock Paper Scissors.</strong></p>
+    `,
+    `
+      <p>But a little more complex.</p>
+      <p>There are five options, and</p>
+      <p>a resource to manage.</p>
+    `,
+    `
+      <p>Hover over the buttons</p>
+      <p>to see what beats what.</p>
+    `,
+    `
+      <p>An</p>
+      <p><strong>Action Point</strong></p>
+      <p>is required to attack your opponent.</p>
+      <p>Each player starts with one.</p>
+      <p>Defensive moves are free.</p>
+    `,
+    `
+      <p><strong>Reloading</strong></p>
+      <p>stocks an Action Point,</p>
+      <p>but leaves you vulnerable.</p>
+    `,
+    `
+      <p>Each game is</p>
+      <p><strong>First to Five.</strong></p>
+    `,
+    `
+      <div class="tutorial-side-copy">
+        <p><strong>Tips</strong></p>
+        <p>The game is all about</p>
+        <p>relative Action Points.</p>
+        <p>When each player has</p>
+        <p>one, the game is like</p>
+        <p>Rock Paper Scissors.</p>
+      </div>
+      <div class="tutorial-art-slot" aria-hidden="true"></div>
+    `,
+    `
+      <div class="tutorial-side-copy">
+        <p><strong>Tips</strong></p>
+        <p>But when a player has an</p>
+        <p>Action Point advantage,</p>
+        <p>they can enforce a mixup.</p>
+      </div>
+      <div class="tutorial-art-slot" aria-hidden="true"></div>
+    `,
+    `
+      <p>Everyone has patterns.</p>
+      <p>Try to read your opponent!</p>
+      <p>And thanks for playing!!</p>
+      <p><strong>-JP</strong></p>
+    `,
+  ];
+
+  return `
+    <div class="tutorial-slide tutorial-slide-${slideNumber}" aria-label="Tutorial ${slideNumber}">
+      ${slides[tutorialSlideIndex]}
+    </div>
+  `;
+}
+
+function renderTutorialButtons() {
+  if (tutorialSlideIndex >= 2) {
+    const moves = Object.values(MOVES);
+
+    return moves.map((move) => renderTutorialMoveButton(move)).join('');
+  }
+
+  return '';
 }
 
 function renderOpponentSelectScreen() {
@@ -592,14 +500,32 @@ function renderOpponentSelectScreen() {
 
       <div class="opponent-actions">
         ${OPPONENT_IDS.map((opponentId) => renderOpponentButton(OPPONENTS[opponentId])).join('')}
+        ${renderBackButton()}
       </div>
     </section>
   `;
 
   app.querySelectorAll('[data-opponent]').forEach((button) => {
-    button.addEventListener('click', () => startLocalMatch(button.dataset.opponent));
+    button.addEventListener('click', () => startLocalGame(button.dataset.opponent));
   });
+  app.querySelector('[data-action="back-title"]').addEventListener('click', returnToTitleFromOpponentSelect);
   mountSpriteRenderers(app.querySelectorAll('.sprite-canvas'));
+}
+
+function renderBackButton() {
+  return `
+    <button class="opponent-button back-button" data-action="back-title" aria-label="Back">
+      <canvas
+        class="sprite-canvas opponent-button-art"
+        data-doodle="back_button"
+        data-frame-width="${TITLE_BUTTON_FRAME_WIDTH}"
+        data-frame-height="${TITLE_BUTTON_FRAME_HEIGHT}"
+        width="${TITLE_BUTTON_FRAME_WIDTH}"
+        height="${TITLE_BUTTON_FRAME_HEIGHT}"
+        aria-hidden="true"
+      ></canvas>
+    </button>
+  `;
 }
 
 function renderOpponentButton(opponent) {
@@ -669,17 +595,17 @@ function renderQueueScreen() {
 
 function renderStageHud() {
   return `
-    <div class="stage-hud" aria-label="Match status">
+    <div class="stage-hud" aria-label="Game status">
       ${renderApMeter('p1', state.players.p1.ap)}
       ${renderWinMeter('p1')}
       <canvas
-        class="sprite-canvas round-counter"
-        data-doodle="${getRoundDoodle(state.round)}"
-        data-frame-width="${ROUND_FRAME_WIDTH}"
-        data-frame-height="${ROUND_FRAME_HEIGHT}"
-        width="${ROUND_FRAME_WIDTH}"
-        height="${ROUND_FRAME_HEIGHT}"
-        aria-label="Round ${state.round}"
+        class="sprite-canvas turn-counter"
+        data-doodle="${getTurnDoodle(state.turn)}"
+        data-frame-width="${TURN_FRAME_WIDTH}"
+        data-frame-height="${TURN_FRAME_HEIGHT}"
+        width="${TURN_FRAME_WIDTH}"
+        height="${TURN_FRAME_HEIGHT}"
+        aria-label="Turn ${state.turn}"
       ></canvas>
       ${renderWinMeter('p2')}
       ${renderApMeter('p2', state.players.p2.ap)}
@@ -688,7 +614,7 @@ function renderStageHud() {
 }
 
 function renderWinMeter(playerId) {
-  const winStacks = getWinStacks(matchWins[playerId]);
+  const winStacks = getWinStacks(roundWins[playerId]);
 
   return `
     <div class="win-meter ${playerId}">
@@ -701,7 +627,7 @@ function renderWinMeter(playerId) {
         height="${WINS_LABEL_FRAME_HEIGHT}"
         aria-hidden="true"
       ></canvas>
-      <div class="win-marks" aria-label="${playerId} wins: ${matchWins[playerId]}">
+      <div class="win-marks" aria-label="${playerId} wins: ${roundWins[playerId]}">
         ${winStacks.map((stack) => renderWinMark(stack)).join('')}
       </div>
     </div>
@@ -766,17 +692,17 @@ function renderApIcon() {
   `;
 }
 
-function getRoundDoodle(round) {
-  return round <= LAST_NUMBERED_ROUND ? `round${round}` : 'roundlostcount';
+function getTurnDoodle(turn) {
+  return turn <= LAST_NUMBERED_TURN ? `turn${turn}` : 'turnlostcount';
 }
 
 function renderActionButtons(legalMoves) {
-  if (roundPhase === 'game-over') {
+  if (turnPhase === 'round-over') {
     if (playMode === 'online') {
       return renderSheetButton('rematch', 'rematch_button', 'Rematch', 'rematch-button');
     }
 
-    return isMatchOver() ? renderMatchOverButtons() : renderContinueButton();
+    return isGameOver() ? renderGameOverButtons() : renderContinueButton();
   }
 
   return Object.values(MOVES).map((move) => renderMoveButton(move, legalMoves.has(move.id))).join('');
@@ -786,7 +712,7 @@ function renderContinueButton() {
   return renderSheetButton('continue', 'continue_button', 'Continue', 'continue-button');
 }
 
-function renderMatchOverButtons() {
+function renderGameOverButtons() {
   return `
     ${renderSheetButton('rematch', 'rematch_button', 'Rematch', 'rematch-button')}
     ${renderSheetButton('quit', 'quit_button', 'Quit', 'quit-button')}
@@ -811,10 +737,22 @@ function renderSheetButton(action, doodle, label, extraClass = '') {
 
 function renderMoveButton(move, isLegal) {
   const isQueued = p1QueuedMove === move.id;
-  const canChooseMove = roundPhase === 'go' || roundPhase === 'scene';
+  const canChooseMove = turnPhase === 'go' || turnPhase === 'scene';
+  const relationAttributes = Object.fromEntries(
+    Object.entries(MOVE_OUTLINE_RELATIONS).map(([hoveredMove, relations]) => [
+      `data-${hoveredMove}-outline`,
+      relations[move.id],
+    ]),
+  );
+  const relationMarkup = Object.entries(relationAttributes)
+    .map(([attribute, value]) => `${attribute}="${value}"`)
+    .join(' ');
 
   return `
-    <button class="move-card ${isQueued ? 'selected' : ''}" data-move="${move.id}" ${isLegal && canChooseMove && state.status === 'playing' && !isTransitioning ? '' : 'disabled'}>
+    <button class="move-card ${isQueued ? 'selected' : ''}" data-move="${move.id}" ${relationMarkup} ${isLegal && canChooseMove && state.status === 'playing' && !isTransitioning ? '' : 'disabled'}>
+      ${renderMoveOutline('beats')}
+      ${renderMoveOutline('draws')}
+      ${renderMoveOutline('loses')}
       <canvas
         class="sprite-canvas move-button-art"
         data-doodle="${MOVE_BUTTON_DOODLES[move.id]}"
@@ -828,7 +766,42 @@ function renderMoveButton(move, isLegal) {
   `;
 }
 
+function renderTutorialMoveButton(move) {
+  return renderMoveButton(move, tutorialStageMode === 'slide' && canAfford(move.id, state.players.p1.ap));
+}
+
+function renderMoveOutline(relation) {
+  return `
+    <canvas
+      class="sprite-canvas move-interaction-outline ${relation}-outline"
+      data-doodle="${relation}_outline"
+      data-frame-width="${OUTLINE_FRAME_WIDTH}"
+      data-frame-height="${OUTLINE_FRAME_HEIGHT}"
+      width="${OUTLINE_FRAME_WIDTH}"
+      height="${OUTLINE_FRAME_HEIGHT}"
+      aria-hidden="true"
+    ></canvas>
+  `;
+}
+
+function installMoveHoverHandlers() {
+  app.querySelectorAll('[data-move]').forEach((button) => {
+    button.addEventListener('click', () => submitMove(button.dataset.move));
+    button.addEventListener('pointerenter', () => {
+      button.closest('.moves')?.setAttribute('data-hover-move', button.dataset.move);
+    });
+    button.addEventListener('pointerleave', () => {
+      button.closest('.moves')?.removeAttribute('data-hover-move');
+    });
+  });
+}
+
 function submitMove(p1Move) {
+  if (screen === 'tutorial') {
+    submitTutorialMove(p1Move);
+    return;
+  }
+
   if (playMode === 'online') {
     submitRankedMove(p1Move);
     return;
@@ -836,7 +809,7 @@ function submitMove(p1Move) {
 
   if (
     isTransitioning ||
-    (roundPhase !== 'go' && roundPhase !== 'scene') ||
+    (turnPhase !== 'go' && turnPhase !== 'scene') ||
     state.status !== 'playing' ||
     !canAfford(p1Move, state.players.p1.ap)
   ) {
@@ -849,122 +822,25 @@ function submitMove(p1Move) {
   resolvePlayerSelection();
 }
 
-function chooseRivalMove() {
-  const opponent = OPPONENTS[selectedOpponentId] ?? OPPONENTS[DEFAULT_OPPONENT_ID];
-  return opponent.chooseMove(state);
+function submitTutorialMove(p1Move) {
+  if (
+    tutorialSlideIndex < 2 ||
+    tutorialStageMode !== 'slide' ||
+    isTransitioning ||
+    (turnPhase !== 'go' && turnPhase !== 'scene') ||
+    state.status !== 'playing' ||
+    !canAfford(p1Move, state.players.p1.ap)
+  ) {
+    return;
+  }
+
+  unlockSceneAudio();
+  p1QueuedMove = p1Move;
+  render();
+  resolvePlayerSelection();
 }
 
-function chooseOlJoeMove(currentState) {
-  const ownAp = currentState.players.p2.ap;
-  const enemyAp = currentState.players.p1.ap;
-  return chooseWeightedLegalMove(ownAp, OL_JOE_POLICY[getRivalPolicyKey(ownAp, enemyAp)]);
-}
-
-function chooseMackTheKnifeMove(currentState) {
-  const ownAp = currentState.players.p2.ap;
-  const enemyAp = currentState.players.p1.ap;
-
-  if (ownAp === 0) {
-    return chooseWeightedLegalMove(ownAp, enemyAp > 0
-      ? { counterstab: 50, block: 30, reload: 20 }
-      : { reload: 100 });
-  }
-
-  return chooseWeightedLegalMove(ownAp, enemyAp > 0
-    ? { stab: 50, counterstab: 25, shoot: 15, block: 10 }
-    : { stab: 62, shoot: 18, reload: 20 });
-}
-
-function chooseBlastinDanMove(currentState) {
-  const ownAp = currentState.players.p2.ap;
-  const enemyAp = currentState.players.p1.ap;
-
-  if (ownAp === 0) {
-    return 'reload';
-  }
-
-  return chooseWeightedLegalMove(ownAp, enemyAp > 0
-    ? { shoot: 70, block: 15, reload: 10, stab: 5 }
-    : { shoot: 72, reload: 18, stab: 10 });
-}
-
-function chooseKatheyCleverMove(currentState) {
-  const ownAp = currentState.players.p2.ap;
-  const enemyAp = currentState.players.p1.ap;
-  const playerLastMove = currentState.history[0]?.p1Move;
-
-  if (enemyAp === 0) {
-    return chooseWeightedLegalMove(ownAp, ownAp > 0
-      ? { stab: 40, shoot: 30, reload: 30 }
-      : { reload: 100 });
-  }
-
-  if (playerLastMove === 'stab') {
-    return chooseWeightedLegalMove(ownAp, { counterstab: 55, block: 25, shoot: 15, reload: 5 });
-  }
-
-  if (playerLastMove === 'shoot') {
-    return chooseWeightedLegalMove(ownAp, { block: 55, reload: 20, shoot: 15, counterstab: 10 });
-  }
-
-  return chooseWeightedLegalMove(ownAp, ownAp > enemyAp
-    ? { shoot: 32, block: 28, counterstab: 25, stab: 10, reload: 5 }
-    : { block: 36, counterstab: 34, reload: 15, shoot: 10, stab: 5 });
-}
-
-function chooseWeightedLegalMove(ownAp, policy) {
-  const legalMoves = getLegalMoves(ownAp);
-  const weightedMoves = Object.entries(policy)
-    .filter(([moveId, weight]) => legalMoves.includes(moveId) && weight > 0)
-    .map(([moveId, weight]) => ({ moveId, weight }));
-
-  if (!weightedMoves.length) {
-    return legalMoves.includes('reload') ? 'reload' : legalMoves[0];
-  }
-
-  return pickWeightedRivalMove(weightedMoves);
-}
-
-function getRivalPolicyKey(ownAp, enemyAp) {
-  if (ownAp === 0 && enemyAp === 0) {
-    return '0-0';
-  }
-
-  if (ownAp > 0 && enemyAp === 0) {
-    return '1-0';
-  }
-
-  if (ownAp === 0 && enemyAp > 0) {
-    return '0-1';
-  }
-
-  if (ownAp > enemyAp) {
-    return '2-1';
-  }
-
-  if (ownAp < enemyAp) {
-    return '1-2';
-  }
-
-  return '1-1';
-}
-
-function pickWeightedRivalMove(weightedMoves) {
-  const totalWeight = weightedMoves.reduce((sum, move) => sum + move.weight, 0);
-  let roll = Math.random() * totalWeight;
-
-  for (const move of weightedMoves) {
-    if (roll < move.weight) {
-      return move.moveId;
-    }
-
-    roll -= move.weight;
-  }
-
-  return weightedMoves[weightedMoves.length - 1].moveId;
-}
-
-async function restartMatch() {
+async function restartGame() {
   if (playMode === 'online') {
     leaveRanked();
     return;
@@ -974,14 +850,14 @@ async function restartMatch() {
     return;
   }
 
-  if (isMatchOver() || state.winner !== 'p1') {
+  if (isGameOver() || state.winner !== 'p1') {
     restartMusicTrackOnce('title', 'game');
   }
   unlockSceneAudio();
-  resetMatchWins();
+  resetRoundWins();
   loopToken += 1;
   isTransitioning = true;
-  await playStarburstWipeTransition(setNewGame);
+  await playWipeTransition(setNewRound);
   isTransitioning = false;
   render();
   beginOpeningCues();
@@ -999,7 +875,45 @@ async function startGameFromTitle() {
   render();
 }
 
-async function startLocalMatch(opponentId) {
+function returnToTitleFromOpponentSelect() {
+  if (isTransitioning) {
+    return;
+  }
+
+  screen = 'title';
+  p1QueuedMove = null;
+  rankedSnapshot = null;
+  render();
+}
+
+async function startTutorialFromTitle() {
+  if (isTransitioning) {
+    return;
+  }
+
+  playMode = 'local';
+  requestMusicTrack('game');
+  unlockSceneAudio();
+  resetRoundWins();
+  loopToken += 1;
+  isTransitioning = true;
+  await playWipeTransition(() => {
+    selectedOpponentId = DEFAULT_OPPONENT_ID;
+    state = createRoundState();
+    screen = 'tutorial';
+    turnPhase = 'scene';
+    tutorialSlideIndex = 0;
+    tutorialStageMode = 'slide';
+    p1QueuedMove = null;
+    rankedSnapshot = null;
+    stagePresentation = { kind: 'doodle', name: 'reloading', flip: false };
+    render();
+  });
+  isTransitioning = false;
+  render();
+}
+
+async function startLocalGame(opponentId) {
   if (isTransitioning) {
     return;
   }
@@ -1008,20 +922,63 @@ async function startLocalMatch(opponentId) {
   playMode = 'local';
   requestMusicTrack('game');
   unlockSceneAudio();
-  resetMatchWins();
+  resetRoundWins();
   isTransitioning = true;
-  await playStarburstWipeTransition(setNewGame);
+  await playWipeTransition(setNewRound);
   isTransitioning = false;
   render();
   beginOpeningCues();
 }
 
-async function continueMatch() {
+async function advanceTutorialSlide() {
+  if (isTransitioning || screen !== 'tutorial' || tutorialSlideIndex >= TUTORIAL_SLIDE_COUNT - 1) {
+    return;
+  }
+
+  unlockSceneAudio();
+  isTransitioning = true;
+  await playWipeTransition(() => {
+    settleTutorialScene();
+    tutorialSlideIndex += 1;
+    tutorialStageMode = 'slide';
+    render();
+  });
+  isTransitioning = false;
+  render();
+}
+
+async function goBackTutorial() {
+  if (isTransitioning || screen !== 'tutorial') {
+    return;
+  }
+
+  if (tutorialStageMode === 'slide' && tutorialSlideIndex === 0) {
+    return;
+  }
+
+  unlockSceneAudio();
+  isTransitioning = true;
+  await playWipeTransition(() => {
+    if (tutorialStageMode === 'scene') {
+      settleTutorialScene();
+      tutorialStageMode = 'slide';
+      render();
+      return;
+    }
+
+    tutorialSlideIndex = Math.max(0, tutorialSlideIndex - 1);
+    render();
+  });
+  isTransitioning = false;
+  render();
+}
+
+async function continueGame() {
   if (playMode === 'online') {
     return;
   }
 
-  if (isTransitioning || roundPhase !== 'game-over' || isMatchOver()) {
+  if (isTransitioning || turnPhase !== 'round-over' || isGameOver()) {
     return;
   }
 
@@ -1029,12 +986,12 @@ async function continueMatch() {
   unlockSceneAudio();
   loopToken += 1;
   isTransitioning = true;
-  await playStarburstWipeTransition(setNewGameAtReloadScene);
+  await playWipeTransition(setNewRoundAtReloadScene);
   isTransitioning = false;
   render();
 }
 
-async function quitLocalMatch() {
+async function quitLocalGame() {
   if (playMode === 'online') {
     leaveRanked();
     return;
@@ -1048,11 +1005,13 @@ async function quitLocalMatch() {
   unlockSceneAudio();
   loopToken += 1;
   isTransitioning = true;
-  await playStarburstWipeTransition(() => {
-    resetMatchWins();
-    state = createGameState();
+  await playWipeTransition(() => {
+    resetRoundWins();
+    state = createRoundState();
     screen = 'title';
-    roundPhase = 'idle';
+    turnPhase = 'idle';
+    tutorialSlideIndex = 0;
+    tutorialStageMode = 'slide';
     p1QueuedMove = null;
     rankedSnapshot = null;
     stagePresentation = { kind: 'doodle', name: 'reloading', flip: false };
@@ -1062,37 +1021,53 @@ async function quitLocalMatch() {
   render();
 }
 
-function resetMatchWins() {
-  matchWins = {
+function resetRoundWins() {
+  roundWins = {
     p1: 0,
     p2: 0,
   };
   syncMusicTopper();
 }
 
-function isMatchOver() {
-  return matchWins.p1 >= MATCH_TARGET_WINS || matchWins.p2 >= MATCH_TARGET_WINS;
+function isGameOver() {
+  return roundWins.p1 >= GAME_TARGET_ROUNDS || roundWins.p2 >= GAME_TARGET_ROUNDS;
 }
 
-function getMatchWinner() {
-  if (matchWins.p1 >= MATCH_TARGET_WINS) {
+function getGameWinner() {
+  if (roundWins.p1 >= GAME_TARGET_ROUNDS) {
     return 'p1';
   }
 
-  if (matchWins.p2 >= MATCH_TARGET_WINS) {
+  if (roundWins.p2 >= GAME_TARGET_ROUNDS) {
     return 'p2';
   }
 
   return null;
 }
 
-function setNewGame() {
-  state = createGameState();
+function getMusicTopperFile() {
+  if (
+    playMode !== 'local' ||
+    isGameOver() ||
+    (roundWins.p1 !== GAME_TARGET_ROUNDS - 1 && roundWins.p2 !== GAME_TARGET_ROUNDS - 1)
+  ) {
+    return null;
+  }
+
+  if (roundWins.p1 === GAME_TARGET_ROUNDS - 1 && roundWins.p2 === GAME_TARGET_ROUNDS - 1) {
+    return getMusicTopperId('final');
+  }
+
+  return getMusicTopperId('tension');
+}
+
+function setNewRound() {
+  state = createRoundState();
   screen = 'playing';
   rankedSnapshot = null;
-  roundPhase = 'intro-scene';
+  turnPhase = 'intro-scene';
   p1QueuedMove = null;
-  lastSceneAudioKey = null;
+  resetStageAudioKey();
   lastMoves = {
     p1: 'reload',
     p2: 'reload',
@@ -1101,9 +1076,9 @@ function setNewGame() {
   render();
 }
 
-function setNewGameAtReloadScene() {
-  setNewGame();
-  roundPhase = 'scene';
+function setNewRoundAtReloadScene() {
+  setNewRound();
+  turnPhase = 'scene';
   stagePresentation = { kind: 'doodle', name: 'reloading', flip: false };
   render();
 }
@@ -1127,59 +1102,20 @@ function startRankedFromTitle() {
   p1QueuedMove = null;
   rankedSnapshot = null;
   findingMatchStep = 0;
-  connectRankedSocket();
+  rankedClient.connect();
   render();
 }
 
-function connectRankedSocket() {
-  closeRankedSocket();
-
-  const socket = new WebSocket(getRankedSocketUrl());
-  rankedSocket = socket;
-
-  socket.addEventListener('message', (event) => {
-    const message = JSON.parse(event.data);
-    handleRankedMessage(message);
-  });
-
-  socket.addEventListener('close', () => {
-    if (playMode === 'online' && screen !== 'title' && rankedSocket === socket) {
-      screen = 'title';
-      rankedSnapshot = null;
-      rankedSocket = null;
-      render();
-    }
-  });
+function handleRankedQueue() {
+  screen = 'queue';
+  render();
 }
 
-function getRankedSocketUrl() {
-  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  const host = window.location.protocol === 'file:' ? 'localhost:8787' : window.location.host;
-  const url = new URL(`${protocol}//${host}/ws`);
-
-  if (rankedPlayerId) {
-    url.searchParams.set('playerId', rankedPlayerId);
-  }
-
-  return url.toString();
-}
-
-function handleRankedMessage(message) {
-  if (message.type === 'hello') {
-    rankedPlayerId = message.playerId;
-    writeLocalStorage(RANKED_PLAYER_ID_KEY, rankedPlayerId);
-    sendRankedMessage({ type: 'joinRanked' });
-    return;
-  }
-
-  if (message.type === 'queue') {
-    screen = 'queue';
+function handleRankedClose() {
+  if (playMode === 'online' && screen !== 'title') {
+    screen = 'title';
+    rankedSnapshot = null;
     render();
-    return;
-  }
-
-  if (message.type === 'matchState') {
-    applyRankedSnapshot(message);
   }
 }
 
@@ -1189,12 +1125,14 @@ function applyRankedSnapshot(snapshot) {
   rankedSnapshot = snapshot;
   screen = 'playing';
   state = getLocalStateFromRankedSnapshot(snapshot);
-  matchWins = getLocalScoreFromRankedSnapshot(snapshot);
-  roundPhase = getRoundPhaseFromRankedSnapshot(snapshot);
+  roundWins = getLocalRoundWinsFromRankedSnapshot(snapshot);
+  turnPhase = getTurnPhaseFromRankedSnapshot(snapshot);
   p1QueuedMove = snapshot.phase === 'choosing' ? p1QueuedMove : null;
-  lastSceneAudioKey = previousPhase === snapshot.phase ? lastSceneAudioKey : null;
+  if (previousPhase !== snapshot.phase) {
+    resetStageAudioKey();
+  }
 
-  if (snapshot.revealedMoves || snapshot.game.lastTurn) {
+  if (snapshot.revealedMoves || snapshot.round.lastTurn) {
     lastMoves = getLocalMovesFromRankedSnapshot(snapshot);
     stagePresentation = getDoodlePresentation(lastMoves.p1, lastMoves.p2);
   } else if (snapshot.phase === 'countdown') {
@@ -1217,7 +1155,7 @@ function getLocalStateFromRankedSnapshot(snapshot) {
   const playerKey = snapshot.playerKey;
 
   return {
-    round: snapshot.game.round,
+    turn: snapshot.round.turn,
     status: snapshot.phase === 'gameOver' ? 'finished' : 'playing',
     winner: snapshot.winner === playerKey ? 'p1' : snapshot.winner === opponentKey ? 'p2' : null,
     players: {
@@ -1232,18 +1170,18 @@ function getLocalStateFromRankedSnapshot(snapshot) {
         hit: null,
       },
     },
-    history: snapshot.game.lastTurn ? [snapshot.game.lastTurn] : [],
+    history: snapshot.round.lastTurn ? [snapshot.round.lastTurn] : [],
   };
 }
 
-function getLocalScoreFromRankedSnapshot(snapshot) {
+function getLocalRoundWinsFromRankedSnapshot(snapshot) {
   return {
-    p1: snapshot.score[snapshot.playerKey],
-    p2: snapshot.score[snapshot.opponentKey],
+    p1: snapshot.roundWins[snapshot.playerKey],
+    p2: snapshot.roundWins[snapshot.opponentKey],
   };
 }
 
-function getRoundPhaseFromRankedSnapshot(snapshot) {
+function getTurnPhaseFromRankedSnapshot(snapshot) {
   if (snapshot.phase === 'countdown') {
     return 'ready';
   }
@@ -1256,13 +1194,13 @@ function getRoundPhaseFromRankedSnapshot(snapshot) {
     return 'scene';
   }
 
-  return 'game-over';
+  return 'round-over';
 }
 
 function getLocalMovesFromRankedSnapshot(snapshot) {
   const moves = snapshot.revealedMoves ?? {
-    p1: snapshot.game.lastTurn?.p1Move ?? 'reload',
-    p2: snapshot.game.lastTurn?.p2Move ?? 'reload',
+    p1: snapshot.round.lastTurn?.p1Move ?? 'reload',
+    p2: snapshot.round.lastTurn?.p2Move ?? 'reload',
   };
 
   return {
@@ -1272,39 +1210,21 @@ function getLocalMovesFromRankedSnapshot(snapshot) {
 }
 
 function submitRankedMove(moveId) {
-  if (
-    !rankedSocket ||
-    rankedSocket.readyState !== WebSocket.OPEN ||
-    !rankedSnapshot ||
-    rankedSnapshot.phase !== 'choosing' ||
-    p1QueuedMove ||
-    !rankedSnapshot.players[rankedSnapshot.playerKey].legalMoves.includes(moveId)
-  ) {
+  if (p1QueuedMove || !rankedClient.submitMove(rankedSnapshot, moveId)) {
     return;
   }
 
   p1QueuedMove = moveId;
-  sendRankedMessage({
-    type: 'submitMove',
-    matchId: rankedSnapshot.matchId,
-    moveId,
-  });
   render();
 }
 
-function sendRankedMessage(message) {
-  if (rankedSocket?.readyState === WebSocket.OPEN) {
-    rankedSocket.send(JSON.stringify(message));
-  }
-}
-
 function leaveRanked() {
-  closeRankedSocket();
+  rankedClient.close();
   stopFindingMatchTicker();
   playMode = 'local';
   rankedSnapshot = null;
   screen = 'title';
-  roundPhase = 'idle';
+  turnPhase = 'idle';
   p1QueuedMove = null;
   render();
 }
@@ -1334,768 +1254,9 @@ function stopFindingMatchTicker() {
   findingMatchTimer = null;
 }
 
-function closeRankedSocket() {
-  if (rankedSocket) {
-    rankedSocket.close();
-    rankedSocket = null;
-  }
-}
-
-function readLocalStorage(key) {
-  try {
-    return window.localStorage.getItem(key);
-  } catch {
-    return null;
-  }
-}
-
-function writeLocalStorage(key, value) {
-  try {
-    window.localStorage.setItem(key, value);
-  } catch {
-    // Ranked still works for this tab; it just cannot persist the player id.
-  }
-}
-
-function installAudioUnlockListeners() {
-  const options = { capture: true, once: true };
-  const unlock = () => unlockSceneAudio();
-
-  window.addEventListener('pointerdown', unlock, options);
-  window.addEventListener('keydown', unlock, options);
-  window.addEventListener('touchstart', unlock, options);
-}
-
-function requestMusicTrack(trackId) {
-  if (!MUSIC_TRACKS[trackId]) {
-    return;
-  }
-
-  desiredMusicTrack = trackId;
-
-  const context = getExistingSceneAudioContext();
-
-  if (!context) {
-    return;
-  }
-
-  loadSceneAudioBuffer(MUSIC_TRACKS[trackId]).then(() => syncMusicTrack());
-  syncMusicTrack();
-}
-
-function queueMusicTrackOnce(trackId, returnTrackId) {
-  if (!MUSIC_TRACKS[trackId] || !MUSIC_TRACKS[returnTrackId]) {
-    return;
-  }
-
-  const context = getSceneAudioContext();
-
-  if (!context) {
-    return;
-  }
-
-  queuedMusicSegment = { trackId, returnTrackId };
-  loadSceneAudioBuffer(MUSIC_TRACKS[trackId]).then(() => syncMusicTrack());
-  loadSceneAudioBuffer(MUSIC_TRACKS[returnTrackId]);
-  syncMusicTrack();
-}
-
-function restartMusicTrack(trackId) {
-  if (!MUSIC_TRACKS[trackId]) {
-    return;
-  }
-
-  desiredMusicTrack = trackId;
-  queuedMusicTrack = null;
-  queuedMusicSegment = null;
-
-  const context = getSceneAudioContext();
-
-  if (!context) {
-    startHtmlMusicTrack(trackId, null);
-    return;
-  }
-
-  stopCurrentMusicSegment();
-  loadSceneAudioBuffer(MUSIC_TRACKS[trackId]).then((buffer) => {
-    if (!buffer || context.state !== 'running') {
-      return;
-    }
-
-    startMusicSegment(trackId, context.currentTime + 0.005, null);
-  });
-}
-
-function restartMusicTrackOnce(trackId, returnTrackId) {
-  if (!MUSIC_TRACKS[trackId] || !MUSIC_TRACKS[returnTrackId]) {
-    return;
-  }
-
-  desiredMusicTrack = returnTrackId;
-  queuedMusicTrack = null;
-  queuedMusicSegment = null;
-
-  const context = getSceneAudioContext();
-
-  if (!context) {
-    startHtmlMusicTrack(trackId, returnTrackId);
-    return;
-  }
-
-  stopCurrentMusicSegment();
-  loadSceneAudioBuffer(MUSIC_TRACKS[trackId]).then((buffer) => {
-    if (!buffer || context.state !== 'running') {
-      return;
-    }
-
-    loadSceneAudioBuffer(MUSIC_TRACKS[returnTrackId]);
-    startMusicSegment(trackId, context.currentTime + 0.005, returnTrackId);
-  });
-}
-
-function interruptMusicFileOnce(fileName, returnTrackId = desiredMusicTrack ?? 'game', resumeCurrentTrack = true) {
-  if (!fileName) {
-    return;
-  }
-
-  desiredMusicTrack = returnTrackId;
-  queuedMusicTrack = null;
-  queuedMusicSegment = null;
-
-  const context = getSceneAudioContext();
-
-  if (!context) {
-    const audio = getSceneAudio(fileName);
-    audio.muted = false;
-    audio.volume = 1;
-    audio.currentTime = 0;
-    audio.onended = () => {
-      if (returnTrackId) {
-        startHtmlMusicTrack(returnTrackId, null);
-      }
-    };
-    audio.play().catch((error) => {
-      console.warn(`Could not play music interrupt: ${fileName}`, error);
-    });
-    return;
-  }
-
-  loadSceneAudioBuffer(fileName).then((buffer) => {
-    if (!buffer || context.state !== 'running') {
-      return;
-    }
-
-    if (returnTrackId && MUSIC_TRACKS[returnTrackId]) {
-      loadSceneAudioBuffer(MUSIC_TRACKS[returnTrackId]);
-    }
-
-    const resumeSegment = resumeCurrentTrack ? getInterruptedMusicResumeSegment(returnTrackId) : null;
-    stopCurrentMusicSegment();
-    startMusicFileSegment(fileName, context.currentTime + 0.005, resumeSegment);
-  });
-}
-
-function getInterruptedMusicResumeSegment(fallbackTrackId) {
-  const context = getSceneAudioContext();
-
-  if (!context || !currentMusicSegment?.trackId) {
-    return fallbackTrackId ? { trackId: fallbackTrackId, returnTrackId: null, offset: 0 } : null;
-  }
-
-  const fileName = MUSIC_TRACKS[currentMusicSegment.trackId];
-  const buffer = fileName ? sceneAudioBuffers.get(fileName) : null;
-
-  if (!buffer) {
-    return { trackId: currentMusicSegment.trackId, returnTrackId: currentMusicSegment.returnTrackId, offset: 0 };
-  }
-
-  const elapsed = Math.max(0, context.currentTime - currentMusicSegment.startTime);
-  const offset = (currentMusicSegment.offset + elapsed) % buffer.duration;
-
-  return {
-    trackId: currentMusicSegment.trackId,
-    returnTrackId: currentMusicSegment.returnTrackId,
-    offset,
-  };
-}
-
-function startMusicFileSegment(fileName, startAt, resumeSegment) {
-  const context = getSceneAudioContext();
-  const buffer = fileName ? sceneAudioBuffers.get(fileName) : null;
-
-  if (!context || context.state !== 'running' || !buffer) {
-    return;
-  }
-
-  const source = context.createBufferSource();
-  const safeStartAt = Math.max(startAt, context.currentTime + 0.005);
-  const segment = {
-    trackId: null,
-    returnTrackId: null,
-    resumeSegment,
-    source,
-    startTime: safeStartAt,
-    offset: 0,
-    endTime: safeStartAt + buffer.duration,
-  };
-
-  source.buffer = buffer;
-  source.connect(context.destination);
-  source.onended = () => {
-    if (currentMusicSegment?.source === source) {
-      const nextResumeSegment = currentMusicSegment.resumeSegment;
-      currentMusicSegment = null;
-      stopMusicTopperSegment(source);
-      resumeInterruptedMusic(nextResumeSegment);
-      return;
-    }
-
-    stopMusicTopperSegment(source);
-  };
-  source.start(safeStartAt);
-  currentMusicSegment = segment;
-}
-
-function resumeInterruptedMusic(resumeSegment) {
-  const context = getSceneAudioContext();
-
-  if (!context || context.state !== 'running') {
-    syncMusicTrack();
-    return;
-  }
-
-  if (!resumeSegment?.trackId || !MUSIC_TRACKS[resumeSegment.trackId]) {
-    syncMusicTrack();
-    return;
-  }
-
-  loadSceneAudioBuffer(MUSIC_TRACKS[resumeSegment.trackId]).then((buffer) => {
-    if (!buffer || context.state !== 'running' || currentMusicSegment) {
-      return;
-    }
-
-    startMusicSegment(
-      resumeSegment.trackId,
-      context.currentTime + 0.005,
-      resumeSegment.returnTrackId,
-      resumeSegment.offset,
-    );
-  });
-}
-
-function syncMusicTrack() {
-  const context = getExistingSceneAudioContext();
-
-  if (!context) {
-    return;
-  }
-
-  if (context.state !== 'running' || !desiredMusicTrack) {
-    return;
-  }
-
-  if (!currentMusicSegment) {
-    const nextSegment = queuedMusicSegment;
-    queuedMusicSegment = null;
-
-    if (nextSegment) {
-      startMusicSegment(nextSegment.trackId, context.currentTime + 0.02, nextSegment.returnTrackId);
-      return;
-    }
-
-    startMusicSegment(desiredMusicTrack, context.currentTime + 0.02, null);
-    return;
-  }
-
-  if (currentMusicSegment.trackId !== desiredMusicTrack) {
-    queuedMusicTrack = desiredMusicTrack;
-  }
-
-  scheduleMusicBoundaryCheck();
-}
-
-function startMusicSegment(trackId, startAt, returnTrackId, offset = 0) {
-  const context = getSceneAudioContext();
-  const fileName = MUSIC_TRACKS[trackId];
-  const buffer = fileName ? sceneAudioBuffers.get(fileName) : null;
-
-  if (!context || context.state !== 'running' || !buffer) {
-    if (fileName) {
-      loadSceneAudioBuffer(fileName).then(() => syncMusicTrack());
-    }
-
-    return;
-  }
-
-  const source = context.createBufferSource();
-  const safeStartAt = Math.max(startAt, context.currentTime + 0.005);
-  const safeOffset = normalizeAudioOffset(offset, buffer.duration);
-  const segment = {
-    trackId,
-    returnTrackId,
-    source,
-    startTime: safeStartAt,
-    offset: safeOffset,
-    endTime: safeStartAt + buffer.duration - safeOffset,
-  };
-
-  source.buffer = buffer;
-  source.connect(context.destination);
-  source.onended = () => {
-    if (currentMusicSegment?.source === source) {
-      currentMusicSegment = null;
-      stopMusicTopperSegment(source);
-      syncMusicTrack();
-      return;
-    }
-
-    stopMusicTopperSegment(source);
-  };
-  source.start(safeStartAt, safeOffset);
-  currentMusicSegment = segment;
-  syncMusicTopperForSegment(segment, safeStartAt, safeOffset);
-  scheduleMusicBoundaryCheck();
-}
-
-function normalizeAudioOffset(offset, duration) {
-  if (!duration || duration <= 0) {
-    return 0;
-  }
-
-  return ((offset % duration) + duration) % duration;
-}
-
-function stopCurrentMusicSegment() {
-  clearTimeout(musicScheduleTimer);
-  musicScheduleTimer = null;
-  stopMusicTopperSegment();
-
-  if (!currentMusicSegment) {
-    return;
-  }
-
-  const source = currentMusicSegment.source;
-  currentMusicSegment = null;
-  source.onended = null;
-
-  try {
-    source.stop();
-  } catch {
-    // Already stopped.
-  }
-}
-
-function shouldPlayMusicTopper() {
-  return playMode === 'local'
-    && !isMatchOver()
-    && (matchWins.p1 === MATCH_TARGET_WINS - 1 || matchWins.p2 === MATCH_TARGET_WINS - 1);
-}
-
-function getMusicTopperFile() {
-  if (!shouldPlayMusicTopper()) {
-    return null;
-  }
-
-  if (matchWins.p1 === MATCH_TARGET_WINS - 1 && matchWins.p2 === MATCH_TARGET_WINS - 1) {
-    return MUSIC_TOPPERS.final;
-  }
-
-  return MUSIC_TOPPERS.tension;
-}
-
-function syncMusicTopper() {
-  const fileName = getMusicTopperFile();
-
-  if (!fileName) {
-    stopMusicTopperSegment();
-    return;
-  }
-
-  loadSceneAudioBuffer(fileName).then(() => {
-    if (!currentMusicSegment?.trackId || musicTopperSegment?.fileName === fileName) {
-      return;
-    }
-
-    const context = getSceneAudioContext();
-
-    if (!context || context.state !== 'running') {
-      return;
-    }
-
-    const elapsed = Math.max(0, context.currentTime - currentMusicSegment.startTime);
-    const offset = currentMusicSegment.offset + elapsed;
-    syncMusicTopperForSegment(currentMusicSegment, context.currentTime + 0.005, offset);
-  });
-}
-
-function syncMusicTopperForSegment(segment, startAt, offset = 0) {
-  const fileName = getMusicTopperFile();
-
-  if (!fileName) {
-    stopMusicTopperSegment();
-    return;
-  }
-
-  const context = getSceneAudioContext();
-  const buffer = sceneAudioBuffers.get(fileName);
-
-  if (!context || context.state !== 'running') {
-    return;
-  }
-
-  if (!buffer) {
-    loadSceneAudioBuffer(fileName);
-    return;
-  }
-
-  stopMusicTopperSegment();
-
-  const source = context.createBufferSource();
-  const safeOffset = normalizeAudioOffset(offset, buffer.duration);
-  source.buffer = buffer;
-  source.connect(context.destination);
-  source.onended = () => {
-    if (musicTopperSegment?.source === source) {
-      musicTopperSegment = null;
-    }
-  };
-  source.start(startAt, safeOffset);
-  musicTopperSegment = {
-    source,
-    baseSource: segment.source,
-    fileName,
-  };
-}
-
-function stopMusicTopperSegment(baseSource = null) {
-  if (!musicTopperSegment || (baseSource && musicTopperSegment.baseSource !== baseSource)) {
-    return;
-  }
-
-  const source = musicTopperSegment.source;
-  musicTopperSegment = null;
-  source.onended = null;
-
-  try {
-    source.stop();
-  } catch {
-    // Already stopped.
-  }
-}
-
-function scheduleMusicBoundaryCheck() {
-  clearTimeout(musicScheduleTimer);
-
-  const context = getSceneAudioContext();
-
-  if (!context || !currentMusicSegment) {
-    return;
-  }
-
-  const delaySeconds = Math.max(
-    0,
-    currentMusicSegment.endTime - context.currentTime - MUSIC_SCHEDULE_LOOKAHEAD_SECONDS,
-  );
-
-  musicScheduleTimer = setTimeout(scheduleNextMusicSegment, delaySeconds * 1000);
-}
-
-function scheduleNextMusicSegment() {
-  const context = getSceneAudioContext();
-
-  if (!context || context.state !== 'running' || !currentMusicSegment) {
-    syncMusicTrack();
-    return;
-  }
-
-  const nextSegment = queuedMusicSegment;
-  queuedMusicSegment = null;
-
-  let nextTrack = nextSegment?.trackId
-    ?? queuedMusicTrack
-    ?? currentMusicSegment.returnTrackId
-    ?? desiredMusicTrack;
-  const returnTrackId = nextSegment?.returnTrackId ?? null;
-  queuedMusicTrack = null;
-
-  if (!nextTrack) {
-    return;
-  }
-
-  if (!sceneAudioBuffers.has(MUSIC_TRACKS[nextTrack])) {
-    if (nextSegment) {
-      queuedMusicSegment = nextSegment;
-    } else {
-      queuedMusicTrack = nextTrack;
-    }
-
-    nextTrack = currentMusicSegment.trackId;
-  }
-
-  startMusicSegment(nextTrack, currentMusicSegment.endTime, returnTrackId);
-}
-
-function requestHtmlMusicTrack(trackId) {
-  const fileName = MUSIC_TRACKS[trackId];
-
-  if (!fileName || htmlMusicTrack === trackId) {
-    return;
-  }
-
-  if (!htmlMusicAudio || htmlMusicAudio.ended || htmlMusicAudio.paused) {
-    startHtmlMusicTrack(trackId, null);
-    return;
-  }
-
-  queuedMusicTrack = trackId;
-  htmlMusicAudio.loop = false;
-}
-
-function startHtmlMusicTrack(trackId, returnTrackId) {
-  const fileName = MUSIC_TRACKS[trackId];
-
-  if (!fileName) {
-    return;
-  }
-
-  htmlMusicAudio = getSceneAudio(fileName);
-  htmlMusicTrack = trackId;
-  htmlMusicAudio.loop = false;
-  htmlMusicAudio.muted = false;
-  htmlMusicAudio.volume = 1;
-  htmlMusicAudio.currentTime = 0;
-  htmlMusicAudio.onended = () => {
-    const nextTrack = returnTrackId ?? queuedMusicTrack ?? desiredMusicTrack;
-    queuedMusicTrack = null;
-
-    if (nextTrack) {
-      startHtmlMusicTrack(nextTrack, null);
-    }
-  };
-  htmlMusicAudio.play().catch((error) => {
-    console.warn(`Could not play music track: ${fileName}`, error);
-  });
-}
-
-function playStageAudio() {
-  if (isTransitioning || stagePresentation.kind !== 'doodle') {
-    return;
-  }
-
-  const fileName = SCENE_AUDIO[stagePresentation.name];
-
-  if (!fileName) {
-    return;
-  }
-
-  const audioKey = `${state.round}:${roundPhase}:${stagePresentation.name}:${stagePresentation.flip}`;
-
-  if (audioKey === lastSceneAudioKey) {
-    return;
-  }
-
-  lastSceneAudioKey = audioKey;
-  playSceneAudio(fileName, audioKey);
-}
-
-function playSceneAudio(fileName, audioKey) {
-  const context = getSceneAudioContext();
-
-  if (!context) {
-    playSceneHtmlAudio(fileName);
-    return;
-  }
-
-  const buffer = sceneAudioBuffers.get(fileName);
-
-  if (buffer) {
-    playSceneAudioBuffer(buffer, audioKey);
-    return;
-  }
-
-  loadSceneAudioBuffer(fileName).then((loadedBuffer) => {
-    if (loadedBuffer) {
-      playSceneAudioBuffer(loadedBuffer, audioKey);
-      return;
-    }
-
-    if (audioKey === lastSceneAudioKey) {
-      playSceneHtmlAudio(fileName);
-    }
-  });
-}
-
-function playOneShotAudio(fileName) {
-  const context = getSceneAudioContext();
-
-  if (!context) {
-    playSceneHtmlAudio(fileName);
-    return;
-  }
-
-  const buffer = sceneAudioBuffers.get(fileName);
-
-  if (buffer) {
-    startSceneAudioBuffer(context, buffer);
-    return;
-  }
-
-  loadSceneAudioBuffer(fileName).then((loadedBuffer) => {
-    if (loadedBuffer) {
-      startSceneAudioBuffer(context, loadedBuffer);
-      return;
-    }
-
-    playSceneHtmlAudio(fileName);
-  });
-}
-
-function playSceneHtmlAudio(fileName) {
-  const audio = getSceneAudio(fileName);
-  audio.muted = false;
-  audio.volume = 1;
-  audio.currentTime = 0;
-  audio.play().catch((error) => {
-    console.warn(`Could not play scene audio: ${fileName}`, error);
-  });
-}
-
-function unlockSceneAudio() {
-  if (sceneAudioUnlockPromise) {
-    return sceneAudioUnlockPromise;
-  }
-
-  const context = getSceneAudioContext();
-  const audioFiles = getAudioFiles();
-
-  if (!context) {
-    audioFiles.forEach((fileName) => getSceneAudio(fileName).load());
-    sceneAudioUnlockPromise = Promise.resolve();
-    return sceneAudioUnlockPromise;
-  }
-
-  sceneAudioUnlockPromise = context.resume()
-    .catch((error) => {
-      console.warn('Could not unlock scene audio context', error);
-    })
-    .then(() => desiredMusicTrack ? loadSceneAudioBuffer(MUSIC_TRACKS[desiredMusicTrack]) : null)
-    .then(() => syncMusicTrack())
-    .then(() => Promise.all(audioFiles.map((fileName) => loadSceneAudioBuffer(fileName))))
-    .then(() => syncMusicTrack())
-    .then(() => undefined);
-
-  return sceneAudioUnlockPromise;
-}
-
-function getAudioFiles() {
-  return [
-    ...new Set([
-      ...Object.values(SCENE_AUDIO),
-      STARBURST_WIPE_AUDIO,
-      LOSE_JINGLE_AUDIO,
-      WIN_SOUND_AUDIO,
-      ...Object.values(MUSIC_TRACKS),
-      ...Object.values(MUSIC_TOPPERS),
-    ]),
-  ];
-}
-
-function getSceneAudioContext() {
-  if (sceneAudioContext) {
-    return sceneAudioContext;
-  }
-
-  const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-
-  if (!AudioContextClass) {
-    return null;
-  }
-
-  sceneAudioContext = new AudioContextClass();
-  return sceneAudioContext;
-}
-
-function getExistingSceneAudioContext() {
-  return sceneAudioContext;
-}
-
-function loadSceneAudioBuffer(fileName) {
-  if (sceneAudioBuffers.has(fileName) || sceneAudioLoadPromises.has(fileName)) {
-    return sceneAudioLoadPromises.get(fileName) ?? Promise.resolve(sceneAudioBuffers.get(fileName));
-  }
-
-  const context = getSceneAudioContext();
-
-  if (!context) {
-    return Promise.resolve(null);
-  }
-
-  const promise = fetch(`./assets/audio/${fileName}`)
-    .then((response) => {
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
-      }
-
-      return response.arrayBuffer();
-    })
-    .then((arrayBuffer) => context.decodeAudioData(arrayBuffer))
-    .then((buffer) => {
-      sceneAudioBuffers.set(fileName, buffer);
-      return buffer;
-    })
-    .catch((error) => {
-      console.warn(`Could not load WebAudio scene audio: ${fileName}`, error);
-      return null;
-    });
-
-  sceneAudioLoadPromises.set(fileName, promise);
-  return promise;
-}
-
-function playSceneAudioBuffer(buffer, audioKey) {
-  const context = getSceneAudioContext();
-
-  if (!context || audioKey !== lastSceneAudioKey) {
-    return;
-  }
-
-  if (context.state !== 'running') {
-    context.resume()
-      .then(() => {
-        if (audioKey === lastSceneAudioKey && context.state === 'running') {
-          startSceneAudioBuffer(context, buffer);
-        }
-      })
-      .catch((error) => {
-        console.warn('Could not resume scene audio context', error);
-      });
-    return;
-  }
-
-  startSceneAudioBuffer(context, buffer);
-}
-
-function startSceneAudioBuffer(context, buffer) {
-  const source = context.createBufferSource();
-  source.buffer = buffer;
-  source.connect(context.destination);
-  source.start();
-}
-
-function getSceneAudio(fileName) {
-  if (sceneAudio.has(fileName)) {
-    return sceneAudio.get(fileName);
-  }
-
-  const audio = new Audio(`./assets/audio/${fileName}`);
-  audio.preload = 'auto';
-  sceneAudio.set(fileName, audio);
-  return audio;
-}
-
 function beginGameLoop() {
   loopToken += 1;
-  setNewGame();
+  setNewRound();
   beginOpeningCues();
 }
 
@@ -2105,14 +1266,14 @@ function beginOpeningCues() {
 }
 
 async function runOpeningCues(token) {
-  roundPhase = 'intro-scene';
+  turnPhase = 'intro-scene';
   await waitBeats(SCENE_BEATS, token);
 
   if (!isActiveLoop(token)) {
     return;
   }
 
-  roundPhase = 'ready';
+  turnPhase = 'ready';
   stagePresentation = { kind: 'cue', name: 'READY' };
   render();
   await waitBeats(READY_BEATS, token);
@@ -2121,7 +1282,7 @@ async function runOpeningCues(token) {
     return;
   }
 
-  roundPhase = 'go';
+  turnPhase = 'go';
   stagePresentation = { kind: 'cue', name: 'GO' };
   render();
 }
@@ -2129,18 +1290,20 @@ async function runOpeningCues(token) {
 async function resolvePlayerSelection() {
   const token = loopToken;
 
-  if (!isActiveLoop(token) || isTransitioning || (roundPhase !== 'go' && roundPhase !== 'scene')) {
+  if (!isActiveLoop(token) || isTransitioning || (turnPhase !== 'go' && turnPhase !== 'scene')) {
     return;
   }
 
-  roundPhase = 'wipe';
+  turnPhase = 'wipe';
   isTransitioning = true;
-  await playStarburstWipeTransition(resolveQueuedRound);
+  await playWipeTransition(resolveQueuedTurn);
   isTransitioning = false;
 
   if (isActiveLoop(token)) {
     render();
-    maybeShowGameOverScene(token);
+    if (screen !== 'tutorial') {
+      maybeShowRoundOverScene(token);
+    }
   }
 }
 
@@ -2153,33 +1316,41 @@ function waitBeats(beats, token) {
 }
 
 function isActiveLoop(token) {
-  return token === loopToken && screen === 'playing';
+  return token === loopToken && (screen === 'playing' || screen === 'tutorial');
 }
 
-function resolveQueuedRound() {
+function resolveQueuedTurn() {
   const p1Move = p1QueuedMove && canAfford(p1QueuedMove, state.players.p1.ap)
     ? p1QueuedMove
     : getFallbackMove('p1');
-  const p2Move = chooseRivalMove();
-  const turn = playRound(state, p1Move, p2Move);
+  const p2Move = chooseAiMove(state, selectedOpponentId);
+  const turn = playTurn(state, p1Move, p2Move);
 
   if (turn.ok) {
     state = turn.state;
-    roundPhase = 'scene';
+    turnPhase = 'scene';
+    if (screen === 'tutorial') {
+      tutorialStageMode = 'scene';
+    }
     lastMoves = {
       p1: p1Move,
       p2: p2Move,
     };
     stagePresentation = getDoodlePresentation(p1Move, p2Move);
 
+    if (screen === 'tutorial' && state.status === 'finished' && state.winner) {
+      roundWins[state.winner] += 1;
+      syncMusicTopper();
+    }
+
     if (playMode === 'local' && state.status === 'finished' && state.winner === 'p2') {
-      if (matchWins.p2 >= MATCH_TARGET_WINS - 1) {
+      if (screen !== 'tutorial' && roundWins.p2 >= GAME_TARGET_ROUNDS - 1) {
         interruptMusicFileOnce(LOSE_JINGLE_AUDIO, null, false);
       } else {
         interruptMusicFileOnce(LOSE_JINGLE_AUDIO, 'game');
       }
     } else if (playMode === 'local' && state.status === 'finished' && state.winner === 'p1') {
-      if (matchWins.p1 >= MATCH_TARGET_WINS - 1) {
+      if (screen !== 'tutorial' && roundWins.p1 >= GAME_TARGET_ROUNDS - 1) {
         interruptMusicFileOnce(WIN_SOUND_AUDIO, null, false);
       } else {
         interruptMusicFileOnce(WIN_SOUND_AUDIO, 'game');
@@ -2191,20 +1362,30 @@ function resolveQueuedRound() {
   render();
 }
 
-async function maybeShowGameOverScene(token) {
+function settleTutorialScene() {
+  if (tutorialStageMode !== 'scene') {
+    return;
+  }
+
+  if (state.status === 'finished') {
+    setNewTutorialRound();
+  }
+}
+
+async function maybeShowRoundOverScene(token) {
   if (!isActiveLoop(token) || state.status !== 'finished') {
     return;
   }
 
-  await waitBeats(GAME_OVER_SCENE_BEATS, token);
+  await waitBeats(ROUND_OVER_SCENE_BEATS, token);
 
   if (!isActiveLoop(token) || state.status !== 'finished') {
     return;
   }
 
-  roundPhase = 'game-over';
+  turnPhase = 'round-over';
   isTransitioning = true;
-  await playStarburstWipeTransition(showGameOverScene);
+  await playWipeTransition(showRoundOverScene);
   isTransitioning = false;
 
   if (isActiveLoop(token)) {
@@ -2212,17 +1393,17 @@ async function maybeShowGameOverScene(token) {
   }
 }
 
-function showGameOverScene() {
+function showRoundOverScene() {
   if (state.winner) {
-    matchWins[state.winner] += 1;
+    roundWins[state.winner] += 1;
   }
   syncMusicTopper();
 
-  if (playMode === 'local' && getMatchWinner() === 'p1') {
+  if (playMode === 'local' && screen !== 'tutorial' && getGameWinner() === 'p1') {
     defeatedOpponentIds.add(selectedOpponentId);
   }
 
-  if (playMode === 'local' && !isMatchOver()) {
+  if (playMode === 'local' && screen !== 'tutorial' && !isGameOver()) {
     if (state.winner === 'p1') {
       queueMusicTrackOnce('sax', 'game');
     }
@@ -2233,6 +1414,19 @@ function showGameOverScene() {
     name: state.winner === 'p1' ? 'winner' : 'loser',
     flip: false,
   };
+  render();
+}
+
+function setNewTutorialRound() {
+  state = createRoundState();
+  turnPhase = 'scene';
+  p1QueuedMove = null;
+  resetStageAudioKey();
+  lastMoves = {
+    p1: 'reload',
+    p2: 'reload',
+  };
+  stagePresentation = { kind: 'doodle', name: 'reloading', flip: false };
   render();
 }
 
@@ -2254,242 +1448,7 @@ function getFallbackMove(playerId) {
   return legalMoves.includes('reload') ? 'reload' : legalMoves[0];
 }
 
-async function playStarburstWipeTransition(onCovered) {
-  playOneShotAudio(STARBURST_WIPE_AUDIO);
-  await preloadStarburstWipe();
 
-  let overlay = createWipeOverlay();
-  const coveredStep = 5;
-  await animateWipeSteps(overlay, 0, coveredStep);
-
-  onCovered();
-
-  overlay = createWipeOverlay();
-  drawWipeStep(overlay, STARBURST_WIPE_STEPS[coveredStep], performance.now());
-  await animateWipeSteps(overlay, coveredStep + 1, STARBURST_WIPE_STEPS.length - 1);
-  overlay.remove();
-}
-
-function createWipeOverlay() {
-  const canvas = document.createElement('canvas');
-  canvas.className = 'wipe-overlay';
-  canvas.width = WIPE_FRAME_WIDTH;
-  canvas.height = WIPE_FRAME_HEIGHT;
-  canvas.setAttribute('aria-hidden', 'true');
-  app.append(canvas);
-  return canvas;
-}
-
-function preloadStarburstWipe() {
-  const images = new Set(STARBURST_WIPE_STEPS.flat());
-  return Promise.all([...images].map((name) => ensureImageLoaded(loadDoodleSheet(`starburst_wipe/${name}`))));
-}
-
-function ensureImageLoaded(image) {
-  if (image.complete && image.naturalWidth) {
-    return Promise.resolve();
-  }
-
-  return new Promise((resolve) => {
-    image.addEventListener('load', resolve, { once: true });
-    image.addEventListener('error', resolve, { once: true });
-  });
-}
-
-function animateWipeSteps(canvas, firstStep, lastStep) {
-  return new Promise((resolve) => {
-    const start = Math.max(0, firstStep);
-    const end = Math.min(STARBURST_WIPE_STEPS.length - 1, lastStep);
-    const stepCount = end - start + 1;
-
-    if (stepCount <= 0) {
-      resolve();
-      return;
-    }
-
-    const startedAt = performance.now();
-
-    function tick(now) {
-      const elapsed = now - startedAt;
-      const stepOffset = Math.min(stepCount - 1, Math.floor(elapsed / WIPE_STEP_DURATION));
-      const stepIndex = start + stepOffset;
-
-      drawWipeStep(canvas, STARBURST_WIPE_STEPS[stepIndex], now);
-
-      if (stepOffset >= stepCount - 1 && elapsed >= stepCount * WIPE_STEP_DURATION) {
-        resolve();
-        return;
-      }
-
-      requestAnimationFrame(tick);
-    }
-
-    requestAnimationFrame(tick);
-  });
-}
-
-function drawWipeStep(canvas, layers, now) {
-  if (!layers) {
-    return;
-  }
-
-  const context = canvas.getContext('2d');
-  const frame = Math.floor((now / 1000) * DOODLE_FRAME_RATE) % DOODLE_FRAME_COUNT;
-
-  context.clearRect(0, 0, canvas.width, canvas.height);
-
-  layers.forEach((layer) => {
-    const image = loadDoodleSheet(`starburst_wipe/${layer}`);
-
-    if (!image.complete || !image.naturalWidth) {
-      return;
-    }
-
-    context.drawImage(
-      image,
-      0,
-      frame * WIPE_FRAME_HEIGHT,
-      WIPE_FRAME_WIDTH,
-      WIPE_FRAME_HEIGHT,
-      0,
-      0,
-      canvas.width,
-      canvas.height,
-    );
-  });
-}
-
-function getDoodleForMoves(p1Move, p2Move) {
-  const sortedMoves = [p1Move, p2Move].sort((a, b) => MOVE_IDS.indexOf(a) - MOVE_IDS.indexOf(b));
-  const key = sortedMoves.join('|');
-  return INTERACTION_DOODLES[key] ?? 'hiding';
-}
-
-function getDoodlePresentation(p1Move, p2Move) {
-  const name = getDoodleForMoves(p1Move, p2Move);
-
-  return {
-    kind: 'doodle',
-    name,
-    flip: shouldFlipDoodle(name, p1Move, p2Move),
-  };
-}
-
-function shouldFlipDoodle(doodle, p1Move, p2Move) {
-  if (doodle === 'shooting') {
-    return p2Move === 'shoot';
-  }
-
-  if (doodle === 'stabbing') {
-    return p2Move === 'stab';
-  }
-
-  if (doodle === 'dodge') {
-    return p1Move === 'block';
-  }
-
-  if (doodle === 'counterstab') {
-    return p1Move === 'counterstab';
-  }
-
-  if (doodle === 'tricky') {
-    return p2Move === 'reload' && p1Move !== 'reload';
-  }
-
-  return false;
-}
-
-function mountSpriteRenderers(canvases) {
-  doodleRenderers = [...canvases].map((canvas) => ({
-    canvas,
-    context: canvas.getContext('2d'),
-    image: loadDoodleSheet(canvas.dataset.doodle),
-    frameWidth: Number(canvas.dataset.frameWidth) || DOODLE_FRAME_WIDTH,
-    frameHeight: Number(canvas.dataset.frameHeight) || DOODLE_FRAME_HEIGHT,
-    flip: canvas.dataset.flip === 'true',
-  }));
-
-  doodleRenderers.forEach(({ canvas, image }) => {
-    installSpriteFallback(canvas, image);
-  });
-  drawDoodleFrame(performance.now());
-  ensureDoodleLoop();
-}
-
-function installSpriteFallback(canvas, image) {
-  canvas.style.backgroundImage = `url("${image.src}")`;
-  canvas.style.backgroundPosition = 'top left';
-  canvas.style.backgroundRepeat = 'no-repeat';
-  canvas.style.backgroundSize = '100% auto';
-}
-
-function shouldKeepSpriteFallback() {
-  return /iPhone|iPad|iPod/.test(navigator.userAgent)
-    || (navigator.maxTouchPoints > 1 && /Safari/.test(navigator.userAgent));
-}
-
-function loadDoodleSheet(doodle) {
-  if (doodleSheets.has(doodle)) {
-    return doodleSheets.get(doodle);
-  }
-
-  const image = new Image();
-  image.src = `./assets/${doodle}_sheet.png`;
-  image.onload = () => drawDoodleFrame(performance.now());
-  doodleSheets.set(doodle, image);
-  return image;
-}
-
-function ensureDoodleLoop() {
-  if (ensureDoodleLoop.isRunning) {
-    return;
-  }
-
-  ensureDoodleLoop.isRunning = true;
-
-  function tick(now) {
-    drawDoodleFrame(now);
-    requestAnimationFrame(tick);
-  }
-
-  requestAnimationFrame(tick);
-}
-
-function drawDoodleFrame(now) {
-  if (!doodleRenderers.length) {
-    return;
-  }
-
-  const frame = Math.floor((now / 1000) * DOODLE_FRAME_RATE) % DOODLE_FRAME_COUNT;
-
-  doodleRenderers.forEach(({ canvas, context, image, frameWidth, frameHeight, flip }) => {
-    if (!image.complete || !image.naturalWidth) {
-      return;
-    }
-
-    context.clearRect(0, 0, canvas.width, canvas.height);
-    context.save();
-
-    if (flip) {
-      context.translate(canvas.width, 0);
-      context.scale(-1, 1);
-    }
-
-    context.drawImage(
-      image,
-      0,
-      frame * frameHeight,
-      frameWidth,
-      frameHeight,
-      0,
-      0,
-      canvas.width,
-      canvas.height,
-    );
-    context.restore();
-
-    if (!shouldKeepSpriteFallback()) {
-      canvas.style.backgroundImage = 'none';
-    }
-  });
+function playWipeTransition(onCovered) {
+  return playStarburstWipeTransition(app, onCovered, () => playOneShotAudio(STARBURST_WIPE_AUDIO));
 }

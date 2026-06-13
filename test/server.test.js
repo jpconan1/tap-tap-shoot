@@ -4,7 +4,7 @@ import test from 'node:test';
 import { DEFAULT_RATING, updateRatings } from '../server/elo.js';
 import { MemoryPlayerStore } from '../server/playerStore.js';
 import { RankedDuelService } from '../server/rankedDuel.js';
-import { createGameState } from '../src/engine/gameState.js';
+import { createRoundState } from '../src/engine/gameState.js';
 
 test('matchmaking pairs similarly rated players into a ranked room', async () => {
   const service = createTestService();
@@ -50,7 +50,7 @@ test('submitted moves resolve immediately when both players lock in', async () =
   service.receive(p2.session, { type: 'submitMove', moveId: 'stab' });
 
   assert.equal(room.phase, 'revealed');
-  assert.equal(room.score.p1, 1);
+  assert.equal(room.roundWins.p1, 1);
   assert.equal(lastMessage(p1).revealedMoves.p1, 'shoot');
   assert.equal(lastMessage(p2).revealedMoves.p2, 'stab');
 });
@@ -66,7 +66,7 @@ test('duplicate submits keep the first move', async () => {
 
   assert.equal(room.phase, 'revealed');
   assert.deepEqual(lastMessage(p1).revealedMoves, { p1: 'reload', p2: 'stab' });
-  assert.equal(room.score.p2, 1);
+  assert.equal(room.roundWins.p2, 1);
 });
 
 test('turn timeout uses fallback legal moves', async () => {
@@ -79,23 +79,23 @@ test('turn timeout uses fallback legal moves', async () => {
 
   assert.equal(room.phase, 'revealed');
   assert.equal(lastMessage(p1).revealedMoves.p2, 'reload');
-  assert.equal(room.score.p1, 1);
+  assert.equal(room.roundWins.p1, 1);
 });
 
-test('first to three ends match and updates Elo once', async () => {
+test('first to five ends match and updates Elo once', async () => {
   const { service, p1, p2, store } = await createMatchedService();
   const room = onlyRoom(service);
 
-  for (let win = 0; win < 3; win += 1) {
+  for (let win = 0; win < 5; win += 1) {
     service.beginChoosing(room);
     service.receive(p1.session, { type: 'submitMove', moveId: 'shoot' });
     service.receive(p2.session, { type: 'submitMove', moveId: 'stab' });
     await wait(0);
 
-    if (win < 2) {
-      room.gameState = service.rooms.get(room.id).gameState.status === 'finished'
-        ? createFreshGame(service, room)
-        : room.gameState;
+    if (win < 4) {
+      room.roundState = service.rooms.get(room.id).roundState.status === 'finished'
+        ? createFreshRound(service, room)
+        : room.roundState;
     }
   }
 
@@ -170,9 +170,9 @@ function wait(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function createFreshGame(service, room) {
+function createFreshRound(service, room) {
   service.clearRoomTimer(room);
-  room.gameState = createGameState();
+  room.roundState = createRoundState();
   room.phase = 'choosing';
-  return room.gameState;
+  return room.roundState;
 }

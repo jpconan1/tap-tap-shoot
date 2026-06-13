@@ -12,7 +12,7 @@ const HIT_TABLE = Object.freeze({
   }),
 });
 
-export function resolveRound({ p1Move, p2Move, p1Ap, p2Ap }) {
+export function resolveTurn({ p1Move, p2Move, p1Ap, p2Ap }) {
   const p1 = validateChoice('p1', p1Move, p1Ap);
   const p2 = validateChoice('p2', p2Move, p2Ap);
 
@@ -36,7 +36,7 @@ export function resolveRound({ p1Move, p2Move, p1Ap, p2Ap }) {
     p1Hit,
     p2Hit,
     winner,
-    isGameOver: winner !== null,
+    isRoundOver: winner !== null,
     isTie: winner === null,
   };
 }
