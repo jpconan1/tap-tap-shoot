@@ -74,15 +74,17 @@ const READY_BEATS = 3;
 const READY_SELECTION_PAUSE_BEATS = 2;
 const LOADING_FRAME_WIDTH = 512;
 const LOADING_FRAME_HEIGHT = 256;
-const LOADING_FRAME_COUNT = 30;
-const LOADING_FRAME_RATE = 15;
-const LOADING_LOOP_COUNT = 2;
+const LOADING_FRAME_COUNT = 10;
+const LOADING_FRAME_RATE = 8;
+const LOADING_LOOP_COUNT = 1;
 const LOADING_DURATION_MS = (LOADING_FRAME_COUNT / LOADING_FRAME_RATE) * LOADING_LOOP_COUNT * 1000;
 const LOADING_BAR_FRAME_COUNT = 3;
 const LOADING_BAR_FRAME_RATE = 8;
+const LOADING_CLICK_BLINK_MS = 1400;
 const LOADING_ANIMATION_URL = './assets/loading_animation_boil_sheet.webp';
 const LOADING_BAR_EMPTY_URL = './assets/progress_bar_empty_sheet.webp';
 const LOADING_BAR_FULL_URL = './assets/progress_bar_full_sheet.webp';
+const LOADING_CLICK_MESSAGE_URL = './assets/click_msg_sheet.webp';
 const PAPER_BACKGROUND_URL = './assets/crumpled_paper_background.webp';
 const MOVE_BUTTON_DOODLES = Object.freeze({
   reload: 'reload_button',
@@ -345,7 +347,7 @@ async function boot() {
       return images;
     })
     .then((images) => {
-      if (!loadingScreen.isDone && images.boil && images.barEmpty && images.barFull) {
+      if (!loadingScreen.isDone && images.boil && images.barEmpty && images.barFull && images.clickMessage) {
         playLoadingScreen(loadingScreen, images);
       }
     })
@@ -386,6 +388,12 @@ function renderLoadingScreen() {
           height="${LOADING_FRAME_HEIGHT}"
           aria-hidden="true"
         ></canvas>
+        <canvas
+          class="loading-click-message"
+          width="${LOADING_FRAME_WIDTH}"
+          height="${LOADING_FRAME_HEIGHT}"
+          aria-hidden="true"
+        ></canvas>
       </button>
     </section>
   `;
@@ -394,6 +402,7 @@ function renderLoadingScreen() {
     button: app.querySelector('.loading-start'),
     boilCanvas: app.querySelector('.loading-boil'),
     progressCanvas: app.querySelector('.loading-progress'),
+    clickMessageCanvas: app.querySelector('.loading-click-message'),
     animationFrameId: null,
     startedAt: 0,
     isDone: false,
@@ -405,18 +414,25 @@ function preloadLoadingImages() {
     loadImageAsset(LOADING_ANIMATION_URL, { decode: false }),
     loadImageAsset(LOADING_BAR_EMPTY_URL, { decode: false }),
     loadImageAsset(LOADING_BAR_FULL_URL, { decode: false }),
-  ]).then(([boil, barEmpty, barFull]) => ({ boil, barEmpty, barFull }));
+    loadImageAsset(LOADING_CLICK_MESSAGE_URL, { decode: false }),
+  ]).then(([boil, barEmpty, barFull, clickMessage]) => ({
+    boil,
+    barEmpty,
+    barFull,
+    clickMessage,
+  }));
 }
 
 function playLoadingScreen(loadingScreen, images) {
   loadingScreen.startedAt = performance.now();
 
   function tick(now) {
-    drawLoadingScreen(loadingScreen, images, now);
-
-    if (!loadingScreen.isDone) {
-      loadingScreen.animationFrameId = requestAnimationFrame(tick);
+    if (!loadingScreen.button?.isConnected) {
+      return;
     }
+
+    drawLoadingScreen(loadingScreen, images, now);
+    loadingScreen.animationFrameId = requestAnimationFrame(tick);
   }
 
   tick(loadingScreen.startedAt);
@@ -431,6 +447,7 @@ function drawLoadingScreen(loadingScreen, images, now) {
   const progress = loadingScreen.isDone ? 1 : Math.min(1, elapsed / LOADING_DURATION_MS);
   const boilContext = loadingScreen.boilCanvas?.getContext('2d');
   const progressContext = loadingScreen.progressCanvas?.getContext('2d');
+  const clickMessageContext = loadingScreen.clickMessageCanvas?.getContext('2d');
 
   if (boilContext) {
     boilContext.clearRect(0, 0, LOADING_FRAME_WIDTH, LOADING_FRAME_HEIGHT);
@@ -438,7 +455,7 @@ function drawLoadingScreen(loadingScreen, images, now) {
     if (!loadingScreen.isDone) {
       const boilFrame = Math.min(
         LOADING_FRAME_COUNT - 1,
-        Math.floor((elapsed / 1000) * LOADING_FRAME_RATE) % LOADING_FRAME_COUNT,
+        Math.floor((elapsed / 1000) * LOADING_FRAME_RATE),
       );
       if (images.boil) {
         boilContext.drawImage(
@@ -491,14 +508,33 @@ function drawLoadingScreen(loadingScreen, images, now) {
     barWidth,
     LOADING_FRAME_HEIGHT,
   );
+
+  if (!loadingScreen.isDone || !clickMessageContext || !images.clickMessage) {
+    return;
+  }
+
+  const blinkPhase = (now % LOADING_CLICK_BLINK_MS) / LOADING_CLICK_BLINK_MS;
+  const blinkAlpha = blinkPhase < 0.55 ? 1 : 0.18;
+
+  clickMessageContext.clearRect(0, 0, LOADING_FRAME_WIDTH, LOADING_FRAME_HEIGHT);
+  clickMessageContext.save();
+  clickMessageContext.globalAlpha = blinkAlpha;
+  clickMessageContext.drawImage(
+    images.clickMessage,
+    0,
+    barFrame * LOADING_FRAME_HEIGHT,
+    LOADING_FRAME_WIDTH,
+    LOADING_FRAME_HEIGHT,
+    0,
+    0,
+    LOADING_FRAME_WIDTH,
+    LOADING_FRAME_HEIGHT,
+  );
+  clickMessageContext.restore();
 }
 
 function stopLoadingScreen(loadingScreen, images) {
   loadingScreen.isDone = true;
-
-  if (loadingScreen.animationFrameId) {
-    cancelAnimationFrame(loadingScreen.animationFrameId);
-  }
 
   if (images) {
     drawLoadingScreen(loadingScreen, images, loadingScreen.startedAt + LOADING_DURATION_MS);
