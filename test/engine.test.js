@@ -1,22 +1,33 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { createRoundState, playTurn } from '../src/engine/gameState.js';
+import { createRoundState, getPlayerLegalMoves, playTurn } from '../src/engine/gameState.js';
 import { MOVE_IDS, getLegalMoves } from '../src/engine/moves.js';
 import { RIVALS, chooseRivalMove } from '../src/engine/rivalAi.js';
 import { resolveTurn } from '../src/engine/resolveTurn.js';
 
 test('reload grants AP and ties with free defense moves', () => {
-  const block = resolveTurn({ p1Move: 'reload', p2Move: 'block', p1Ap: 0, p2Ap: 0 });
+  const block = resolveTurn({ p1Move: 'reload', p2Move: 'block', p1Ap: 0, p2Ap: 1 });
   assert.equal(block.ok, true);
   assert.equal(block.isTie, true);
   assert.equal(block.p1Ap, 1);
-  assert.equal(block.p2Ap, 0);
+  assert.equal(block.p2Ap, 1);
 
-  const counterstab = resolveTurn({ p1Move: 'reload', p2Move: 'counterstab', p1Ap: 0, p2Ap: 0 });
+  const counterstab = resolveTurn({ p1Move: 'reload', p2Move: 'counterstab', p1Ap: 0, p2Ap: 1 });
   assert.equal(counterstab.ok, true);
   assert.equal(counterstab.isTie, true);
   assert.equal(counterstab.p1Ap, 1);
+});
+
+test('0-0 forces both players to reload', () => {
+  const state = createStateWithAp(0, 0);
+  assert.deepEqual(getLegalMoves(0, 0), ['reload']);
+  assert.deepEqual(getPlayerLegalMoves(state, 'p1'), ['reload']);
+  assert.deepEqual(getPlayerLegalMoves(state, 'p2'), ['reload']);
+
+  const result = resolveTurn({ p1Move: 'block', p2Move: 'reload', p1Ap: 0, p2Ap: 0 });
+  assert.equal(result.ok, false);
+  assert.deepEqual(result.errors, ['p1 must reload at 0-0']);
 });
 
 test('shoot beats stab, counterstab, and reload', () => {
@@ -43,7 +54,7 @@ test('listed ties do not end game', () => {
     ['shoot', 'block', 1, 0],
     ['stab', 'stab', 1, 1],
     ['stab', 'counterstab', 1, 0],
-    ['block', 'counterstab', 0, 0],
+    ['block', 'counterstab', 0, 1],
   ];
 
   for (const [p1Move, p2Move, p1Ap, p2Ap] of ties) {
@@ -55,9 +66,23 @@ test('listed ties do not end game', () => {
 });
 
 test('moves with AP costs are illegal without AP', () => {
-  const result = resolveTurn({ p1Move: 'shoot', p2Move: 'reload', p1Ap: 0, p2Ap: 0 });
+  const result = resolveTurn({ p1Move: 'shoot', p2Move: 'reload', p1Ap: 0, p2Ap: 1 });
   assert.equal(result.ok, false);
   assert.deepEqual(result.errors, ['p1 cannot afford shoot']);
+});
+
+test('4 AP blocks reload and caps AP gain', () => {
+  const state = createStateWithAp(1, 4);
+  assert.equal(getLegalMoves(4, 1).includes('reload'), false);
+  assert.equal(getPlayerLegalMoves(state, 'p1').includes('reload'), false);
+
+  const blocked = resolveTurn({ p1Move: 'reload', p2Move: 'block', p1Ap: 4, p2Ap: 1 });
+  assert.equal(blocked.ok, false);
+  assert.deepEqual(blocked.errors, ['p1 cannot reload at 4']);
+
+  const capped = resolveTurn({ p1Move: 'reload', p2Move: 'block', p1Ap: 3, p2Ap: 1 });
+  assert.equal(capped.ok, true);
+  assert.equal(capped.p1Ap, 4);
 });
 
 test('round state advances on ties and freezes on round win', () => {
@@ -108,7 +133,7 @@ test('rival AI only chooses legal moves across AP matchups', () => {
   for (const rival of Object.values(RIVALS)) {
     for (let rivalAp = 0; rivalAp <= 4; rivalAp += 1) {
       for (let playerAp = 0; playerAp <= 4; playerAp += 1) {
-        const legalMoves = getLegalMoves(rivalAp);
+        const legalMoves = getLegalMoves(rivalAp, playerAp);
 
         for (const roll of rolls) {
           const move = chooseRivalMove(createStateWithAp(rivalAp, playerAp), rival.id, fixedRoll(roll));

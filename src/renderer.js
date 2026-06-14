@@ -8,6 +8,8 @@ export const DOODLE_FRAME_RATE = 8;
 const WIPE_FRAME_WIDTH = 1100;
 const WIPE_FRAME_HEIGHT = 825;
 const WIPE_STEP_DURATION = 58;
+const READY_ANIMATION_FRAME_WIDTH = 512;
+const READY_ANIMATION_FRAME_HEIGHT = 256;
 
 const INTERACTION_DOODLES = Object.freeze({
   'reload|reload': 'reloading',
@@ -40,8 +42,33 @@ const STARBURST_WIPE_STEPS = Object.freeze([
   Object.freeze(['1']),
 ]);
 
+const READY_ANIMATION_STEPS = Object.freeze([
+  Object.freeze(['1']),
+  Object.freeze(['1_w']),
+  Object.freeze(['2', '1_w']),
+  Object.freeze(['3', '2_w']),
+  Object.freeze(['4', '3_w']),
+  Object.freeze(['5', '4_w']),
+  Object.freeze(['6', '5_w']),
+  Object.freeze(['7', '6_w']),
+  Object.freeze(['7_w']),
+]);
+export const READY_ANIMATION_LOOP_MS = READY_ANIMATION_STEPS.length * WIPE_STEP_DURATION;
+
 const doodleSheets = new Map();
 let doodleRenderers = [];
+
+export function preloadDoodleSheets(doodles) {
+  return Promise.all([...new Set(doodles)].map((doodle) => ensureImageLoaded(loadDoodleSheet(doodle))));
+}
+
+export function getRendererPreloadDoodles() {
+  return [
+    ...Object.values(INTERACTION_DOODLES),
+    ...STARBURST_WIPE_STEPS.flat().map((name) => `starburst_wipe/${name}`),
+    ...READY_ANIMATION_STEPS.flat().map((name) => `ready_animation/${name}`),
+  ];
+}
 
 export async function playStarburstWipeTransition(app, onCovered, playWipeAudio) {
   playWipeAudio();
@@ -86,6 +113,12 @@ export function mountSpriteRenderers(canvases) {
   ensureDoodleLoop();
 }
 
+export function mountReadyAnimationOverlays(canvases, { pauseMs = 0 } = {}) {
+  [...canvases].forEach((canvas) => {
+    startReadyAnimationLoop(canvas, pauseMs);
+  });
+}
+
 function createWipeOverlay(app) {
   const canvas = document.createElement('canvas');
   canvas.className = 'wipe-overlay';
@@ -98,7 +131,12 @@ function createWipeOverlay(app) {
 
 function preloadStarburstWipe() {
   const images = new Set(STARBURST_WIPE_STEPS.flat());
-  return Promise.all([...images].map((name) => ensureImageLoaded(loadDoodleSheet(`starburst_wipe/${name}`))));
+  return preloadDoodleSheets([...images].map((name) => `starburst_wipe/${name}`));
+}
+
+function preloadReadyAnimation() {
+  const images = new Set(READY_ANIMATION_STEPS.flat());
+  return preloadDoodleSheets([...images].map((name) => `ready_animation/${name}`));
 }
 
 function ensureImageLoaded(image) {
@@ -167,6 +205,63 @@ function drawWipeStep(canvas, layers, now) {
       frame * WIPE_FRAME_HEIGHT,
       WIPE_FRAME_WIDTH,
       WIPE_FRAME_HEIGHT,
+      0,
+      0,
+      canvas.width,
+      canvas.height,
+    );
+  });
+}
+
+async function startReadyAnimationLoop(canvas, pauseMs) {
+  const context = canvas.getContext('2d');
+  await preloadReadyAnimation();
+
+  const loopDuration = READY_ANIMATION_STEPS.length * WIPE_STEP_DURATION;
+  const totalDuration = loopDuration + pauseMs;
+  const startedAt = performance.now();
+
+  function tick(now) {
+    if (!canvas.isConnected) {
+      return;
+    }
+
+    const loopElapsed = (now - startedAt) % totalDuration;
+
+    if (loopElapsed < loopDuration) {
+      const stepIndex = Math.min(
+        READY_ANIMATION_STEPS.length - 1,
+        Math.floor(loopElapsed / WIPE_STEP_DURATION),
+      );
+      drawReadyAnimationStep(canvas, context, READY_ANIMATION_STEPS[stepIndex], now);
+    } else {
+      context.clearRect(0, 0, canvas.width, canvas.height);
+    }
+
+    requestAnimationFrame(tick);
+  }
+
+  requestAnimationFrame(tick);
+}
+
+function drawReadyAnimationStep(canvas, context, layers, now) {
+  const frame = Math.floor((now / 1000) * DOODLE_FRAME_RATE) % DOODLE_FRAME_COUNT;
+
+  context.clearRect(0, 0, canvas.width, canvas.height);
+
+  layers.forEach((layer) => {
+    const image = loadDoodleSheet(`ready_animation/${layer}`);
+
+    if (!image.complete || !image.naturalWidth) {
+      return;
+    }
+
+    context.drawImage(
+      image,
+      0,
+      frame * READY_ANIMATION_FRAME_HEIGHT,
+      READY_ANIMATION_FRAME_WIDTH,
+      READY_ANIMATION_FRAME_HEIGHT,
       0,
       0,
       canvas.width,

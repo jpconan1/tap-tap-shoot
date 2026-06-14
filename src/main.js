@@ -1,4 +1,4 @@
-import { MOVES, canAfford } from './engine/moves.js';
+import { MOVES } from './engine/moves.js';
 import { createRoundState, getPlayerLegalMoves, playTurn } from './engine/gameState.js';
 import { chooseRivalMove as chooseAiMove, DEFAULT_RIVAL_ID, RIVALS } from './engine/rivalAi.js';
 import {
@@ -8,6 +8,7 @@ import {
   interruptMusicFileOnce,
   LOSE_JINGLE_AUDIO,
   playOneShotAudio,
+  preloadSceneAudio,
   playStageAudio,
   queueMusicTrackOnce,
   requestMusicTrack,
@@ -22,9 +23,13 @@ import { RankedClient } from './rankedClient.js';
 import {
   DOODLE_FRAME_HEIGHT,
   DOODLE_FRAME_WIDTH,
+  READY_ANIMATION_LOOP_MS,
   getDoodlePresentation,
+  getRendererPreloadDoodles,
+  mountReadyAnimationOverlays,
   mountSpriteRenderers,
   playStarburstWipeTransition,
+  preloadDoodleSheets,
 } from './renderer.js';
 
 const BEAT_MS = 750;
@@ -49,7 +54,9 @@ const TITLE_FRAME_WIDTH = 512;
 const TITLE_FRAME_HEIGHT = 256;
 const TITLE_BUTTON_FRAME_WIDTH = 256;
 const TITLE_BUTTON_FRAME_HEIGHT = 128;
-const TUTORIAL_SLIDE_COUNT = 9;
+const TUTORIAL_MAIN_SLIDE_COUNT = 6;
+const TUTORIAL_REVEAL_SLIDE_INDEX = 5;
+const TUTORIAL_TIPS_SLIDE_COUNT = 3;
 const REMATCH_BUTTON_FRAME_WIDTH = 256;
 const REMATCH_BUTTON_FRAME_HEIGHT = 128;
 const CROSSED_FRAME_WIDTH = 384;
@@ -64,6 +71,7 @@ const FRAME_HEIGHT = 825;
 const SCENE_BEATS = 2;
 const ROUND_OVER_SCENE_BEATS = 2;
 const READY_BEATS = 3;
+const READY_SELECTION_PAUSE_BEATS = 2;
 const MOVE_BUTTON_DOODLES = Object.freeze({
   reload: 'reload_button',
   shoot: 'shoot_button',
@@ -115,6 +123,157 @@ const MOVE_OUTLINE_RELATIONS = Object.freeze({
     counterstab: 'draws',
   }),
 });
+const TUTORIAL_OUTCOMES = Object.freeze({
+  '1-1:reload': Object.freeze({
+    p2Move: 'stab',
+    lines: Object.freeze([
+      Object.freeze({ text: 'Reloading while your opponent has an Action Point' }),
+      Object.freeze({ text: 'is a bad idea.' }),
+      Object.freeze({ text: 'They get a Win.' }),
+    ]),
+  }),
+  '1-1:shoot': Object.freeze({
+    p2Move: 'block',
+    lines: Object.freeze([
+      Object.freeze({ text: 'Watch out!', size: 'big' }),
+      Object.freeze({ text: 'They have an Action Point' }),
+      Object.freeze({ text: "and you don't." }),
+    ]),
+  }),
+  '1-1:stab': Object.freeze({
+    p2Move: 'block',
+    lines: Object.freeze([
+      Object.freeze({ text: 'Nice.', size: 'big' }),
+      Object.freeze({ text: 'They thought you were' }),
+      Object.freeze({ text: 'going to shoot.' }),
+      Object.freeze({ text: 'You get a Win.' }),
+    ]),
+  }),
+  '1-1:block': Object.freeze({
+    p2Move: 'shoot',
+    lines: Object.freeze([
+      Object.freeze({ text: 'Nice.', size: 'big' }),
+      Object.freeze({ text: 'Now you have an advantage.' }),
+      Object.freeze({ text: "Your opponent can't" }),
+      Object.freeze({ text: 'attack next round.' }),
+    ]),
+  }),
+  '1-1:counterstab': Object.freeze({
+    p2Move: 'shoot',
+    lines: Object.freeze([
+      Object.freeze({ text: 'Guessed wrong.' }),
+      Object.freeze({ text: 'They get a Win.' }),
+    ]),
+  }),
+  '1-0:reload': Object.freeze({
+    p2Move: 'block',
+    lines: Object.freeze([
+      Object.freeze({ text: 'Cunning.', size: 'big' }),
+      Object.freeze({ text: 'Your advantage grew' }),
+      Object.freeze({ text: 'and the game continues.' }),
+    ]),
+  }),
+  '1-0:shoot': Object.freeze({
+    p2Move: 'block',
+    lines: Object.freeze([
+      Object.freeze({ text: 'Back to even.', size: 'big' }),
+      Object.freeze({ text: 'They guessed right.' }),
+      Object.freeze({ text: 'How mysterious.', size: 'small' }),
+    ]),
+  }),
+  '1-0:stab': Object.freeze({
+    p2Move: 'counterstab',
+    lines: Object.freeze([
+      Object.freeze({ text: 'Back to even.', size: 'big' }),
+      Object.freeze({ text: 'They guessed right.' }),
+      Object.freeze({ text: 'How mysterious.', size: 'small' }),
+    ]),
+  }),
+  '1-0:block': Object.freeze({
+    p2Move: 'reload',
+    lines: Object.freeze([
+      Object.freeze({ text: 'Odd choice.', size: 'big' }),
+      Object.freeze({ text: 'You made a defensive move' }),
+      Object.freeze({ text: 'when your opponent' }),
+      Object.freeze({ text: "couldn't attack." }),
+      Object.freeze({ text: 'Back to even.' }),
+    ]),
+  }),
+  '1-0:counterstab': Object.freeze({
+    p2Move: 'reload',
+    lines: Object.freeze([
+      Object.freeze({ text: 'Odd choice.', size: 'big' }),
+      Object.freeze({ text: 'You made a defensive move' }),
+      Object.freeze({ text: 'when your opponent' }),
+      Object.freeze({ text: "couldn't attack." }),
+      Object.freeze({ text: 'Back to even.' }),
+    ]),
+  }),
+  '0-1:reload': Object.freeze({
+    p2Move: 'shoot',
+    lines: Object.freeze([
+      Object.freeze({ text: 'Low key smart.', size: 'big' }),
+      Object.freeze({ text: "But it won't work" }),
+      Object.freeze({ text: 'in this tutorial.' }),
+    ]),
+  }),
+  '0-1:block': Object.freeze({
+    p2Move: 'shoot',
+    lines: Object.freeze([
+      Object.freeze({ text: 'Whew!', size: 'big' }),
+      Object.freeze({ text: 'You avoided the attack!' }),
+      Object.freeze({ text: 'Back to even.' }),
+    ]),
+  }),
+  '0-1:counterstab': Object.freeze({
+    p2Move: 'stab',
+    lines: Object.freeze([
+      Object.freeze({ text: 'Whew!', size: 'big' }),
+      Object.freeze({ text: 'You avoided the attack!' }),
+      Object.freeze({ text: 'Back to even.' }),
+    ]),
+  }),
+  'advantage:reload': Object.freeze({
+    p2Move: 'block',
+    lines: Object.freeze([
+      Object.freeze({ text: 'Cunning.', size: 'big' }),
+      Object.freeze({ text: 'Your advantage grew' }),
+      Object.freeze({ text: 'and the game continues.' }),
+    ]),
+  }),
+  'advantage:shoot': Object.freeze({
+    p2Move: 'block',
+    lines: Object.freeze([
+      Object.freeze({ text: 'They guessed right.' }),
+      Object.freeze({ text: 'How mysterious.', size: 'small' }),
+    ]),
+  }),
+  'advantage:stab': Object.freeze({
+    p2Move: 'counterstab',
+    lines: Object.freeze([
+      Object.freeze({ text: 'They guessed right.' }),
+      Object.freeze({ text: 'How mysterious.', size: 'small' }),
+    ]),
+  }),
+  'advantage:block': Object.freeze({
+    p2Move: 'block',
+    lines: Object.freeze([
+      Object.freeze({ text: 'Odd choice.', size: 'big' }),
+      Object.freeze({ text: 'You made a defensive move' }),
+      Object.freeze({ text: 'when your opponent' }),
+      Object.freeze({ text: "couldn't attack." }),
+    ]),
+  }),
+  'advantage:counterstab': Object.freeze({
+    p2Move: 'block',
+    lines: Object.freeze([
+      Object.freeze({ text: 'Odd choice.', size: 'big' }),
+      Object.freeze({ text: 'You made a defensive move' }),
+      Object.freeze({ text: 'when your opponent' }),
+      Object.freeze({ text: "couldn't attack." }),
+    ]),
+  }),
+});
 const OPPONENTS = RIVALS;
 const OPPONENT_IDS = Object.freeze(Object.keys(OPPONENTS));
 const DEFAULT_OPPONENT_ID = DEFAULT_RIVAL_ID;
@@ -138,7 +297,10 @@ let rankedSnapshot = null;
 let findingMatchStep = 0;
 let findingMatchTimer = null;
 let tutorialSlideIndex = 0;
+let tutorialTipsSlideIndex = 0;
 let tutorialStageMode = 'slide';
+let tutorialFeedbackMarkup = '';
+let tutorialPendingFeedbackMarkup = '';
 let stagePresentation = { kind: 'doodle', name: 'reloading', flip: false };
 let lastMoves = {
   p1: 'reload',
@@ -160,10 +322,107 @@ configureAudio({ getMusicTopperFile });
 updateFrameScale();
 window.addEventListener('resize', updateFrameScale);
 installAudioUnlockListeners();
-try {
-  render();
-} catch (error) {
-  console.error('Could not render title screen', error);
+boot();
+
+async function boot() {
+  renderLoadingScreen();
+
+  try {
+    await preloadGameAssets();
+  } catch (error) {
+    console.warn('Could not preload all game assets', error);
+  }
+
+  try {
+    render();
+  } catch (error) {
+    console.error('Could not render title screen', error);
+  }
+}
+
+function renderLoadingScreen() {
+  app.innerHTML = `
+    <section class="loading-screen" aria-label="Loading">
+      <div class="loading-mark" aria-hidden="true"></div>
+    </section>
+  `;
+}
+
+function preloadGameAssets() {
+  return Promise.all([
+    preloadDoodleSheets(getGamePreloadDoodles()),
+    preloadStaticImages(),
+    preloadGameFont(),
+    preloadSceneAudio(),
+  ]).then(() => undefined);
+}
+
+function getGamePreloadDoodles() {
+  return [
+    ...getRendererPreloadDoodles(),
+    'READY',
+    'GO',
+    'action_points',
+    'ap_icon',
+    'back_button',
+    'beats_outline',
+    'continue_button',
+    'continue_t_button',
+    'draws_outline',
+    'loses_outline',
+    'next_slide_button',
+    'Prev_slide_button',
+    'quit_button',
+    'reload_button',
+    'rematch_button',
+    'tips_button',
+    'wins_label',
+    'you_picked',
+    'they_picked',
+    'winner',
+    'loser',
+    'round_won',
+    'round_lost',
+    'tip1graphic',
+    'tip2graphicgraphic',
+    'title/LOGO',
+    'title/playvcom',
+    'title/playonline',
+    'title/tutorial_button',
+    ...FINDING_MATCH_DOODLES,
+    ...Object.values(MOVE_BUTTON_DOODLES),
+    ...Object.values(MOVE_ICON_DOODLES),
+    ...OPPONENT_IDS.flatMap((opponentId) => [
+      OPPONENTS[opponentId].buttonDoodle,
+      OPPONENTS[opponentId].crossedDoodle,
+    ]),
+    ...Array.from({ length: LAST_NUMBERED_TURN + 1 }, (_, turn) => `turn${turn}`),
+    'turnlostcount',
+    ...Array.from({ length: GAME_TARGET_ROUNDS }, (_, index) => `w${index + 1}`),
+  ];
+}
+
+function preloadStaticImages() {
+  return Promise.all([
+    preloadImageAsset('./assets/crumpled_paper_background.png'),
+  ]).then(() => undefined);
+}
+
+function preloadImageAsset(src) {
+  const image = new Image();
+  image.src = src;
+  return image.decode?.().catch(() => undefined) ?? new Promise((resolve) => {
+    image.addEventListener('load', resolve, { once: true });
+    image.addEventListener('error', resolve, { once: true });
+  });
+}
+
+function preloadGameFont() {
+  if (!document.fonts?.load) {
+    return Promise.resolve();
+  }
+
+  return document.fonts.load('16px Pangolin').then(() => undefined, () => undefined);
 }
 
 function updateFrameScale() {
@@ -204,6 +463,7 @@ function render() {
       <figure class="doodle-stage">
         ${renderStagePresentation()}
       </figure>
+      ${shouldShowReadyAnimation() ? renderReadyAnimationOverlay() : ''}
     </section>
 
     <section class="moves" aria-label="Moves">
@@ -222,6 +482,9 @@ function render() {
   app.querySelector('[data-action="quit"]')?.addEventListener('click', quitLocalGame);
   app.querySelector('[data-action="reset"]').addEventListener('click', restartGame);
   mountSpriteRenderers(app.querySelectorAll('.sprite-canvas'));
+  mountReadyAnimationOverlays(app.querySelectorAll('.ready-animation-overlay'), {
+    pauseMs: READY_SELECTION_PAUSE_BEATS * BEAT_MS,
+  });
   playStageAudio({
     isTransitioning,
     presentation: stagePresentation,
@@ -293,6 +556,27 @@ function renderStagePresentation() {
       aria-label="${stagePresentation.name}"
     ></canvas>
   `;
+}
+
+function renderReadyAnimationOverlay() {
+  return `
+    <canvas
+      class="ready-animation-overlay"
+      width="${DOODLE_FRAME_WIDTH}"
+      height="${DOODLE_FRAME_HEIGHT}"
+      aria-hidden="true"
+    ></canvas>
+  `;
+}
+
+function shouldShowReadyAnimation() {
+  return screen === 'playing'
+    && playMode === 'local'
+    && selectedOpponentId === 'olJoe'
+    && p1QueuedMove
+    && state.status === 'playing'
+    && (turnPhase === 'go' || turnPhase === 'scene')
+    && !isTransitioning;
 }
 
 function renderTitleScreen() {
@@ -379,6 +663,8 @@ function renderTutorialScreen() {
   installMoveHoverHandlers();
   app.querySelector('[data-action="back-tutorial"]')?.addEventListener('click', goBackTutorial);
   app.querySelector('[data-action="next-tutorial"]')?.addEventListener('click', advanceTutorialSlide);
+  app.querySelector('[data-action="tips-tutorial"]')?.addEventListener('click', openTutorialTips);
+  app.querySelector('[data-action="rematch"]')?.addEventListener('click', restartTutorialPractice);
   app.querySelector('[data-action="quit"]')?.addEventListener('click', quitLocalGame);
   mountSpriteRenderers(app.querySelectorAll('.sprite-canvas'));
   playStageAudio({
@@ -389,16 +675,51 @@ function renderTutorialScreen() {
 }
 
 function renderTutorialStage() {
-  return tutorialStageMode === 'scene' ? renderStagePresentation() : renderTutorialSlide();
+  if (tutorialStageMode === 'scene') {
+    return renderStagePresentation();
+  }
+
+  if (tutorialStageMode === 'feedback') {
+    return renderTutorialFeedback();
+  }
+
+  if (tutorialStageMode === 'tips') {
+    return renderTutorialTipsSlide();
+  }
+
+  return renderTutorialSlide();
 }
 
 function renderTutorialNav() {
+  if (turnPhase === 'round-over' && isGameOver()) {
+    return '';
+  }
+
+  if (tutorialStageMode === 'scene' || tutorialStageMode === 'feedback') {
+    return `
+      <nav class="tutorial-nav tutorial-nav-practice" aria-label="Tutorial navigation">
+        ${renderSheetButton('tips-tutorial', 'tips_button', 'Tips', 'tutorial-nav-button tutorial-next-button')}
+      </nav>
+    `;
+  }
+
+  if (tutorialStageMode === 'tips') {
+    return `
+      <nav class="tutorial-nav" aria-label="Tutorial navigation">
+        ${renderSheetButton('back-tutorial', 'Prev_slide_button', 'Back', 'tutorial-nav-button tutorial-back-button')}
+        ${tutorialTipsSlideIndex === TUTORIAL_TIPS_SLIDE_COUNT - 1
+          ? renderSheetButton('quit', 'quit_button', 'Return to menu', 'tutorial-nav-button tutorial-next-button')
+          : renderSheetButton('next-tutorial', 'next_slide_button', 'Next', 'tutorial-nav-button tutorial-next-button')}
+      </nav>
+    `;
+  }
+
   return `
     <nav class="tutorial-nav" aria-label="Tutorial navigation">
-      ${renderSheetButton('back-tutorial', 'back_button', 'Back', 'tutorial-nav-button tutorial-back-button')}
-      ${tutorialSlideIndex === TUTORIAL_SLIDE_COUNT - 1
-        ? renderSheetButton('quit', 'quit_button', 'Return to menu', 'tutorial-nav-button tutorial-next-button')
-        : renderSheetButton('next-tutorial', 'tutorial/next_button', 'Next', 'tutorial-nav-button tutorial-next-button')}
+      ${renderSheetButton('back-tutorial', 'Prev_slide_button', 'Back', 'tutorial-nav-button tutorial-back-button')}
+      ${tutorialSlideIndex === TUTORIAL_REVEAL_SLIDE_INDEX
+        ? ''
+        : renderSheetButton('next-tutorial', 'next_slide_button', 'Next', 'tutorial-nav-button tutorial-next-button')}
     </nav>
   `;
 }
@@ -408,60 +729,36 @@ function renderTutorialSlide() {
   const slides = [
     `
       <p><strong>Tap Tap Shoot!</strong></p>
-      <p>is a simultaneous reveal</p>
-      <p>guessing game, like</p>
+      <p>is a guessing game like</p>
       <p><strong>Rock Paper Scissors.</strong></p>
     `,
     `
-      <p>But a little more complex.</p>
-      <p>There are five options, and</p>
-      <p>a resource to manage.</p>
+      <p><strong>But more violent.</strong></p>
+      <p>The goal is to</p>
+      <p><strong>Shoot</strong> or <strong>Stab</strong></p>
+      <p>your opponent.</p>
     `,
     `
-      <p>Hover over the buttons</p>
-      <p>to see what beats what.</p>
-    `,
-    `
-      <p>An</p>
+      <p>You need an</p>
       <p><strong>Action Point</strong></p>
-      <p>is required to attack your opponent.</p>
+      <p>to attack.</p>
       <p>Each player starts with one.</p>
       <p>Defensive moves are free.</p>
     `,
     `
       <p><strong>Reloading</strong></p>
       <p>stocks an Action Point,</p>
-      <p>but leaves you vulnerable.</p>
+      <p>but leaves you open.</p>
     `,
     `
-      <p>Each game is</p>
+      <p>Games are</p>
       <p><strong>First to Five.</strong></p>
     `,
     `
-      <div class="tutorial-side-copy">
-        <p><strong>Tips</strong></p>
-        <p>The game is all about</p>
-        <p>relative Action Points.</p>
-        <p>When each player has</p>
-        <p>one, the game is like</p>
-        <p>Rock Paper Scissors.</p>
-      </div>
-      <div class="tutorial-art-slot" aria-hidden="true"></div>
-    `,
-    `
-      <div class="tutorial-side-copy">
-        <p><strong>Tips</strong></p>
-        <p>But when a player has an</p>
-        <p>Action Point advantage,</p>
-        <p>they can enforce a mixup.</p>
-      </div>
-      <div class="tutorial-art-slot" aria-hidden="true"></div>
-    `,
-    `
-      <p>Everyone has patterns.</p>
-      <p>Try to read your opponent!</p>
-      <p>And thanks for playing!!</p>
-      <p><strong>-JP</strong></p>
+      <p>Hover over the buttons</p>
+      <p>to see what beats what.</p>
+      <p>Choose one and</p>
+      <p>see what happens!</p>
     `,
   ];
 
@@ -472,14 +769,83 @@ function renderTutorialSlide() {
   `;
 }
 
+function renderTutorialFeedback() {
+  return `
+    <div class="tutorial-slide tutorial-feedback" aria-label="Tutorial result">
+      ${tutorialFeedbackMarkup}
+    </div>
+  `;
+}
+
+function renderTutorialTipsSlide() {
+  const slideNumber = tutorialTipsSlideIndex + 1;
+  const slides = [
+    `
+      ${renderTutorialTipArt('tip1graphic')}
+      <div class="tutorial-side-copy">
+        <p><strong>Tips</strong></p>
+        <p>The game is all about</p>
+        <p>relative Action Points.</p>
+        <p>When each player has</p>
+        <p>one, the game is like</p>
+        <p>Rock Paper Scissors.</p>
+      </div>
+    `,
+    `
+      ${renderTutorialTipArt('tip2graphicgraphic')}
+      <div class="tutorial-side-copy">
+        <p><strong>Tips</strong></p>
+        <p>But when a player has an</p>
+        <p>Action Point advantage,</p>
+        <p>they can enforce a mixup.</p>
+      </div>
+    `,
+    `
+      <p>Everyone has patterns.</p>
+      <p>Try to read your opponent!</p>
+      <p>And thanks for playing!!</p>
+      <p><strong>-JP</strong></p>
+    `,
+  ];
+
+  return `
+    <div class="tutorial-slide tutorial-tips-slide tutorial-tips-slide-${slideNumber}" aria-label="Tutorial tips ${slideNumber}">
+      ${slides[tutorialTipsSlideIndex]}
+    </div>
+  `;
+}
+
+function renderTutorialTipArt(doodle) {
+  return `
+    <canvas
+      class="sprite-canvas tutorial-tip-graphic"
+      data-doodle="${doodle}"
+      width="${DOODLE_FRAME_WIDTH}"
+      height="${DOODLE_FRAME_HEIGHT}"
+      aria-hidden="true"
+    ></canvas>
+  `;
+}
+
 function renderTutorialButtons() {
-  if (tutorialSlideIndex >= 2) {
+  if (turnPhase === 'round-over' && isGameOver()) {
+    return renderGameOverButtons();
+  }
+
+  if (shouldShowTutorialMoveButtons()) {
     const moves = Object.values(MOVES);
 
     return moves.map((move) => renderTutorialMoveButton(move)).join('');
   }
 
   return '';
+}
+
+function shouldShowTutorialMoveButtons() {
+  return (tutorialStageMode === 'slide' && tutorialSlideIndex === TUTORIAL_REVEAL_SLIDE_INDEX)
+    || tutorialStageMode === 'scene'
+    || tutorialStageMode === 'feedback'
+    || tutorialStageMode === 'tips';
 }
 
 function renderOpponentSelectScreen() {
@@ -767,7 +1133,17 @@ function renderMoveButton(move, isLegal) {
 }
 
 function renderTutorialMoveButton(move) {
-  return renderMoveButton(move, tutorialStageMode === 'slide' && canAfford(move.id, state.players.p1.ap));
+  const canUseMove = shouldShowTutorialMoveButtons()
+    && !isTransitioning
+    && (turnPhase === 'go' || turnPhase === 'scene')
+    && state.status === 'playing'
+    && getTutorialLegalMoves().includes(move.id);
+
+  return renderMoveButton(move, canUseMove);
+}
+
+function getTutorialLegalMoves() {
+  return getPlayerLegalMoves(state, 'p1');
 }
 
 function renderMoveOutline(relation) {
@@ -811,7 +1187,7 @@ function submitMove(p1Move) {
     isTransitioning ||
     (turnPhase !== 'go' && turnPhase !== 'scene') ||
     state.status !== 'playing' ||
-    !canAfford(p1Move, state.players.p1.ap)
+    !getCurrentLegalMoves().includes(p1Move)
   ) {
     return;
   }
@@ -819,22 +1195,37 @@ function submitMove(p1Move) {
   unlockSceneAudio();
   p1QueuedMove = p1Move;
   render();
+  resolveLocalPlayerSelection();
+}
+
+async function resolveLocalPlayerSelection() {
+  const token = loopToken;
+
+  if (selectedOpponentId === 'olJoe') {
+    await waitMs((READY_ANIMATION_LOOP_MS * 2) + (READY_SELECTION_PAUSE_BEATS * BEAT_MS), token);
+  }
+
+  if (!isActiveLoop(token)) {
+    return;
+  }
+
   resolvePlayerSelection();
 }
 
 function submitTutorialMove(p1Move) {
   if (
-    tutorialSlideIndex < 2 ||
-    tutorialStageMode !== 'slide' ||
+    !shouldShowTutorialMoveButtons() ||
     isTransitioning ||
     (turnPhase !== 'go' && turnPhase !== 'scene') ||
     state.status !== 'playing' ||
-    !canAfford(p1Move, state.players.p1.ap)
+    !getTutorialLegalMoves().includes(p1Move)
   ) {
     return;
   }
 
   unlockSceneAudio();
+  tutorialFeedbackMarkup = '';
+  tutorialPendingFeedbackMarkup = '';
   p1QueuedMove = p1Move;
   render();
   resolvePlayerSelection();
@@ -903,7 +1294,10 @@ async function startTutorialFromTitle() {
     screen = 'tutorial';
     turnPhase = 'scene';
     tutorialSlideIndex = 0;
+    tutorialTipsSlideIndex = 0;
     tutorialStageMode = 'slide';
+    tutorialFeedbackMarkup = '';
+    tutorialPendingFeedbackMarkup = '';
     p1QueuedMove = null;
     rankedSnapshot = null;
     stagePresentation = { kind: 'doodle', name: 'reloading', flip: false };
@@ -931,7 +1325,27 @@ async function startLocalGame(opponentId) {
 }
 
 async function advanceTutorialSlide() {
-  if (isTransitioning || screen !== 'tutorial' || tutorialSlideIndex >= TUTORIAL_SLIDE_COUNT - 1) {
+  if (isTransitioning || screen !== 'tutorial') {
+    return;
+  }
+
+  if (tutorialStageMode === 'tips') {
+    if (tutorialTipsSlideIndex >= TUTORIAL_TIPS_SLIDE_COUNT - 1) {
+      return;
+    }
+
+    unlockSceneAudio();
+    isTransitioning = true;
+    await playWipeTransition(() => {
+      tutorialTipsSlideIndex += 1;
+      render();
+    });
+    isTransitioning = false;
+    render();
+    return;
+  }
+
+  if (tutorialStageMode !== 'slide' || tutorialSlideIndex >= TUTORIAL_MAIN_SLIDE_COUNT - 1) {
     return;
   }
 
@@ -941,6 +1355,59 @@ async function advanceTutorialSlide() {
     settleTutorialScene();
     tutorialSlideIndex += 1;
     tutorialStageMode = 'slide';
+    render();
+  });
+  isTransitioning = false;
+  render();
+}
+
+async function openTutorialTips() {
+  if (isTransitioning || screen !== 'tutorial') {
+    return;
+  }
+
+  loopToken += 1;
+  unlockSceneAudio();
+  isTransitioning = true;
+  await playWipeTransition(() => {
+    if (tutorialStageMode === 'scene') {
+      settleTutorialScene();
+    }
+    tutorialStageMode = 'tips';
+    tutorialFeedbackMarkup = '';
+    tutorialPendingFeedbackMarkup = '';
+    render();
+  });
+  isTransitioning = false;
+  render();
+}
+
+async function restartTutorialPractice() {
+  if (isTransitioning || screen !== 'tutorial') {
+    return;
+  }
+
+  requestMusicTrack('game');
+  unlockSceneAudio();
+  loopToken += 1;
+  isTransitioning = true;
+  await playWipeTransition(() => {
+    resetRoundWins();
+    state = createRoundState();
+    turnPhase = 'scene';
+    tutorialSlideIndex = TUTORIAL_REVEAL_SLIDE_INDEX;
+    tutorialTipsSlideIndex = 0;
+    tutorialStageMode = 'slide';
+    tutorialFeedbackMarkup = '';
+    tutorialPendingFeedbackMarkup = '';
+    p1QueuedMove = null;
+    rankedSnapshot = null;
+    resetStageAudioKey();
+    lastMoves = {
+      p1: 'reload',
+      p2: 'reload',
+    };
+    stagePresentation = { kind: 'doodle', name: 'reloading', flip: false };
     render();
   });
   isTransitioning = false;
@@ -959,6 +1426,17 @@ async function goBackTutorial() {
   unlockSceneAudio();
   isTransitioning = true;
   await playWipeTransition(() => {
+    if (tutorialStageMode === 'tips') {
+      if (tutorialTipsSlideIndex > 0) {
+        tutorialTipsSlideIndex -= 1;
+      } else {
+        tutorialSlideIndex = TUTORIAL_REVEAL_SLIDE_INDEX;
+        tutorialStageMode = 'slide';
+      }
+      render();
+      return;
+    }
+
     if (tutorialStageMode === 'scene') {
       settleTutorialScene();
       tutorialStageMode = 'slide';
@@ -1011,7 +1489,10 @@ async function quitLocalGame() {
     screen = 'title';
     turnPhase = 'idle';
     tutorialSlideIndex = 0;
+    tutorialTipsSlideIndex = 0;
     tutorialStageMode = 'slide';
+    tutorialFeedbackMarkup = '';
+    tutorialPendingFeedbackMarkup = '';
     p1QueuedMove = null;
     rankedSnapshot = null;
     stagePresentation = { kind: 'doodle', name: 'reloading', flip: false };
@@ -1301,17 +1782,23 @@ async function resolvePlayerSelection() {
 
   if (isActiveLoop(token)) {
     render();
-    if (screen !== 'tutorial') {
+    if (screen === 'tutorial') {
+      maybeShowTutorialFeedback(token);
+    } else {
       maybeShowRoundOverScene(token);
     }
   }
 }
 
 function waitBeats(beats, token) {
+  return waitMs(beats * BEAT_MS, token);
+}
+
+function waitMs(duration, token) {
   return new Promise((resolve) => {
     setTimeout(() => {
       resolve(isActiveLoop(token));
-    }, beats * BEAT_MS);
+    }, duration);
   });
 }
 
@@ -1319,11 +1806,44 @@ function isActiveLoop(token) {
   return token === loopToken && (screen === 'playing' || screen === 'tutorial');
 }
 
+function getTutorialOutcome(p1Move) {
+  const p1Ap = state.players.p1.ap;
+  const p2Ap = state.players.p2.ap;
+  const key = `${p1Ap}-${p2Ap}:${p1Move}`;
+  const outcome = TUTORIAL_OUTCOMES[key]
+    ?? (p2Ap === 0 && p1Ap >= 2 && p1Ap <= 4 ? TUTORIAL_OUTCOMES[`advantage:${p1Move}`] : null);
+
+  if (!outcome) {
+    return null;
+  }
+
+  return {
+    ...outcome,
+    feedbackMarkup: renderTutorialFeedbackMarkup(outcome.lines),
+  };
+}
+
+function renderTutorialFeedbackMarkup(lines) {
+  return lines.map((line) => {
+    if (line.size === 'big') {
+      return `<p><strong>${line.text}</strong></p>`;
+    }
+
+    if (line.size === 'small') {
+      return `<p class="tutorial-small">${line.text}</p>`;
+    }
+
+    return `<p>${line.text}</p>`;
+  }).join('');
+}
+
 function resolveQueuedTurn() {
-  const p1Move = p1QueuedMove && canAfford(p1QueuedMove, state.players.p1.ap)
+  const legalMoves = screen === 'tutorial' ? getTutorialLegalMoves() : getPlayerLegalMoves(state, 'p1');
+  const p1Move = p1QueuedMove && legalMoves.includes(p1QueuedMove)
     ? p1QueuedMove
     : getFallbackMove('p1');
-  const p2Move = chooseAiMove(state, selectedOpponentId);
+  const tutorialOutcome = screen === 'tutorial' ? getTutorialOutcome(p1Move) : null;
+  const p2Move = tutorialOutcome?.p2Move ?? chooseAiMove(state, selectedOpponentId);
   const turn = playTurn(state, p1Move, p2Move);
 
   if (turn.ok) {
@@ -1331,6 +1851,7 @@ function resolveQueuedTurn() {
     turnPhase = 'scene';
     if (screen === 'tutorial') {
       tutorialStageMode = 'scene';
+      tutorialPendingFeedbackMarkup = tutorialOutcome?.feedbackMarkup ?? '';
     }
     lastMoves = {
       p1: p1Move,
@@ -1344,13 +1865,13 @@ function resolveQueuedTurn() {
     }
 
     if (playMode === 'local' && state.status === 'finished' && state.winner === 'p2') {
-      if (screen !== 'tutorial' && roundWins.p2 >= GAME_TARGET_ROUNDS - 1) {
+      if (isGameOver() || (screen !== 'tutorial' && roundWins.p2 >= GAME_TARGET_ROUNDS - 1)) {
         interruptMusicFileOnce(LOSE_JINGLE_AUDIO, null, false);
       } else {
         interruptMusicFileOnce(LOSE_JINGLE_AUDIO, 'game');
       }
     } else if (playMode === 'local' && state.status === 'finished' && state.winner === 'p1') {
-      if (screen !== 'tutorial' && roundWins.p1 >= GAME_TARGET_ROUNDS - 1) {
+      if (isGameOver() || (screen !== 'tutorial' && roundWins.p1 >= GAME_TARGET_ROUNDS - 1)) {
         interruptMusicFileOnce(WIN_SOUND_AUDIO, null, false);
       } else {
         interruptMusicFileOnce(WIN_SOUND_AUDIO, 'game');
@@ -1393,8 +1914,48 @@ async function maybeShowRoundOverScene(token) {
   }
 }
 
+async function maybeShowTutorialFeedback(token) {
+  if (!isActiveLoop(token) || tutorialStageMode !== 'scene' || !tutorialPendingFeedbackMarkup) {
+    return;
+  }
+
+  await waitBeats(2, token);
+
+  if (!isActiveLoop(token) || tutorialStageMode !== 'scene' || !tutorialPendingFeedbackMarkup) {
+    return;
+  }
+
+  isTransitioning = true;
+  await playWipeTransition(() => {
+    const feedbackMarkup = tutorialPendingFeedbackMarkup;
+
+    if (isGameOver()) {
+      tutorialFeedbackMarkup = '';
+      tutorialPendingFeedbackMarkup = '';
+      tutorialStageMode = 'scene';
+      turnPhase = 'round-over';
+      showRoundOverScene();
+      return;
+    }
+
+    if (state.status === 'finished') {
+      setNewTutorialRound();
+    }
+
+    tutorialFeedbackMarkup = feedbackMarkup;
+    tutorialPendingFeedbackMarkup = '';
+    tutorialStageMode = 'feedback';
+    render();
+  });
+  isTransitioning = false;
+
+  if (isActiveLoop(token)) {
+    render();
+  }
+}
+
 function showRoundOverScene() {
-  if (state.winner) {
+  if (state.winner && screen !== 'tutorial') {
     roundWins[state.winner] += 1;
   }
   syncMusicTopper();
@@ -1409,16 +1970,39 @@ function showRoundOverScene() {
     }
   }
 
+  const isRoundOverInComputerFight = playMode === 'local' && screen !== 'tutorial' && !isGameOver();
+
   stagePresentation = {
     kind: 'doodle',
-    name: state.winner === 'p1' ? 'winner' : 'loser',
+    name: getRoundOverDoodle(state.winner, isRoundOverInComputerFight),
     flip: false,
   };
   render();
 }
 
+function getRoundOverDoodle(winner, useRoundDoodle) {
+  if (winner === 'p1') {
+    return useRoundDoodle ? 'round_won' : 'winner';
+  }
+
+  return useRoundDoodle ? 'round_lost' : 'loser';
+}
+
 function setNewTutorialRound() {
   state = createRoundState();
+  state = {
+    ...state,
+    players: {
+      p1: {
+        ...state.players.p1,
+        ap: 0,
+      },
+      p2: {
+        ...state.players.p2,
+        ap: 0,
+      },
+    },
+  };
   turnPhase = 'scene';
   p1QueuedMove = null;
   resetStageAudioKey();

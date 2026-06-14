@@ -84,6 +84,42 @@ button {
   pointer-events: all;
 }
 
+.loading-screen {
+  display: grid;
+  place-items: center;
+  height: 100%;
+}
+
+.loading-mark {
+  position: relative;
+  width: 220px;
+  height: 18px;
+  overflow: hidden;
+  border: 4px solid var(--ink);
+  background: rgba(255, 255, 255, 0.34);
+  box-shadow: 3px 6px 0 rgba(29, 27, 24, 0.1);
+  transform: rotate(-0.45deg);
+}
+
+.loading-mark::before {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 42%;
+  background: var(--red);
+  content: "";
+  animation: loading-scribble 850ms steps(5, end) infinite;
+}
+
+@keyframes loading-scribble {
+  0% {
+    transform: translateX(-100%);
+  }
+
+  100% {
+    transform: translateX(240%);
+  }
+}
+
 .arena {
   position: relative;
   min-height: 0;
@@ -207,6 +243,7 @@ button {
 .doodle-stage img,
 .doodle-canvas,
 .cue-canvas {
+  grid-area: 1 / 1;
   width: 512px;
   height: 256px;
   min-height: 0;
@@ -219,6 +256,22 @@ button {
   align-self: center;
 }
 
+.ready-animation-overlay {
+  position: absolute;
+  top: calc((100% + 104px - 256px) / 2);
+  left: 50%;
+  z-index: 4;
+  display: block;
+  width: 512px;
+  height: 256px;
+  min-height: 0;
+  filter: none;
+  image-rendering: auto;
+  pointer-events: none;
+  transform: translateX(-50%) rotate(0.35deg);
+  transform-origin: center;
+}
+
 .tutorial-stage {
   padding-top: 104px;
 }
@@ -226,17 +279,21 @@ button {
 .tutorial-nav {
   position: absolute;
   top: 330px;
-  right: 6px;
-  left: 6px;
+  right: -42px;
+  left: -42px;
   z-index: 3;
   display: flex;
   justify-content: space-between;
   pointer-events: none;
 }
 
+.tutorial-nav-practice {
+  justify-content: flex-end;
+}
+
 .tutorial-nav-button {
-  width: 192px;
-  height: 96px;
+  width: 256px;
+  height: 128px;
   pointer-events: auto;
 }
 
@@ -247,8 +304,8 @@ button {
 }
 
 .tutorial-nav-button .sheet-button-art {
-  width: 192px;
-  height: 96px;
+  width: 256px;
+  height: 128px;
 }
 
 .tutorial-slide {
@@ -288,27 +345,51 @@ button {
   font-size: 47px;
 }
 
-.tutorial-slide-7,
-.tutorial-slide-8 {
-  grid-template-columns: 360px 260px;
-  gap: 32px;
-  align-items: center;
-  justify-content: center;
-  font-size: 33px;
+.tutorial-tips-slide-1,
+.tutorial-tips-slide-2 {
+  position: relative;
+  display: block;
+  width: 576px;
+  height: 288px;
+  font-size: 26px;
 }
 
-.tutorial-slide-7 strong,
-.tutorial-slide-8 strong {
+.tutorial-tips-slide-1 strong,
+.tutorial-tips-slide-2 strong {
   font-size: 1.65em;
 }
 
-.tutorial-side-copy {
-  text-align: center;
+.tutorial-feedback {
+  font-size: 42px;
 }
 
-.tutorial-art-slot {
-  width: 208px;
-  height: 172px;
+.tutorial-feedback strong {
+  font-size: 1.45em;
+}
+
+.tutorial-small {
+  font-size: 0.78em;
+}
+
+.tutorial-side-copy {
+  position: relative;
+  z-index: 1;
+  width: 286px;
+  padding: 2px 0 0;
+  text-align: center;
+  transform: translateX(-18px);
+}
+
+.tutorial-tip-graphic {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 576px;
+  height: 288px;
+  min-height: 0;
+  object-fit: contain;
+  filter: none;
+  image-rendering: auto;
 }
 
 .pick-history {
@@ -484,6 +565,10 @@ button {
   margin-top: 24px;
 }
 
+.tutorial-moves {
+  min-height: 281px;
+}
+
 .move-card:nth-child(1) {
   grid-column: 1 / span 2;
 }
@@ -622,19 +707,6 @@ button {
 
 .sheet-button:only-child {
   grid-column: 3 / span 2;
-}
-
-.tutorial-moves .move-card:nth-child(4) {
-  grid-column: 1 / span 2;
-}
-
-.tutorial-moves .move-card:nth-child(5) {
-  grid-column: 3 / span 2;
-}
-
-.tutorial-moves .next-button:not(:only-child),
-.tutorial-moves .quit-button:not(:only-child) {
-  grid-column: 5 / span 2;
 }
 
 .sheet-button:hover {

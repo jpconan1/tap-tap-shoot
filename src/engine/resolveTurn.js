@@ -1,4 +1,4 @@
-import { getMove } from './moves.js';
+import { MAX_AP, getMove, isBlockedByApCap, isForcedReload } from './moves.js';
 
 const HIT_TABLE = Object.freeze({
   shoot: Object.freeze({
@@ -13,8 +13,8 @@ const HIT_TABLE = Object.freeze({
 });
 
 export function resolveTurn({ p1Move, p2Move, p1Ap, p2Ap }) {
-  const p1 = validateChoice('p1', p1Move, p1Ap);
-  const p2 = validateChoice('p2', p2Move, p2Ap);
+  const p1 = validateChoice('p1', p1Move, p1Ap, p2Ap);
+  const p2 = validateChoice('p2', p2Move, p2Ap, p1Ap);
 
   if (!p1.ok || !p2.ok) {
     return {
@@ -41,11 +41,19 @@ export function resolveTurn({ p1Move, p2Move, p1Ap, p2Ap }) {
   };
 }
 
-function validateChoice(player, moveId, ap) {
+function validateChoice(player, moveId, ap, opponentAp) {
   const move = getMove(moveId);
 
   if (!move) {
     return { ok: false, error: `${player} picked unknown move: ${moveId}` };
+  }
+
+  if (isForcedReload(ap, opponentAp) && moveId !== 'reload') {
+    return { ok: false, error: `${player} must reload at 0-0` };
+  }
+
+  if (isBlockedByApCap(moveId, ap)) {
+    return { ok: false, error: `${player} cannot reload at ${MAX_AP}` };
   }
 
   if (ap < move.cost) {
@@ -57,5 +65,5 @@ function validateChoice(player, moveId, ap) {
 
 function spendAndGain(ap, moveId) {
   const move = getMove(moveId);
-  return ap - move.cost + move.gain;
+  return Math.min(MAX_AP, ap - move.cost + move.gain);
 }

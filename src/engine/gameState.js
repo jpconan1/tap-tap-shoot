@@ -81,7 +81,8 @@ export function playTurn(state, p1Move, p2Move) {
 }
 
 export function getPlayerLegalMoves(state, playerId) {
-  return getLegalMoves(state.players[playerId].ap);
+  const opponentId = playerId === 'p1' ? 'p2' : 'p1';
+  return getLegalMoves(state.players[playerId].ap, state.players[opponentId].ap);
 }
 
 function createPlayerState() {

@@ -19,7 +19,7 @@ export function chooseRivalMove(state, rivalId = DEFAULT_RIVAL_ID, rng = Math.ra
     ?? rival.matchups[fallbackPolicyKey]
     ?? RIVALS[DEFAULT_RIVAL_ID].matchups[fallbackPolicyKey];
 
-  return chooseWeightedLegalMove(ownAp, policy, rng);
+  return chooseWeightedLegalMove(ownAp, enemyAp, policy, rng);
 }
 
 function getPolicyKey(ownAp, enemyAp) {
@@ -54,8 +54,8 @@ function getFallbackPolicyKey(ownAp, enemyAp) {
   return '1-1';
 }
 
-function chooseWeightedLegalMove(ownAp, policy, rng) {
-  const legalMoves = getLegalMoves(ownAp);
+function chooseWeightedLegalMove(ownAp, enemyAp, policy, rng) {
+  const legalMoves = getLegalMoves(ownAp, enemyAp);
   const weightedMoves = Object.entries(policy)
     .filter(([moveId, weight]) => legalMoves.includes(moveId) && weight > 0)
     .map(([moveId, weight]) => ({ moveId, weight }));

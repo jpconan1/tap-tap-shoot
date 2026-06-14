@@ -156,6 +156,10 @@ export function interruptMusicFileOnce(fileName, returnTrackId = desiredMusicTra
   const context = getSceneAudioContext();
 
   if (!context) {
+    if (!returnTrackId) {
+      stopHtmlMusicTrack();
+    }
+
     const audio = getSceneAudio(fileName);
     audio.muted = false;
     audio.volume = 1;
@@ -283,6 +287,24 @@ export function unlockSceneAudio() {
     .then(() => undefined);
 
   return sceneAudioUnlockPromise;
+}
+
+export function preloadSceneAudio() {
+  const audioFiles = getAudioFiles();
+  let context = null;
+
+  try {
+    context = getSceneAudioContext();
+  } catch (error) {
+    console.warn('Could not prepare WebAudio preload', error);
+  }
+
+  if (!context) {
+    audioFiles.forEach((fileName) => getSceneAudio(fileName).load());
+    return Promise.resolve();
+  }
+
+  return Promise.all(audioFiles.map((fileName) => loadSceneAudioBuffer(fileName))).then(() => undefined);
 }
 
 export function getMusicTopperId(id) {
@@ -463,6 +485,7 @@ function stopCurrentMusicSegment() {
   clearTimeout(musicScheduleTimer);
   musicScheduleTimer = null;
   stopMusicTopperSegment();
+  stopHtmlMusicTrack();
 
   if (!currentMusicSegment) {
     return;
@@ -477,6 +500,17 @@ function stopCurrentMusicSegment() {
   } catch {
     // Already stopped.
   }
+}
+
+function stopHtmlMusicTrack() {
+  if (!htmlMusicAudio) {
+    return;
+  }
+
+  htmlMusicAudio.pause();
+  htmlMusicAudio.onended = null;
+  htmlMusicAudio = null;
+  htmlMusicTrack = null;
 }
 
 function syncMusicTopperForSegment(segment, startAt, offset = 0) {

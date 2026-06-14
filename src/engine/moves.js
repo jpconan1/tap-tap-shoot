@@ -32,6 +32,7 @@ export const MOVES = Object.freeze({
 });
 
 export const MOVE_IDS = Object.freeze(Object.keys(MOVES));
+export const MAX_AP = 4;
 
 export function getMove(moveId) {
   return MOVES[moveId] ?? null;
@@ -42,6 +43,18 @@ export function canAfford(moveId, ap) {
   return Boolean(move) && ap >= move.cost;
 }
 
-export function getLegalMoves(ap) {
-  return MOVE_IDS.filter((moveId) => canAfford(moveId, ap));
+export function getLegalMoves(ap, opponentAp = null) {
+  if (isForcedReload(ap, opponentAp)) {
+    return ['reload'];
+  }
+
+  return MOVE_IDS.filter((moveId) => canAfford(moveId, ap) && !isBlockedByApCap(moveId, ap));
+}
+
+export function isForcedReload(ap, opponentAp) {
+  return ap === 0 && opponentAp === 0;
+}
+
+export function isBlockedByApCap(moveId, ap) {
+  return moveId === 'reload' && ap >= MAX_AP;
 }
