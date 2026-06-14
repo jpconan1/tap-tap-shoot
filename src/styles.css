@@ -93,34 +93,32 @@ button {
   height: 100%;
 }
 
-.loading-mark {
-  position: relative;
-  width: 220px;
-  height: 18px;
-  overflow: hidden;
-  border: 4px solid var(--ink);
-  background: rgba(255, 255, 255, 0.34);
-  box-shadow: 3px 6px 0 rgba(29, 27, 24, 0.1);
-  transform: rotate(-0.45deg);
+.loading-start {
+  display: grid;
+  gap: 18px;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: default;
 }
 
-.loading-mark::before {
-  position: absolute;
-  inset: 0 auto 0 0;
-  width: 42%;
-  background: var(--red);
-  content: "";
-  animation: loading-scribble 850ms steps(5, end) infinite;
+.loading-start.ready {
+  cursor: pointer;
 }
 
-@keyframes loading-scribble {
-  0% {
-    transform: translateX(-100%);
-  }
+.loading-boil,
+.loading-progress {
+  display: block;
+  width: 512px;
+  height: 256px;
+  image-rendering: auto;
+  filter: drop-shadow(3px 6px 0 rgba(29, 27, 24, 0.1));
+}
 
-  100% {
-    transform: translateX(240%);
-  }
+.loading-progress {
+  margin-top: -54px;
+  transform: rotate(-0.35deg);
 }
 
 .arena {

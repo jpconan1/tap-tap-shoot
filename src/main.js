@@ -72,6 +72,17 @@ const SCENE_BEATS = 2;
 const ROUND_OVER_SCENE_BEATS = 2;
 const READY_BEATS = 3;
 const READY_SELECTION_PAUSE_BEATS = 2;
+const LOADING_FRAME_WIDTH = 512;
+const LOADING_FRAME_HEIGHT = 256;
+const LOADING_FRAME_COUNT = 30;
+const LOADING_FRAME_RATE = 15;
+const LOADING_LOOP_COUNT = 2;
+const LOADING_DURATION_MS = (LOADING_FRAME_COUNT / LOADING_FRAME_RATE) * LOADING_LOOP_COUNT * 1000;
+const LOADING_BAR_FRAME_COUNT = 3;
+const LOADING_BAR_FRAME_RATE = 8;
+const LOADING_ANIMATION_URL = './assets/loading_animation_boil_sheet.webp';
+const LOADING_BAR_EMPTY_URL = './assets/progress_bar_empty_sheet.png';
+const LOADING_BAR_FULL_URL = './assets/progress_bar_full_sheet.png';
 const PAPER_BACKGROUND_URL = './assets/crumpled_paper_background.webp';
 const MOVE_BUTTON_DOODLES = Object.freeze({
   reload: 'reload_button',
@@ -326,15 +337,28 @@ installAudioUnlockListeners();
 boot();
 
 async function boot() {
-  renderLoadingScreen();
+  const loadingScreen = renderLoadingScreen();
+  const loadingImagesPromise = preloadLoadingImages();
+  let loadingImages = null;
 
   try {
-    await preloadGameAssets();
+    loadingImages = await loadingImagesPromise;
+    playLoadingScreen(loadingScreen, loadingImages);
   } catch (error) {
-    console.warn('Could not preload all game assets', error);
+    console.warn('Could not load loading screen art', error);
   }
 
+  const preloadPromise = preloadGameAssets().catch((error) => {
+    console.warn('Could not preload all game assets', error);
+  });
+  const minimumLoadingPromise = waitMsWithoutToken(LOADING_DURATION_MS);
+
+  await Promise.all([preloadPromise, minimumLoadingPromise]);
+  stopLoadingScreen(loadingScreen, loadingImages);
+  await waitForLoadingStart(loadingScreen);
+
   try {
+    await unlockSceneAudio();
     render();
   } catch (error) {
     console.error('Could not render title screen', error);
@@ -344,9 +368,144 @@ async function boot() {
 function renderLoadingScreen() {
   app.innerHTML = `
     <section class="loading-screen" aria-label="Loading">
-      <div class="loading-mark" aria-hidden="true"></div>
+      <button class="loading-start" type="button" aria-label="Start" disabled>
+        <canvas
+          class="loading-boil"
+          width="${LOADING_FRAME_WIDTH}"
+          height="${LOADING_FRAME_HEIGHT}"
+          aria-hidden="true"
+        ></canvas>
+        <canvas
+          class="loading-progress"
+          width="${LOADING_FRAME_WIDTH}"
+          height="${LOADING_FRAME_HEIGHT}"
+          aria-hidden="true"
+        ></canvas>
+      </button>
     </section>
   `;
+
+  return {
+    button: app.querySelector('.loading-start'),
+    boilCanvas: app.querySelector('.loading-boil'),
+    progressCanvas: app.querySelector('.loading-progress'),
+    animationFrameId: null,
+    startedAt: 0,
+    isDone: false,
+  };
+}
+
+function preloadLoadingImages() {
+  return Promise.all([
+    loadImageAsset(LOADING_ANIMATION_URL),
+    loadImageAsset(LOADING_BAR_EMPTY_URL),
+    loadImageAsset(LOADING_BAR_FULL_URL),
+  ]).then(([boil, barEmpty, barFull]) => ({ boil, barEmpty, barFull }));
+}
+
+function playLoadingScreen(loadingScreen, images) {
+  loadingScreen.startedAt = performance.now();
+
+  function tick(now) {
+    drawLoadingScreen(loadingScreen, images, now);
+
+    if (!loadingScreen.isDone) {
+      loadingScreen.animationFrameId = requestAnimationFrame(tick);
+    }
+  }
+
+  tick(loadingScreen.startedAt);
+}
+
+function drawLoadingScreen(loadingScreen, images, now) {
+  const elapsed = Math.max(0, now - loadingScreen.startedAt);
+  const progress = loadingScreen.isDone ? 1 : Math.min(1, elapsed / LOADING_DURATION_MS);
+  const boilContext = loadingScreen.boilCanvas?.getContext('2d');
+  const progressContext = loadingScreen.progressCanvas?.getContext('2d');
+
+  if (boilContext) {
+    boilContext.clearRect(0, 0, LOADING_FRAME_WIDTH, LOADING_FRAME_HEIGHT);
+
+    if (!loadingScreen.isDone) {
+      const boilFrame = Math.min(
+        LOADING_FRAME_COUNT - 1,
+        Math.floor((elapsed / 1000) * LOADING_FRAME_RATE) % LOADING_FRAME_COUNT,
+      );
+      boilContext.drawImage(
+        images.boil,
+        0,
+        boilFrame * LOADING_FRAME_HEIGHT,
+        LOADING_FRAME_WIDTH,
+        LOADING_FRAME_HEIGHT,
+        0,
+        0,
+        LOADING_FRAME_WIDTH,
+        LOADING_FRAME_HEIGHT,
+      );
+    }
+  }
+
+  if (!progressContext) {
+    return;
+  }
+
+  const barFrame = Math.floor((now / 1000) * LOADING_BAR_FRAME_RATE) % LOADING_BAR_FRAME_COUNT;
+  const barWidth = Math.round(LOADING_FRAME_WIDTH * progress);
+
+  progressContext.clearRect(0, 0, LOADING_FRAME_WIDTH, LOADING_FRAME_HEIGHT);
+  progressContext.drawImage(
+    images.barEmpty,
+    0,
+    barFrame * LOADING_FRAME_HEIGHT,
+    LOADING_FRAME_WIDTH,
+    LOADING_FRAME_HEIGHT,
+    0,
+    0,
+    LOADING_FRAME_WIDTH,
+    LOADING_FRAME_HEIGHT,
+  );
+
+  if (barWidth <= 0) {
+    return;
+  }
+
+  progressContext.drawImage(
+    images.barFull,
+    0,
+    barFrame * LOADING_FRAME_HEIGHT,
+    barWidth,
+    LOADING_FRAME_HEIGHT,
+    0,
+    0,
+    barWidth,
+    LOADING_FRAME_HEIGHT,
+  );
+}
+
+function stopLoadingScreen(loadingScreen, images) {
+  loadingScreen.isDone = true;
+
+  if (loadingScreen.animationFrameId) {
+    cancelAnimationFrame(loadingScreen.animationFrameId);
+  }
+
+  if (images) {
+    drawLoadingScreen(loadingScreen, images, loadingScreen.startedAt + LOADING_DURATION_MS);
+  }
+
+  loadingScreen.boilCanvas?.remove();
+  loadingScreen.button?.classList.add('ready');
+  loadingScreen.button?.removeAttribute('disabled');
+}
+
+function waitForLoadingStart(loadingScreen) {
+  if (!loadingScreen.button) {
+    return Promise.resolve();
+  }
+
+  return new Promise((resolve) => {
+    loadingScreen.button.addEventListener('click', resolve, { once: true });
+  });
 }
 
 function preloadGameAssets() {
@@ -410,36 +569,43 @@ function preloadStaticImages() {
 }
 
 function preloadImageAsset(src, { readyClass = '' } = {}) {
-  const image = new Image();
-  const loaded = new Promise((resolve) => {
-    image.addEventListener('load', () => resolve(true), { once: true });
-    image.addEventListener('error', () => resolve(false), { once: true });
-    image.src = src;
-
-    if (image.complete) {
-      resolve(Boolean(image.naturalWidth));
-    }
-  });
-
-  return loaded
+  return loadImageAsset(src)
     .then((didLoad) => {
       if (!didLoad) {
         return false;
       }
 
-      if (!image.decode) {
-        return true;
-      }
-
-      return image.decode().then(() => true, () => true);
-    })
-    .then((didLoad) => {
-      if (didLoad && readyClass) {
+      if (readyClass) {
         document.body.classList.add(readyClass);
       }
 
-      return didLoad;
+      return true;
     });
+}
+
+function loadImageAsset(src) {
+  const image = new Image();
+  const loaded = new Promise((resolve) => {
+    image.addEventListener('load', () => resolve(image), { once: true });
+    image.addEventListener('error', () => resolve(null), { once: true });
+    image.src = src;
+
+    if (image.complete) {
+      resolve(image.naturalWidth ? image : null);
+    }
+  });
+
+  return loaded.then((loadedImage) => {
+    if (!loadedImage) {
+      return false;
+    }
+
+    if (!loadedImage.decode) {
+      return loadedImage;
+    }
+
+    return loadedImage.decode().then(() => loadedImage, () => loadedImage);
+  });
 }
 
 function preloadGameFont() {
@@ -1824,6 +1990,12 @@ function waitMs(duration, token) {
     setTimeout(() => {
       resolve(isActiveLoop(token));
     }, duration);
+  });
+}
+
+function waitMsWithoutToken(duration) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, duration);
   });
 }
 
