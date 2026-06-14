@@ -318,7 +318,7 @@ function loadDoodleSheet(doodle) {
   }
 
   const image = new Image();
-  image.src = `./assets/${doodle}_sheet.png`;
+  image.src = `./assets/${doodle}_sheet.webp`;
   image.onload = () => drawDoodleFrame(performance.now());
   doodleSheets.set(doodle, image);
   return image;

@@ -1,26 +1,26 @@
-export const STARBURST_WIPE_AUDIO = 'starbust.wav';
-export const LOSE_JINGLE_AUDIO = 'lose_jingle.wav';
-export const WIN_SOUND_AUDIO = 'win_sound.wav';
+export const STARBURST_WIPE_AUDIO = 'starbust.mp3';
+export const LOSE_JINGLE_AUDIO = 'lose_jingle.mp3';
+export const WIN_SOUND_AUDIO = 'win_sound.mp3';
 
 const SCENE_AUDIO = Object.freeze({
-  shooting: 'gunshot.wav',
-  stabbing: 'stab.wav',
-  hiding: 'nothing.wav',
-  clash: 'clash.wav',
-  collision: 'collision.wav',
-  counterstab: 'counterstab.wav',
-  dodge: 'wiff.wav',
-  reloading: 'reload.wav',
-  tricky: 'reload.wav',
+  shooting: 'gunshot.mp3',
+  stabbing: 'stab.mp3',
+  hiding: 'nothing.mp3',
+  clash: 'clash.mp3',
+  collision: 'collision.mp3',
+  counterstab: 'counterstab.mp3',
+  dodge: 'wiff.mp3',
+  reloading: 'reload.mp3',
+  tricky: 'reload.mp3',
 });
 const MUSIC_TRACKS = Object.freeze({
-  title: 'title_loop.wav',
-  game: 'piano_loop.wav',
-  sax: 'sax_loop.wav',
+  title: 'title_loop.mp3',
+  game: 'piano_loop.mp3',
+  sax: 'sax_loop.mp3',
 });
 const MUSIC_TOPPERS = Object.freeze({
-  tension: 'string_loop_topper.wav',
-  final: 'string_loop_topper2.wav',
+  tension: 'string_loop_topper.mp3',
+  final: 'string_loop_topper2.mp3',
 });
 const MUSIC_SCHEDULE_LOOKAHEAD_SECONDS = 0.08;
 

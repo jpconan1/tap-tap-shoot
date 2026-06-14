@@ -404,7 +404,7 @@ function getGamePreloadDoodles() {
 
 function preloadStaticImages() {
   return Promise.all([
-    preloadImageAsset('./assets/crumpled_paper_background.png'),
+    preloadImageAsset('./assets/crumpled_paper_background.webp'),
   ]).then(() => undefined);
 }
 

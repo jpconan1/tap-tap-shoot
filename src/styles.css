@@ -36,7 +36,7 @@ body {
   margin: 0;
   overflow: hidden;
   background-color: var(--paper);
-  background-image: url("../assets/crumpled_paper_background.png");
+  background-image: url("../assets/crumpled_paper_background.webp");
   background-position: center;
   background-size: cover;
   color: var(--ink);

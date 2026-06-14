@@ -4,6 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "assets:compress-staged": "scripts/compress-staged-assets.sh",
+    "assets:check": "scripts/check-compressed-assets.sh",
     "test": "node --test",
     "server": "node server/index.js"
   }

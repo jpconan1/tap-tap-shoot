@@ -13,8 +13,8 @@ const PUBLIC_TYPES = new Map([
   ['.html', 'text/html; charset=utf-8'],
   ['.js', 'text/javascript; charset=utf-8'],
   ['.json', 'application/json; charset=utf-8'],
-  ['.png', 'image/png'],
-  ['.wav', 'audio/wav'],
+  ['.webp', 'image/webp'],
+  ['.mp3', 'audio/mpeg'],
 ]);
 
 const playerStore = new JsonPlayerStore(join(ROOT, '.ranked-players.json'));
