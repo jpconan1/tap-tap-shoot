@@ -81,8 +81,8 @@ const LOADING_DURATION_MS = (LOADING_FRAME_COUNT / LOADING_FRAME_RATE) * LOADING
 const LOADING_BAR_FRAME_COUNT = 3;
 const LOADING_BAR_FRAME_RATE = 8;
 const LOADING_ANIMATION_URL = './assets/loading_animation_boil_sheet.webp';
-const LOADING_BAR_EMPTY_URL = './assets/progress_bar_empty_sheet.png';
-const LOADING_BAR_FULL_URL = './assets/progress_bar_full_sheet.png';
+const LOADING_BAR_EMPTY_URL = './assets/progress_bar_empty_sheet.webp';
+const LOADING_BAR_FULL_URL = './assets/progress_bar_full_sheet.webp';
 const PAPER_BACKGROUND_URL = './assets/crumpled_paper_background.webp';
 const MOVE_BUTTON_DOODLES = Object.freeze({
   reload: 'reload_button',
@@ -338,19 +338,24 @@ boot();
 
 async function boot() {
   const loadingScreen = renderLoadingScreen();
-  const loadingImagesPromise = preloadLoadingImages();
   let loadingImages = null;
-
-  try {
-    loadingImages = await loadingImagesPromise;
-    playLoadingScreen(loadingScreen, loadingImages);
-  } catch (error) {
-    console.warn('Could not load loading screen art', error);
-  }
-
+  const loadingImagesPromise = preloadLoadingImages()
+    .then((images) => {
+      loadingImages = images;
+      return images;
+    })
+    .then((images) => {
+      if (!loadingScreen.isDone && images.boil && images.barEmpty && images.barFull) {
+        playLoadingScreen(loadingScreen, images);
+      }
+    })
+    .catch((error) => {
+      console.warn('Could not load loading screen art', error);
+    });
   const preloadPromise = preloadGameAssets().catch((error) => {
     console.warn('Could not preload all game assets', error);
   });
+
   const minimumLoadingPromise = waitMsWithoutToken(LOADING_DURATION_MS);
 
   await Promise.all([preloadPromise, minimumLoadingPromise]);
@@ -358,7 +363,7 @@ async function boot() {
   await waitForLoadingStart(loadingScreen);
 
   try {
-    await unlockSceneAudio();
+    unlockSceneAudio();
     render();
   } catch (error) {
     console.error('Could not render title screen', error);
@@ -397,9 +402,9 @@ function renderLoadingScreen() {
 
 function preloadLoadingImages() {
   return Promise.all([
-    loadImageAsset(LOADING_ANIMATION_URL),
-    loadImageAsset(LOADING_BAR_EMPTY_URL),
-    loadImageAsset(LOADING_BAR_FULL_URL),
+    loadImageAsset(LOADING_ANIMATION_URL, { decode: false }),
+    loadImageAsset(LOADING_BAR_EMPTY_URL, { decode: false }),
+    loadImageAsset(LOADING_BAR_FULL_URL, { decode: false }),
   ]).then(([boil, barEmpty, barFull]) => ({ boil, barEmpty, barFull }));
 }
 
@@ -418,6 +423,10 @@ function playLoadingScreen(loadingScreen, images) {
 }
 
 function drawLoadingScreen(loadingScreen, images, now) {
+  if (!images) {
+    return;
+  }
+
   const elapsed = Math.max(0, now - loadingScreen.startedAt);
   const progress = loadingScreen.isDone ? 1 : Math.min(1, elapsed / LOADING_DURATION_MS);
   const boilContext = loadingScreen.boilCanvas?.getContext('2d');
@@ -431,21 +440,23 @@ function drawLoadingScreen(loadingScreen, images, now) {
         LOADING_FRAME_COUNT - 1,
         Math.floor((elapsed / 1000) * LOADING_FRAME_RATE) % LOADING_FRAME_COUNT,
       );
-      boilContext.drawImage(
-        images.boil,
-        0,
-        boilFrame * LOADING_FRAME_HEIGHT,
-        LOADING_FRAME_WIDTH,
-        LOADING_FRAME_HEIGHT,
-        0,
-        0,
-        LOADING_FRAME_WIDTH,
-        LOADING_FRAME_HEIGHT,
-      );
+      if (images.boil) {
+        boilContext.drawImage(
+          images.boil,
+          0,
+          boilFrame * LOADING_FRAME_HEIGHT,
+          LOADING_FRAME_WIDTH,
+          LOADING_FRAME_HEIGHT,
+          0,
+          0,
+          LOADING_FRAME_WIDTH,
+          LOADING_FRAME_HEIGHT,
+        );
+      }
     }
   }
 
-  if (!progressContext) {
+  if (!progressContext || !images.barEmpty || !images.barFull) {
     return;
   }
 
@@ -583,7 +594,7 @@ function preloadImageAsset(src, { readyClass = '' } = {}) {
     });
 }
 
-function loadImageAsset(src) {
+function loadImageAsset(src, { decode = true } = {}) {
   const image = new Image();
   const loaded = new Promise((resolve) => {
     image.addEventListener('load', () => resolve(image), { once: true });
@@ -600,7 +611,7 @@ function loadImageAsset(src) {
       return false;
     }
 
-    if (!loadedImage.decode) {
+    if (!decode || !loadedImage.decode) {
       return loadedImage;
     }
 
