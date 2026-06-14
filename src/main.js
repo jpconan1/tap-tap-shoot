@@ -72,6 +72,7 @@ const SCENE_BEATS = 2;
 const ROUND_OVER_SCENE_BEATS = 2;
 const READY_BEATS = 3;
 const READY_SELECTION_PAUSE_BEATS = 2;
+const PAPER_BACKGROUND_URL = './assets/crumpled_paper_background.webp';
 const MOVE_BUTTON_DOODLES = Object.freeze({
   reload: 'reload_button',
   shoot: 'shoot_button',
@@ -404,17 +405,41 @@ function getGamePreloadDoodles() {
 
 function preloadStaticImages() {
   return Promise.all([
-    preloadImageAsset('./assets/crumpled_paper_background.webp'),
+    preloadImageAsset(PAPER_BACKGROUND_URL, { readyClass: 'paper-background-ready' }),
   ]).then(() => undefined);
 }
 
-function preloadImageAsset(src) {
+function preloadImageAsset(src, { readyClass = '' } = {}) {
   const image = new Image();
-  image.src = src;
-  return image.decode?.().catch(() => undefined) ?? new Promise((resolve) => {
-    image.addEventListener('load', resolve, { once: true });
-    image.addEventListener('error', resolve, { once: true });
+  const loaded = new Promise((resolve) => {
+    image.addEventListener('load', () => resolve(true), { once: true });
+    image.addEventListener('error', () => resolve(false), { once: true });
+    image.src = src;
+
+    if (image.complete) {
+      resolve(Boolean(image.naturalWidth));
+    }
   });
+
+  return loaded
+    .then((didLoad) => {
+      if (!didLoad) {
+        return false;
+      }
+
+      if (!image.decode) {
+        return true;
+      }
+
+      return image.decode().then(() => true, () => true);
+    })
+    .then((didLoad) => {
+      if (didLoad && readyClass) {
+        document.body.classList.add(readyClass);
+      }
+
+      return didLoad;
+    });
 }
 
 function preloadGameFont() {

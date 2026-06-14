@@ -36,13 +36,16 @@ body {
   margin: 0;
   overflow: hidden;
   background-color: var(--paper);
-  background-image: url("../assets/crumpled_paper_background.webp");
   background-position: center;
   background-size: cover;
   color: var(--ink);
   font-family: "Pangolin", "Comic Sans MS", "Marker Felt", "Trebuchet MS", system-ui, sans-serif;
   -webkit-touch-callout: none;
   user-select: none;
+}
+
+body.paper-background-ready {
+  background-image: url("../assets/crumpled_paper_background.webp");
 }
 
 body::before {
