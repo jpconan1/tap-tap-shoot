@@ -314,6 +314,7 @@ let turnPhase = 'idle';
 let p1QueuedMove = null;
 let localTurnChoice = null;
 let rankedSnapshot = null;
+let rankedReadyWaitingTimer = null;
 let findingMatchStep = 0;
 let findingMatchTimer = null;
 let tutorialSlideIndex = 0;
@@ -844,25 +845,27 @@ function renderStagePresentation() {
 }
 
 function renderReadyWaitingOverlay() {
-  if (!shouldShowReadyWaitingOverlay()) {
+  const readyWaiting = getActiveReadyWaiting();
+
+  if (!readyWaiting) {
     return '';
   }
 
   const waitingSceneClass = getReadyWaitingSceneClass();
-  const waitingRoleClass = getReadyWaitingRoleClass(localTurnChoice.waitingPlayerId);
+  const waitingRoleClass = getReadyWaitingRoleClass(readyWaiting.waitingPlayerId);
 
   return `
     <canvas
-      class="ready-waiting-overlay ${localTurnChoice.readyPlayerId}"
-      data-ready-phase="${localTurnChoice.phase}"
+      class="ready-waiting-overlay ${readyWaiting.readyPlayerId}"
+      data-ready-phase="${readyWaiting.phase}"
       width="300"
       height="256"
       aria-hidden="true"
     ></canvas>
-    ${localTurnChoice.phase === 'countdown'
+    ${readyWaiting.phase === 'countdown'
       ? `
         <canvas
-          class="countdown-overlay ${localTurnChoice.waitingPlayerId}"
+          class="countdown-overlay ${readyWaiting.waitingPlayerId}"
           width="300"
           height="256"
           aria-hidden="true"
@@ -870,7 +873,7 @@ function renderReadyWaitingOverlay() {
       `
       : `
         <canvas
-          class="waiting-dots-overlay ${localTurnChoice.waitingPlayerId} ${waitingSceneClass} ${waitingRoleClass}"
+          class="waiting-dots-overlay ${readyWaiting.waitingPlayerId} ${waitingSceneClass} ${waitingRoleClass}"
           width="135"
           height="55"
           aria-hidden="true"
@@ -902,19 +905,52 @@ function getReadyWaitingRoleClass(playerId) {
   return '';
 }
 
-function shouldShowReadyWaitingOverlay() {
-  return screen === 'playing'
-    && isLocalChoiceMode()
-    && state.status === 'playing'
+function getActiveReadyWaiting() {
+  if (screen !== 'playing' || state.status !== 'playing' || isTransitioning) {
+    return null;
+  }
+
+  if (
+    isLocalChoiceMode()
     && turnPhase === 'scene'
-    && !isTransitioning
     && localTurnChoice?.readyPlayerId
-    && (localTurnChoice.phase === 'safe' || localTurnChoice.phase === 'countdown');
+    && (localTurnChoice.phase === 'safe' || localTurnChoice.phase === 'countdown')
+  ) {
+    return {
+      phase: localTurnChoice.phase,
+      readyPlayerId: localTurnChoice.readyPlayerId,
+      waitingPlayerId: localTurnChoice.waitingPlayerId,
+    };
+  }
+
+  return getRankedReadyWaiting();
+}
+
+function getRankedReadyWaiting() {
+  if (
+    playMode !== 'online' ||
+    rankedSnapshot?.phase !== 'choosing' ||
+    !rankedSnapshot.readyPlayerKey ||
+    !rankedSnapshot.waitingPlayerKey
+  ) {
+    return null;
+  }
+
+  const remainingMs = Math.max(0, rankedSnapshot.deadlineAt - Date.now());
+
+  return {
+    phase: remainingMs <= COUNTDOWN_PHASE_MS ? 'countdown' : 'safe',
+    readyPlayerId: getLocalPlayerIdFromRankedKey(rankedSnapshot.readyPlayerKey),
+    waitingPlayerId: getLocalPlayerIdFromRankedKey(rankedSnapshot.waitingPlayerKey),
+  };
+}
+
+function getLocalPlayerIdFromRankedKey(playerKey) {
+  return playerKey === rankedSnapshot?.playerKey ? 'p1' : 'p2';
 }
 
 function shouldClearStageForCountdown() {
-  return shouldShowReadyWaitingOverlay()
-    && localTurnChoice.phase === 'countdown';
+  return getActiveReadyWaiting()?.phase === 'countdown';
 }
 
 function renderTitleScreen() {
@@ -1720,9 +1756,13 @@ function beginLocalCountdownPhase() {
 }
 
 function handleReadyWaitingSplit() {
-  const choice = localTurnChoice;
+  const choice = getActiveReadyWaiting();
 
-  if (!choice || choice.splitApplied || choice.phase !== 'safe') {
+  if (!choice || choice.phase !== 'safe') {
+    return;
+  }
+
+  if (localTurnChoice && choice.readyPlayerId === localTurnChoice.readyPlayerId && localTurnChoice.splitApplied) {
     return;
   }
 
@@ -1732,7 +1772,10 @@ function handleReadyWaitingSplit() {
     return;
   }
 
-  choice.splitApplied = true;
+  if (localTurnChoice && choice.readyPlayerId === localTurnChoice.readyPlayerId) {
+    localTurnChoice.splitApplied = true;
+  }
+
   stagePresentation = splitPresentation;
   replaceStagePresentation();
 }
@@ -2243,6 +2286,7 @@ function startRankedFromTitle() {
   unlockSceneAudio();
   playMode = 'online';
   clearLocalTurnChoice();
+  clearRankedReadyWaitingTimer();
   screen = 'queue';
   p1QueuedMove = null;
   rankedSnapshot = null;
@@ -2258,6 +2302,7 @@ function handleRankedQueue() {
 
 function handleRankedClose() {
   if (playMode === 'online' && screen !== 'title') {
+    clearRankedReadyWaitingTimer();
     screen = 'title';
     rankedSnapshot = null;
     render();
@@ -2276,12 +2321,15 @@ function applyRankedSnapshot(snapshot) {
   if (previousPhase !== snapshot.phase) {
     resetStageAudioKey();
   }
+  scheduleRankedReadyWaitingRender();
 
   if (snapshot.revealedMoves || snapshot.round.lastTurn) {
     lastMoves = getLocalMovesFromRankedSnapshot(snapshot);
     stagePresentation = getDoodlePresentation(lastMoves.p1, lastMoves.p2);
   } else if (snapshot.phase === 'countdown') {
     stagePresentation = { kind: 'cue', name: 'READY' };
+  } else if (snapshot.phase === 'choosing' && snapshot.readyPlayerKey) {
+    stagePresentation = getRankedChoosingPresentation(snapshot);
   } else if (snapshot.phase === 'choosing') {
     stagePresentation = { kind: 'cue', name: 'GO' };
   } else if (snapshot.phase === 'gameOver') {
@@ -2293,6 +2341,14 @@ function applyRankedSnapshot(snapshot) {
   }
 
   render();
+}
+
+function getRankedChoosingPresentation(snapshot) {
+  if (snapshot.round.turn === 0 && !snapshot.round.lastTurn) {
+    return { kind: 'doodle', name: 'reloading', flip: false };
+  }
+
+  return getDoodlePresentation(lastMoves.p1, lastMoves.p2);
 }
 
 function getLocalStateFromRankedSnapshot(snapshot) {
@@ -2332,7 +2388,7 @@ function getTurnPhaseFromRankedSnapshot(snapshot) {
   }
 
   if (snapshot.phase === 'choosing') {
-    return 'go';
+    return snapshot.readyPlayerKey ? 'scene' : 'go';
   }
 
   if (snapshot.phase === 'revealed') {
@@ -2340,6 +2396,29 @@ function getTurnPhaseFromRankedSnapshot(snapshot) {
   }
 
   return 'round-over';
+}
+
+function scheduleRankedReadyWaitingRender() {
+  clearRankedReadyWaitingTimer();
+
+  const readyWaiting = getRankedReadyWaiting();
+
+  if (!readyWaiting || readyWaiting.phase !== 'safe') {
+    return;
+  }
+
+  const countdownStartsIn = Math.max(0, rankedSnapshot.deadlineAt - Date.now() - COUNTDOWN_PHASE_MS);
+  rankedReadyWaitingTimer = setTimeout(() => {
+    rankedReadyWaitingTimer = null;
+    render();
+  }, countdownStartsIn);
+}
+
+function clearRankedReadyWaitingTimer() {
+  if (rankedReadyWaitingTimer) {
+    clearTimeout(rankedReadyWaitingTimer);
+    rankedReadyWaitingTimer = null;
+  }
 }
 
 function getLocalMovesFromRankedSnapshot(snapshot) {
@@ -2366,6 +2445,7 @@ function submitRankedMove(moveId) {
 function leaveRanked() {
   rankedClient.close();
   stopFindingMatchTicker();
+  clearRankedReadyWaitingTimer();
   playMode = 'local';
   clearLocalTurnChoice();
   rankedSnapshot = null;
