@@ -82,6 +82,19 @@ test('first submitted move starts server-owned waiting deadline', async () => {
   assert.equal(lastMessage(p2).waitingPlayerKey, 'p2');
 });
 
+test('opponent first submit broadcasts ready state to waiting player', async () => {
+  const { service, p1, p2 } = await createMatchedService();
+  const room = onlyRoom(service);
+
+  service.beginChoosing(room);
+  service.receive(p2.session, { type: 'submitMove', moveId: 'reload' });
+
+  assert.equal(room.readyPlayerKey, 'p2');
+  assert.equal(room.waitingPlayerKey, 'p1');
+  assert.equal(lastMessage(p1).readyPlayerKey, 'p2');
+  assert.equal(lastMessage(p1).waitingPlayerKey, 'p1');
+});
+
 test('turn timeout gives the ready player the round', async () => {
   const { service, p1 } = await createMatchedService({ turnMs: 10 });
   const room = onlyRoom(service);

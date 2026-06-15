@@ -314,6 +314,7 @@ let turnPhase = 'idle';
 let p1QueuedMove = null;
 let localTurnChoice = null;
 let rankedSnapshot = null;
+let rankedReadyWaiting = null;
 let rankedReadyWaitingTimer = null;
 let findingMatchStep = 0;
 let findingMatchTimer = null;
@@ -923,30 +924,30 @@ function getActiveReadyWaiting() {
     };
   }
 
-  return getRankedReadyWaiting();
+  return rankedReadyWaiting;
 }
 
-function getRankedReadyWaiting() {
+function getRankedReadyWaitingFromSnapshot(snapshot) {
   if (
     playMode !== 'online' ||
-    rankedSnapshot?.phase !== 'choosing' ||
-    !rankedSnapshot.readyPlayerKey ||
-    !rankedSnapshot.waitingPlayerKey
+    snapshot?.phase !== 'choosing' ||
+    !snapshot.readyPlayerKey ||
+    !snapshot.waitingPlayerKey
   ) {
     return null;
   }
 
-  const remainingMs = Math.max(0, rankedSnapshot.deadlineAt - Date.now());
+  const remainingMs = Math.max(0, snapshot.deadlineAt - Date.now());
 
   return {
     phase: remainingMs <= COUNTDOWN_PHASE_MS ? 'countdown' : 'safe',
-    readyPlayerId: getLocalPlayerIdFromRankedKey(rankedSnapshot.readyPlayerKey),
-    waitingPlayerId: getLocalPlayerIdFromRankedKey(rankedSnapshot.waitingPlayerKey),
+    readyPlayerId: getLocalPlayerIdFromRankedKey(snapshot, snapshot.readyPlayerKey),
+    waitingPlayerId: getLocalPlayerIdFromRankedKey(snapshot, snapshot.waitingPlayerKey),
   };
 }
 
-function getLocalPlayerIdFromRankedKey(playerKey) {
-  return playerKey === rankedSnapshot?.playerKey ? 'p1' : 'p2';
+function getLocalPlayerIdFromRankedKey(snapshot, playerKey) {
+  return playerKey === snapshot?.playerKey ? 'p1' : 'p2';
 }
 
 function shouldClearStageForCountdown() {
@@ -2290,6 +2291,7 @@ function startRankedFromTitle() {
   screen = 'queue';
   p1QueuedMove = null;
   rankedSnapshot = null;
+  rankedReadyWaiting = null;
   findingMatchStep = 0;
   rankedClient.connect();
   render();
@@ -2303,6 +2305,7 @@ function handleRankedQueue() {
 function handleRankedClose() {
   if (playMode === 'online' && screen !== 'title') {
     clearRankedReadyWaitingTimer();
+    rankedReadyWaiting = null;
     screen = 'title';
     rankedSnapshot = null;
     render();
@@ -2313,6 +2316,7 @@ function applyRankedSnapshot(snapshot) {
   stopFindingMatchTicker();
   const previousPhase = rankedSnapshot?.phase;
   rankedSnapshot = snapshot;
+  rankedReadyWaiting = getRankedReadyWaitingFromSnapshot(snapshot);
   screen = 'playing';
   state = getLocalStateFromRankedSnapshot(snapshot);
   roundWins = getLocalRoundWinsFromRankedSnapshot(snapshot);
@@ -2401,15 +2405,14 @@ function getTurnPhaseFromRankedSnapshot(snapshot) {
 function scheduleRankedReadyWaitingRender() {
   clearRankedReadyWaitingTimer();
 
-  const readyWaiting = getRankedReadyWaiting();
-
-  if (!readyWaiting || readyWaiting.phase !== 'safe') {
+  if (!rankedReadyWaiting || rankedReadyWaiting.phase !== 'safe') {
     return;
   }
 
   const countdownStartsIn = Math.max(0, rankedSnapshot.deadlineAt - Date.now() - COUNTDOWN_PHASE_MS);
   rankedReadyWaitingTimer = setTimeout(() => {
     rankedReadyWaitingTimer = null;
+    rankedReadyWaiting = getRankedReadyWaitingFromSnapshot(rankedSnapshot);
     render();
   }, countdownStartsIn);
 }
@@ -2449,6 +2452,7 @@ function leaveRanked() {
   playMode = 'local';
   clearLocalTurnChoice();
   rankedSnapshot = null;
+  rankedReadyWaiting = null;
   screen = 'title';
   turnPhase = 'idle';
   p1QueuedMove = null;
