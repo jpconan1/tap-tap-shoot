@@ -274,7 +274,19 @@ button {
   align-self: center;
 }
 
-.ready-animation-overlay {
+.split-scene-canvas {
+  display: none;
+}
+
+.ready-waiting-split .full-scene-canvas {
+  display: none;
+}
+
+.ready-waiting-split .split-scene-canvas {
+  display: block;
+}
+
+.ready-waiting-overlay {
   position: absolute;
   top: calc((100% + 104px - 256px) / 2);
   left: 50%;

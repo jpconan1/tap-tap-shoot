@@ -8,8 +8,8 @@ export const DOODLE_FRAME_RATE = 8;
 const WIPE_FRAME_WIDTH = 1100;
 const WIPE_FRAME_HEIGHT = 825;
 const WIPE_STEP_DURATION = 58;
-const READY_ANIMATION_FRAME_WIDTH = 512;
-const READY_ANIMATION_FRAME_HEIGHT = 256;
+const READY_WAITING_FRAME_WIDTH = 512;
+const READY_WAITING_FRAME_HEIGHT = 256;
 
 const INTERACTION_DOODLES = Object.freeze({
   'reload|reload': 'reloading',
@@ -42,18 +42,40 @@ const STARBURST_WIPE_STEPS = Object.freeze([
   Object.freeze(['1']),
 ]);
 
-const READY_ANIMATION_STEPS = Object.freeze([
+const READY_WAITING_READY_STEPS = Object.freeze([
   Object.freeze(['1']),
-  Object.freeze(['1_w']),
-  Object.freeze(['2', '1_w']),
-  Object.freeze(['3', '2_w']),
-  Object.freeze(['4', '3_w']),
-  Object.freeze(['5', '4_w']),
-  Object.freeze(['6', '5_w']),
-  Object.freeze(['7', '6_w']),
-  Object.freeze(['7_w']),
+  Object.freeze(['2']),
+  Object.freeze(['3']),
+  Object.freeze(['4']),
+  Object.freeze(['5']),
+  Object.freeze(['6']),
+  Object.freeze(['7']),
 ]);
-export const READY_ANIMATION_LOOP_MS = READY_ANIMATION_STEPS.length * WIPE_STEP_DURATION;
+const READY_WAITING_WAITING_STEPS = Object.freeze([
+  Object.freeze(['waiting1']),
+  Object.freeze(['waiting2']),
+  Object.freeze(['waiting3']),
+]);
+const SPLIT_SCENE_DOODLES = Object.freeze([
+  'split_scenes/clash-them',
+  'split_scenes/clash-you',
+  'split_scenes/collision-them',
+  'split_scenes/collision-you',
+  'split_scenes/counterstab-counterer',
+  'split_scenes/counterstab-stabber',
+  'split_scenes/dodge-dodger',
+  'split_scenes/dodge-shooter',
+  'split_scenes/hiding-them',
+  'split_scenes/hiding-you',
+  'split_scenes/reloading-them',
+  'split_scenes/reloading-you',
+  'split_scenes/tricky-fooled',
+  'split_scenes/tricky-tricker',
+]);
+const READY_WAITING_SPLIT_STEP = 3;
+const READY_WAITING_COUNTDOWN_MS = 5000;
+export const READY_WAITING_READY_MS = READY_WAITING_READY_STEPS.length * WIPE_STEP_DURATION;
+export const READY_WAITING_WAITING_MS = READY_WAITING_WAITING_STEPS.length * WIPE_STEP_DURATION;
 
 const doodleSheets = new Map();
 let doodleRenderers = [];
@@ -66,7 +88,10 @@ export function getRendererPreloadDoodles() {
   return [
     ...Object.values(INTERACTION_DOODLES),
     ...STARBURST_WIPE_STEPS.flat().map((name) => `starburst_wipe/${name}`),
-    ...READY_ANIMATION_STEPS.flat().map((name) => `ready_animation/${name}`),
+    ...READY_WAITING_READY_STEPS.flat().map((name) => `ready_waiting/${name}`),
+    ...READY_WAITING_WAITING_STEPS.flat().map((name) => `ready_waiting/${name}`),
+    ...Array.from({ length: 5 }, (_, index) => `ready_waiting/countdown${index + 1}`),
+    ...SPLIT_SCENE_DOODLES,
   ];
 }
 
@@ -113,9 +138,9 @@ export function mountSpriteRenderers(canvases) {
   ensureDoodleLoop();
 }
 
-export function mountReadyAnimationOverlays(canvases, { pauseMs = 0 } = {}) {
+export function mountReadyWaitingOverlays(canvases) {
   [...canvases].forEach((canvas) => {
-    startReadyAnimationLoop(canvas, pauseMs);
+    startReadyWaitingLoop(canvas);
   });
 }
 
@@ -134,9 +159,13 @@ function preloadStarburstWipe() {
   return preloadDoodleSheets([...images].map((name) => `starburst_wipe/${name}`));
 }
 
-function preloadReadyAnimation() {
-  const images = new Set(READY_ANIMATION_STEPS.flat());
-  return preloadDoodleSheets([...images].map((name) => `ready_animation/${name}`));
+function preloadReadyWaiting() {
+  const images = new Set([
+    ...READY_WAITING_READY_STEPS.flat(),
+    ...READY_WAITING_WAITING_STEPS.flat(),
+    ...Array.from({ length: 5 }, (_, index) => `countdown${index + 1}`),
+  ]);
+  return preloadDoodleSheets([...images].map((name) => `ready_waiting/${name}`));
 }
 
 function ensureImageLoaded(image) {
@@ -213,29 +242,46 @@ function drawWipeStep(canvas, layers, now) {
   });
 }
 
-async function startReadyAnimationLoop(canvas, pauseMs) {
+async function startReadyWaitingLoop(canvas) {
   const context = canvas.getContext('2d');
-  await preloadReadyAnimation();
+  await preloadReadyWaiting();
 
-  const loopDuration = READY_ANIMATION_STEPS.length * WIPE_STEP_DURATION;
-  const totalDuration = loopDuration + pauseMs;
   const startedAt = performance.now();
+  let hasSplit = false;
+  const readyFlip = canvas.dataset.readyPlayer === 'p2';
+  const waitingFlip = canvas.dataset.waitingPlayer === 'p2';
 
   function tick(now) {
     if (!canvas.isConnected) {
       return;
     }
 
-    const loopElapsed = (now - startedAt) % totalDuration;
+    const elapsed = now - startedAt;
 
-    if (loopElapsed < loopDuration) {
+    if (elapsed < READY_WAITING_READY_MS) {
       const stepIndex = Math.min(
-        READY_ANIMATION_STEPS.length - 1,
-        Math.floor(loopElapsed / WIPE_STEP_DURATION),
+        READY_WAITING_READY_STEPS.length - 1,
+        Math.floor(elapsed / WIPE_STEP_DURATION),
       );
-      drawReadyAnimationStep(canvas, context, READY_ANIMATION_STEPS[stepIndex], now);
+
+      if (!hasSplit && stepIndex >= READY_WAITING_SPLIT_STEP) {
+        hasSplit = true;
+        canvas.dispatchEvent(new CustomEvent('ready-waiting-split', { bubbles: true }));
+      }
+
+      drawReadyWaitingStep(canvas, context, READY_WAITING_READY_STEPS[stepIndex], now, readyFlip);
+      requestAnimationFrame(tick);
+      return;
+    }
+
+    const waitingElapsed = elapsed - READY_WAITING_READY_MS;
+    const countdownIndex = getCountdownIndex(waitingElapsed);
+
+    if (countdownIndex) {
+      drawReadyWaitingStep(canvas, context, [`countdown${countdownIndex}`], now, waitingFlip);
     } else {
-      context.clearRect(0, 0, canvas.width, canvas.height);
+      const stepIndex = Math.floor(waitingElapsed / WIPE_STEP_DURATION) % READY_WAITING_WAITING_STEPS.length;
+      drawReadyWaitingStep(canvas, context, READY_WAITING_WAITING_STEPS[stepIndex], now, waitingFlip);
     }
 
     requestAnimationFrame(tick);
@@ -244,13 +290,19 @@ async function startReadyAnimationLoop(canvas, pauseMs) {
   requestAnimationFrame(tick);
 }
 
-function drawReadyAnimationStep(canvas, context, layers, now) {
+function drawReadyWaitingStep(canvas, context, layers, now, flip = false) {
   const frame = Math.floor((now / 1000) * DOODLE_FRAME_RATE) % DOODLE_FRAME_COUNT;
 
   context.clearRect(0, 0, canvas.width, canvas.height);
+  context.save();
+
+  if (flip) {
+    context.translate(canvas.width, 0);
+    context.scale(-1, 1);
+  }
 
   layers.forEach((layer) => {
-    const image = loadDoodleSheet(`ready_animation/${layer}`);
+    const image = loadDoodleSheet(`ready_waiting/${layer}`);
 
     if (!image.complete || !image.naturalWidth) {
       return;
@@ -259,15 +311,27 @@ function drawReadyAnimationStep(canvas, context, layers, now) {
     context.drawImage(
       image,
       0,
-      frame * READY_ANIMATION_FRAME_HEIGHT,
-      READY_ANIMATION_FRAME_WIDTH,
-      READY_ANIMATION_FRAME_HEIGHT,
+      frame * READY_WAITING_FRAME_HEIGHT,
+      READY_WAITING_FRAME_WIDTH,
+      READY_WAITING_FRAME_HEIGHT,
       0,
       0,
       canvas.width,
       canvas.height,
     );
   });
+
+  context.restore();
+}
+
+function getCountdownIndex(waitingElapsed) {
+  const countdownElapsed = waitingElapsed - READY_WAITING_WAITING_MS;
+
+  if (countdownElapsed < 0 || countdownElapsed >= READY_WAITING_COUNTDOWN_MS) {
+    return null;
+  }
+
+  return 5 - Math.floor(countdownElapsed / 1000);
 }
 
 function getDoodleForMoves(p1Move, p2Move) {
