@@ -2375,7 +2375,13 @@ function applyRankedSnapshot(snapshot) {
   }
   scheduleRankedReadyWaitingRender();
 
-  if (snapshot.revealedMoves || snapshot.round.lastTurn) {
+  if (snapshot.phase === 'gameOver' && snapshot.noContest) {
+    stagePresentation = {
+      kind: 'doodle',
+      name: 'nocontest',
+      flip: false,
+    };
+  } else if (snapshot.revealedMoves || snapshot.round.lastTurn) {
     lastMoves = getLocalMovesFromRankedSnapshot(snapshot);
     stagePresentation = getDoodlePresentation(lastMoves.p1, lastMoves.p2);
   } else if (snapshot.phase === 'countdown') {
@@ -2384,12 +2390,6 @@ function applyRankedSnapshot(snapshot) {
     stagePresentation = getRankedChoosingPresentation(snapshot);
   } else if (snapshot.phase === 'choosing') {
     stagePresentation = { kind: 'cue', name: 'GO' };
-  } else if (snapshot.phase === 'gameOver' && snapshot.noContest) {
-    stagePresentation = {
-      kind: 'doodle',
-      name: 'nocontest',
-      flip: false,
-    };
   } else if (snapshot.phase === 'gameOver') {
     stagePresentation = {
       kind: 'doodle',
@@ -2472,6 +2472,7 @@ function scheduleRankedReadyWaitingRender() {
     rankedReadyWaitingTimer = setTimeout(() => {
       rankedReadyWaitingTimer = null;
       rankedReadyWaiting = getRankedReadyWaitingFromSnapshot(rankedSnapshot);
+      scheduleRankedReadyWaitingRender();
       render();
     }, waitingStartsIn);
     return;
