@@ -5,7 +5,10 @@ import { updateRatings } from './elo.js';
 import { MemoryPlayerStore } from './playerStore.js';
 
 const GAME_TARGET_ROUNDS = 5;
+const MAX_TIMEOUT_STRIKES = 3;
 const DEFAULT_COUNTDOWN_MS = 3000;
+const NO_SELECTION_GRACE_MS = 5000;
+const NO_CONTEST_WAITING_MS = 3000;
 const READY_WAITING_SAFE_MS = (7 * 58) + 750 + (3 * 1000);
 const READY_WAITING_COUNTDOWN_MS = 5000;
 const DEFAULT_TURN_MS = READY_WAITING_SAFE_MS + READY_WAITING_COUNTDOWN_MS;
@@ -17,6 +20,9 @@ export class RankedDuelService {
   constructor({
     playerStore = new MemoryPlayerStore(),
     countdownMs = DEFAULT_COUNTDOWN_MS,
+    noSelectionGraceMs = NO_SELECTION_GRACE_MS,
+    noContestWaitingMs = NO_CONTEST_WAITING_MS,
+    noContestCountdownMs = READY_WAITING_COUNTDOWN_MS,
     turnMs = DEFAULT_TURN_MS,
     revealMs = DEFAULT_REVEAL_MS,
     now = () => Date.now(),
@@ -24,6 +30,9 @@ export class RankedDuelService {
   } = {}) {
     this.playerStore = playerStore;
     this.countdownMs = countdownMs;
+    this.noSelectionGraceMs = noSelectionGraceMs;
+    this.noContestWaitingMs = noContestWaitingMs;
+    this.noContestCountdownMs = noContestCountdownMs;
     this.turnMs = turnMs;
     this.revealMs = revealMs;
     this.now = now;
@@ -157,10 +166,17 @@ export class RankedDuelService {
         p1: 0,
         p2: 0,
       },
+      timeoutStrikes: {
+        p1: 0,
+        p2: 0,
+      },
       roundState: createRoundState(),
       pendingMoves: new Map(),
       readyPlayerKey: null,
       waitingPlayerKey: null,
+      noContestWaitingAt: null,
+      noContestCountdownAt: null,
+      noContest: false,
       timer: null,
       deadlineAt: this.now() + this.countdownMs,
       winner: null,
@@ -184,9 +200,11 @@ export class RankedDuelService {
     room.pendingMoves.clear();
     room.readyPlayerKey = null;
     room.waitingPlayerKey = null;
-    room.deadlineAt = this.now() + this.turnMs;
+    room.noContestWaitingAt = this.now() + this.noSelectionGraceMs;
+    room.noContestCountdownAt = room.noContestWaitingAt + this.noContestWaitingMs;
+    room.deadlineAt = room.noContestCountdownAt + this.noContestCountdownMs;
     this.broadcastRoom(room);
-    this.setRoomTimer(room, () => this.handleChoosingDeadline(room), this.turnMs);
+    this.setRoomTimer(room, () => this.handleChoosingDeadline(room), room.deadlineAt - this.now());
   }
 
   submitMove(session, moveId) {
@@ -223,6 +241,8 @@ export class RankedDuelService {
   beginReadyWaiting(room, readyPlayerKey) {
     room.readyPlayerKey = readyPlayerKey;
     room.waitingPlayerKey = readyPlayerKey === 'p1' ? 'p2' : 'p1';
+    room.noContestWaitingAt = null;
+    room.noContestCountdownAt = null;
     room.deadlineAt = this.now() + this.turnMs;
     this.broadcastRoom(room);
     this.setRoomTimer(room, () => this.handleChoosingDeadline(room), this.turnMs);
@@ -230,6 +250,11 @@ export class RankedDuelService {
 
   handleChoosingDeadline(room) {
     if (room.phase !== 'choosing') {
+      return;
+    }
+
+    if (room.pendingMoves.size === 0) {
+      this.finishRoomByNoContest(room);
       return;
     }
 
@@ -249,6 +274,8 @@ export class RankedDuelService {
     this.clearRoomTimer(room);
     room.readyPlayerKey = null;
     room.waitingPlayerKey = null;
+    room.noContestWaitingAt = null;
+    room.noContestCountdownAt = null;
 
     const p1Move = room.pendingMoves.get('p1') ?? getFallbackMove(room.roundState, 'p1');
     const p2Move = room.pendingMoves.get('p2') ?? getFallbackMove(room.roundState, 'p2');
@@ -281,10 +308,30 @@ export class RankedDuelService {
     }, this.revealMs);
   }
 
+  finishRoomByNoContest(room) {
+    this.clearRoomTimer(room);
+    room.readyPlayerKey = null;
+    room.waitingPlayerKey = null;
+    room.noContestWaitingAt = null;
+    room.noContestCountdownAt = null;
+    room.noContest = true;
+
+    if (room.roundWins.p1 === room.roundWins.p2) {
+      room.phase = 'gameOver';
+      room.winner = null;
+      room.ratings = null;
+      this.broadcastRoom(room);
+      return;
+    }
+
+    this.finishRoom(room, room.roundWins.p1 > room.roundWins.p2 ? 'p1' : 'p2');
+  }
+
   finishRoundByTimeout(room, loserKey) {
     this.clearRoomTimer(room);
 
     const winnerKey = loserKey === 'p1' ? 'p2' : 'p1';
+    room.timeoutStrikes[loserKey] += 1;
     room.readyPlayerKey = null;
     room.waitingPlayerKey = null;
     room.roundState = {
@@ -292,9 +339,21 @@ export class RankedDuelService {
       status: 'finished',
       winner: winnerKey,
     };
+
+    if (room.timeoutStrikes[loserKey] >= MAX_TIMEOUT_STRIKES) {
+      this.finishRoom(room, winnerKey);
+      return;
+    }
+
     room.roundWins[winnerKey] += 1;
     room.phase = 'revealed';
-    this.broadcastRoom(room, { timeout: { loser: loserKey, winner: winnerKey } });
+    this.broadcastRoom(room, {
+      timeout: {
+        loser: loserKey,
+        winner: winnerKey,
+        strikes: room.timeoutStrikes[loserKey],
+      },
+    });
 
     if (room.roundWins.p1 >= GAME_TARGET_ROUNDS || room.roundWins.p2 >= GAME_TARGET_ROUNDS) {
       this.finishRoom(room, winnerKey);
@@ -390,7 +449,11 @@ export class RankedDuelService {
       deadlineAt: room.deadlineAt,
       readyPlayerKey: room.readyPlayerKey,
       waitingPlayerKey: room.waitingPlayerKey,
+      noContestWaitingAt: room.noContestWaitingAt,
+      noContestCountdownAt: room.noContestCountdownAt,
+      noContest: room.noContest,
       roundWins: room.roundWins,
+      timeoutStrikes: room.timeoutStrikes,
       winner: room.winner,
       ratings: room.ratings,
       players: {

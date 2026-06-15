@@ -631,6 +631,7 @@ function getGamePreloadDoodles() {
     'they_picked',
     'winner',
     'loser',
+    'nocontest',
     'round_won',
     'round_lost',
     'tip1graphic',
@@ -852,6 +853,27 @@ function renderReadyWaitingOverlay() {
     return '';
   }
 
+  if (readyWaiting.isNoContest) {
+    return readyWaiting.phase === 'countdown'
+      ? ['p1', 'p2'].map((playerId) => `
+        <canvas
+          class="countdown-overlay ${playerId}"
+          width="300"
+          height="256"
+          aria-hidden="true"
+        ></canvas>
+      `).join('')
+      : ['p1', 'p2'].map((playerId) => `
+        <canvas
+          class="waiting-dots-overlay ${playerId}"
+          data-immediate="true"
+          width="135"
+          height="55"
+          aria-hidden="true"
+        ></canvas>
+      `).join('');
+  }
+
   const waitingSceneClass = getReadyWaitingSceneClass();
   const waitingRoleClass = getReadyWaitingRoleClass(readyWaiting.waitingPlayerId);
 
@@ -928,6 +950,28 @@ function getActiveReadyWaiting() {
 }
 
 function getRankedReadyWaitingFromSnapshot(snapshot) {
+  if (
+    playMode === 'online' &&
+    snapshot?.phase === 'choosing' &&
+    !snapshot.readyPlayerKey &&
+    !snapshot.waitingPlayerKey &&
+    snapshot.noContestWaitingAt &&
+    snapshot.noContestCountdownAt
+  ) {
+    const now = Date.now();
+
+    if (now < snapshot.noContestWaitingAt) {
+      return null;
+    }
+
+    return {
+      isNoContest: true,
+      phase: now >= snapshot.noContestCountdownAt ? 'countdown' : 'safe',
+      readyPlayerId: null,
+      waitingPlayerId: null,
+    };
+  }
+
   if (
     playMode !== 'online' ||
     snapshot?.phase !== 'choosing' ||
@@ -1443,6 +1487,10 @@ function getTurnDoodle(turn) {
 function renderActionButtons(legalMoves) {
   if (turnPhase === 'round-over') {
     if (playMode === 'online') {
+      if (rankedSnapshot?.noContest && !rankedSnapshot.winner) {
+        return renderSheetButton('quit', 'quit_button', 'Back to menu', 'quit-button');
+      }
+
       return renderSheetButton('rematch', 'rematch_button', 'Rematch', 'rematch-button');
     }
 
@@ -2336,6 +2384,12 @@ function applyRankedSnapshot(snapshot) {
     stagePresentation = getRankedChoosingPresentation(snapshot);
   } else if (snapshot.phase === 'choosing') {
     stagePresentation = { kind: 'cue', name: 'GO' };
+  } else if (snapshot.phase === 'gameOver' && snapshot.noContest) {
+    stagePresentation = {
+      kind: 'doodle',
+      name: 'nocontest',
+      flip: false,
+    };
   } else if (snapshot.phase === 'gameOver') {
     stagePresentation = {
       kind: 'doodle',
@@ -2405,11 +2459,32 @@ function getTurnPhaseFromRankedSnapshot(snapshot) {
 function scheduleRankedReadyWaitingRender() {
   clearRankedReadyWaitingTimer();
 
-  if (!rankedReadyWaiting || rankedReadyWaiting.phase !== 'safe') {
+  if (!rankedSnapshot || rankedSnapshot.phase !== 'choosing') {
     return;
   }
 
-  const countdownStartsIn = Math.max(0, rankedSnapshot.deadlineAt - Date.now() - COUNTDOWN_PHASE_MS);
+  if (!rankedReadyWaiting) {
+    if (!rankedSnapshot.noContestWaitingAt) {
+      return;
+    }
+
+    const waitingStartsIn = Math.max(0, rankedSnapshot.noContestWaitingAt - Date.now());
+    rankedReadyWaitingTimer = setTimeout(() => {
+      rankedReadyWaitingTimer = null;
+      rankedReadyWaiting = getRankedReadyWaitingFromSnapshot(rankedSnapshot);
+      render();
+    }, waitingStartsIn);
+    return;
+  }
+
+  if (rankedReadyWaiting.phase !== 'safe') {
+    return;
+  }
+
+  const countdownAt = rankedReadyWaiting.isNoContest
+    ? rankedSnapshot.noContestCountdownAt
+    : rankedSnapshot.deadlineAt - COUNTDOWN_PHASE_MS;
+  const countdownStartsIn = Math.max(0, countdownAt - Date.now());
   rankedReadyWaitingTimer = setTimeout(() => {
     rankedReadyWaitingTimer = null;
     rankedReadyWaiting = getRankedReadyWaitingFromSnapshot(rankedSnapshot);

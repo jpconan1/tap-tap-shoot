@@ -104,8 +104,76 @@ test('turn timeout gives the ready player the round', async () => {
   await wait(20);
 
   assert.equal(room.phase, 'revealed');
-  assert.deepEqual(lastMessage(p1).timeout, { loser: 'p2', winner: 'p1' });
+  assert.deepEqual(lastMessage(p1).timeout, { loser: 'p2', winner: 'p1', strikes: 1 });
   assert.equal(room.roundWins.p1, 1);
+  assert.equal(room.timeoutStrikes.p2, 1);
+});
+
+test('third timeout loses match regardless of score', async () => {
+  const { service, p1, p2, store } = await createMatchedService({ turnMs: 10 });
+  const room = onlyRoom(service);
+
+  room.roundWins.p2 = 4;
+
+  for (let strike = 0; strike < 3; strike += 1) {
+    service.beginChoosing(room);
+    service.receive(p1.session, { type: 'submitMove', moveId: 'shoot' });
+    await wait(20);
+
+    if (strike < 2) {
+      room.roundState = createFreshRound(service, room);
+    }
+  }
+
+  await wait(0);
+  assert.equal(room.phase, 'gameOver');
+  assert.equal(room.winner, 'p1');
+  assert.equal(room.timeoutStrikes.p2, 3);
+  assert.equal(lastMessage(p2).timeoutStrikes.p2, 3);
+  assert.equal((await store.getPlayer('p1')).wins, 1);
+  assert.equal((await store.getPlayer('p2')).losses, 1);
+});
+
+test('no selections on tied score ends match with no rating change', async () => {
+  const { service, p1, p2, store } = await createMatchedService({
+    noSelectionGraceMs: 1,
+    noContestWaitingMs: 1,
+    noContestCountdownMs: 1,
+  });
+  const room = onlyRoom(service);
+
+  service.beginChoosing(room);
+  await wait(10);
+
+  assert.equal(room.phase, 'gameOver');
+  assert.equal(room.winner, null);
+  assert.equal(room.noContest, true);
+  assert.equal(lastMessage(p1).noContest, true);
+  assert.equal(lastMessage(p2).winner, null);
+  assert.equal((await store.getPlayer('p1')).rating, DEFAULT_RATING);
+  assert.equal((await store.getPlayer('p2')).rating, DEFAULT_RATING);
+  assert.equal((await store.getPlayer('p1')).wins, 0);
+  assert.equal((await store.getPlayer('p2')).losses, 0);
+});
+
+test('no contest awards match to current round leader', async () => {
+  const { service, p1, p2, store } = await createMatchedService({
+    noSelectionGraceMs: 1,
+    noContestWaitingMs: 1,
+    noContestCountdownMs: 1,
+  });
+  const room = onlyRoom(service);
+
+  room.roundWins.p2 = 2;
+  service.beginChoosing(room);
+  await wait(10);
+
+  assert.equal(room.phase, 'gameOver');
+  assert.equal(room.winner, 'p2');
+  assert.equal(room.noContest, true);
+  assert.equal(lastMessage(p1).winner, 'p2');
+  assert.equal((await store.getPlayer('p2')).wins, 1);
+  assert.equal((await store.getPlayer('p1')).losses, 1);
 });
 
 test('first to five ends match and updates Elo once', async () => {
@@ -145,12 +213,22 @@ test('disconnect forfeits active match', async () => {
   assert.equal((await store.getPlayer('p2')).wins, 1);
 });
 
-function createTestService({ store = new MemoryPlayerStore(), now = () => 0, turnMs = 1000 } = {}) {
+function createTestService({
+  store = new MemoryPlayerStore(),
+  now = () => 0,
+  turnMs = 1000,
+  noSelectionGraceMs = 1000,
+  noContestWaitingMs = 1000,
+  noContestCountdownMs = 1000,
+} = {}) {
   return new RankedDuelService({
     playerStore: store,
     countdownMs: 1000,
     revealMs: 1000,
     turnMs,
+    noSelectionGraceMs,
+    noContestWaitingMs,
+    noContestCountdownMs,
     now,
     createId: createIncrementingId(),
   });

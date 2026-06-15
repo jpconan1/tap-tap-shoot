@@ -274,13 +274,14 @@ async function startWaitingDotsLoop(canvas) {
   await preloadReadyWaiting();
 
   const startedAt = performance.now();
+  const elapsedOffset = canvas.dataset.immediate === 'true' ? WAITING_DOTS_START_DELAY : 0;
 
   function tick(now) {
     if (!canvas.isConnected) {
       return;
     }
 
-    const elapsed = now - startedAt;
+    const elapsed = now - startedAt + elapsedOffset;
     context.clearRect(0, 0, canvas.width, canvas.height);
 
     if (elapsed >= WAITING_DOTS_START_DELAY) {
