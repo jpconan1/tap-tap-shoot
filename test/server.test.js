@@ -69,7 +69,20 @@ test('duplicate submits keep the first move', async () => {
   assert.equal(room.roundWins.p2, 1);
 });
 
-test('turn timeout uses fallback legal moves', async () => {
+test('first submitted move starts server-owned waiting deadline', async () => {
+  const { service, p1, p2 } = await createMatchedService();
+  const room = onlyRoom(service);
+
+  service.beginChoosing(room);
+  service.receive(p1.session, { type: 'submitMove', moveId: 'reload' });
+
+  assert.equal(room.readyPlayerKey, 'p1');
+  assert.equal(room.waitingPlayerKey, 'p2');
+  assert.equal(lastMessage(p2).readyPlayerKey, 'p1');
+  assert.equal(lastMessage(p2).waitingPlayerKey, 'p2');
+});
+
+test('turn timeout gives the ready player the round', async () => {
   const { service, p1 } = await createMatchedService({ turnMs: 10 });
   const room = onlyRoom(service);
 
@@ -78,7 +91,7 @@ test('turn timeout uses fallback legal moves', async () => {
   await wait(20);
 
   assert.equal(room.phase, 'revealed');
-  assert.equal(lastMessage(p1).revealedMoves.p2, 'reload');
+  assert.deepEqual(lastMessage(p1).timeout, { loser: 'p2', winner: 'p1' });
   assert.equal(room.roundWins.p1, 1);
 });
 

@@ -26,10 +26,13 @@ import {
   DOODLE_FRAME_WIDTH,
   getDoodlePresentation,
   getRendererPreloadDoodles,
+  mountCountdownOverlays,
   mountReadyWaitingOverlays,
+  mountWaitingDotsOverlays,
   mountSpriteRenderers,
   playStarburstWipeTransition,
   preloadDoodleSheets,
+  READY_WAITING_SAFE_PHASE_MS,
 } from './renderer.js';
 
 const BEAT_MS = 750;
@@ -68,16 +71,15 @@ const LAST_NUMBERED_TURN = 21;
 const GAME_TARGET_ROUNDS = 5;
 const FRAME_WIDTH = 1100;
 const FRAME_HEIGHT = 825;
-const SCENE_BEATS = 2;
 const ROUND_OVER_SCENE_BEATS = 2;
 const READY_BEATS = 3;
 const COMPUTER_MOVE_DELAY_MS = 3000;
-const WAITING_TIMEOUT_MS = 5000;
+const COUNTDOWN_PHASE_MS = 5000;
 const LOADING_FRAME_WIDTH = 512;
 const LOADING_FRAME_HEIGHT = 256;
 const LOADING_FRAME_COUNT = 10;
 const LOADING_FRAME_RATE = DOODLE_FRAME_RATE;
-const LOADING_LOOP_COUNT = 2;
+const LOADING_LOOP_COUNT = 1;
 const LOADING_DURATION_MS = (LOADING_FRAME_COUNT / LOADING_FRAME_RATE) * LOADING_LOOP_COUNT * 1000;
 const LOADING_BAR_FRAME_COUNT = 3;
 const LOADING_BAR_FRAME_RATE = 8;
@@ -450,12 +452,16 @@ function drawLoadingScreen(loadingScreen, images, now) {
   }
 
   const elapsed = Math.max(0, now - loadingScreen.startedAt);
-  const progress = loadingScreen.isDone ? 1 : Math.min(1, elapsed / LOADING_DURATION_MS);
+  const progress = loadingScreen.isDone ? 1 : getLoadingProgress(elapsed);
   const progressContext = loadingScreen.progressCanvas?.getContext('2d');
   const clickMessageContext = loadingScreen.clickMessageCanvas?.getContext('2d');
   const currentBoilFrame = loadingScreen.isDone
     ? LOADING_FRAME_COUNT - 1
-    : Math.floor((elapsed / 1000) * LOADING_FRAME_RATE) % LOADING_FRAME_COUNT;
+    : Math.min(LOADING_FRAME_COUNT - 1, Math.floor((elapsed / 1000) * LOADING_FRAME_RATE));
+
+  if (!loadingScreen.isDone && elapsed >= LOADING_DURATION_MS) {
+    removeLoadingBoil(loadingScreen);
+  }
 
   if (loadingScreen.boilImage && images.boilFrames?.[currentBoilFrame]) {
     loadingScreen.boilImage.src = images.boilFrames[currentBoilFrame].src;
@@ -521,6 +527,48 @@ function drawLoadingScreen(loadingScreen, images, now) {
   clickMessageContext.restore();
 }
 
+function getLoadingProgress(elapsed) {
+  const t = Math.min(1, elapsed / LOADING_DURATION_MS);
+
+  if (t < 0.48) {
+    return easeOutQuad(t / 0.48) * 0.5;
+  }
+
+  if (t < 0.56) {
+    return 0.75;
+  }
+
+  if (t < 0.64) {
+    return lerp(0.75, 0.82, (t - 0.56) / 0.08);
+  }
+
+  if (t < 0.72) {
+    return 0.82;
+  }
+
+  if (t < 0.8) {
+    return lerp(0.82, 0.9, (t - 0.72) / 0.08);
+  }
+
+  if (t < 0.88) {
+    return lerp(0.9, 0.96, (t - 0.8) / 0.08);
+  }
+
+  if (t < 0.98) {
+    return 0.99;
+  }
+
+  return 1;
+}
+
+function easeOutQuad(t) {
+  return 1 - (1 - t) * (1 - t);
+}
+
+function lerp(from, to, t) {
+  return from + (to - from) * t;
+}
+
 function stopLoadingScreen(loadingScreen, images) {
   loadingScreen.isDone = true;
 
@@ -528,9 +576,14 @@ function stopLoadingScreen(loadingScreen, images) {
     drawLoadingScreen(loadingScreen, images, loadingScreen.startedAt + LOADING_DURATION_MS);
   }
 
-  loadingScreen.boilImage?.remove();
+  removeLoadingBoil(loadingScreen);
   loadingScreen.button?.classList.add('ready');
   loadingScreen.button?.removeAttribute('disabled');
+}
+
+function removeLoadingBoil(loadingScreen) {
+  loadingScreen.boilImage?.remove();
+  loadingScreen.boilImage = null;
 }
 
 function waitForLoadingStart(loadingScreen) {
@@ -687,9 +740,10 @@ function render() {
       ${renderStageHud()}
       ${renderPickHistories()}
       <figure class="doodle-stage">
-        ${renderStagePresentation()}
+        ${shouldClearStageForCountdown() ? '' : renderStagePresentation()}
       </figure>
-      ${shouldShowReadyWaitingOverlay() ? renderReadyWaitingOverlay() : ''}
+      ${renderTestOpponentControls()}
+      ${renderReadyWaitingOverlay()}
     </section>
 
     <section class="moves" aria-label="Moves">
@@ -707,14 +761,17 @@ function render() {
   app.querySelector('[data-action="rematch"]')?.addEventListener('click', restartGame);
   app.querySelector('[data-action="quit"]')?.addEventListener('click', quitLocalGame);
   app.querySelector('[data-action="reset"]').addEventListener('click', restartGame);
-  mountSpriteRenderers(app.querySelectorAll('.sprite-canvas'));
-  app.querySelector('.ready-waiting-overlay')?.addEventListener('ready-waiting-split', () => {
-    app.querySelector('.arena')?.classList.add('ready-waiting-split');
+  app.querySelectorAll('[data-test-opponent-move]').forEach((button) => {
+    button.addEventListener('click', () => submitTestOpponentMove(button.dataset.testOpponentMove));
   });
+  mountSpriteRenderers(app.querySelectorAll('.sprite-canvas'));
+  app.querySelector('.ready-waiting-overlay')?.addEventListener('ready-waiting-split', handleReadyWaitingSplit);
   mountReadyWaitingOverlays(app.querySelectorAll('.ready-waiting-overlay'));
+  mountWaitingDotsOverlays(app.querySelectorAll('.waiting-dots-overlay'));
+  mountCountdownOverlays(app.querySelectorAll('.countdown-overlay'));
   playStageAudio({
     isTransitioning,
-    presentation: stagePresentation,
+    presentation: shouldClearStageForCountdown() ? { kind: 'cue', name: 'countdown' } : stagePresentation,
     audioKey: `${state.turn}:${turnPhase}:${stagePresentation.name}:${stagePresentation.flip}`,
   });
   maybeStartComputerTurnChoice();
@@ -762,10 +819,6 @@ function renderPickHistory(playerId) {
 }
 
 function renderStagePresentation() {
-  if (localTurnChoice?.readyPlayerId) {
-    return renderReadyWaitingStagePresentation(localTurnChoice);
-  }
-
   if (stagePresentation.kind === 'cue') {
     return `
       <canvas
@@ -790,47 +843,78 @@ function renderStagePresentation() {
   `;
 }
 
-function renderReadyWaitingStagePresentation(choice) {
+function renderReadyWaitingOverlay() {
+  if (!shouldShowReadyWaitingOverlay()) {
+    return '';
+  }
+
+  const waitingSceneClass = getReadyWaitingSceneClass();
+  const waitingRoleClass = getReadyWaitingRoleClass(localTurnChoice.waitingPlayerId);
+
   return `
     <canvas
-      class="sprite-canvas doodle-canvas full-scene-canvas"
-      data-doodle="${choice.fullPresentation.name}"
-      data-flip="${choice.fullPresentation.flip}"
-      width="${DOODLE_FRAME_WIDTH}"
-      height="${DOODLE_FRAME_HEIGHT}"
-      aria-label="${choice.fullPresentation.name}"
-    ></canvas>
-    <canvas
-      class="sprite-canvas doodle-canvas split-scene-canvas"
-      data-doodle="${choice.splitDoodle}"
-      data-flip="${choice.fullPresentation.flip}"
-      width="${DOODLE_FRAME_WIDTH}"
-      height="${DOODLE_FRAME_HEIGHT}"
+      class="ready-waiting-overlay ${localTurnChoice.readyPlayerId}"
+      data-ready-phase="${localTurnChoice.phase}"
+      width="300"
+      height="256"
       aria-hidden="true"
     ></canvas>
+    ${localTurnChoice.phase === 'countdown'
+      ? `
+        <canvas
+          class="countdown-overlay ${localTurnChoice.waitingPlayerId}"
+          width="300"
+          height="256"
+          aria-hidden="true"
+        ></canvas>
+      `
+      : `
+        <canvas
+          class="waiting-dots-overlay ${localTurnChoice.waitingPlayerId} ${waitingSceneClass} ${waitingRoleClass}"
+          width="135"
+          height="55"
+          aria-hidden="true"
+        ></canvas>
+      `}
   `;
 }
 
-function renderReadyWaitingOverlay() {
-  return `
-    <canvas
-      class="ready-waiting-overlay ${localTurnChoice?.readyPlayerId ?? ''}"
-      data-ready-player="${localTurnChoice?.readyPlayerId ?? ''}"
-      data-waiting-player="${localTurnChoice?.waitingPlayerId ?? ''}"
-      width="${DOODLE_FRAME_WIDTH}"
-      height="${DOODLE_FRAME_HEIGHT}"
-      aria-hidden="true"
-    ></canvas>
-  `;
+function getReadyWaitingSceneClass() {
+  if (stagePresentation.kind !== 'doodle') {
+    return '';
+  }
+
+  const scene = stagePresentation.name.replace(/^split_scenes\//, '').split('-')[0];
+  return scene ? `scene-${scene}` : '';
+}
+
+function getReadyWaitingRoleClass(playerId) {
+  const scene = getReadyWaitingSceneClass();
+
+  if (scene === 'scene-dodge') {
+    return lastMoves[playerId] === 'shoot' ? 'role-shooter' : 'role-dodger';
+  }
+
+  if (scene === 'scene-counterstab') {
+    return lastMoves[playerId] === 'counterstab' ? 'role-counterer' : 'role-stabber';
+  }
+
+  return '';
 }
 
 function shouldShowReadyWaitingOverlay() {
   return screen === 'playing'
-    && playMode === 'local'
-    && localTurnChoice?.readyPlayerId
+    && isLocalChoiceMode()
     && state.status === 'playing'
-    && (turnPhase === 'go' || turnPhase === 'scene')
-    && !isTransitioning;
+    && turnPhase === 'scene'
+    && !isTransitioning
+    && localTurnChoice?.readyPlayerId
+    && (localTurnChoice.phase === 'safe' || localTurnChoice.phase === 'countdown');
+}
+
+function shouldClearStageForCountdown() {
+  return shouldShowReadyWaitingOverlay()
+    && localTurnChoice.phase === 'countdown';
 }
 
 function renderTitleScreen() {
@@ -886,12 +970,15 @@ function renderTitleScreen() {
           ></canvas>
         </button>
       </div>
+
+      <button class="text-link title-test-link" data-action="test" type="button">test mode</button>
     </section>
   `;
 
   app.querySelector('[data-action="play"]').addEventListener('click', startGameFromTitle);
   app.querySelector('[data-action="ranked"]').addEventListener('click', startRankedFromTitle);
   app.querySelector('[data-action="tutorial"]').addEventListener('click', startTutorialFromTitle);
+  app.querySelector('[data-action="test"]').addEventListener('click', startTestModeFromTitle);
   mountSpriteRenderers(app.querySelectorAll('.sprite-canvas'));
 }
 
@@ -1357,7 +1444,11 @@ function renderSheetButton(action, doodle, label, extraClass = '') {
 
 function renderMoveButton(move, isLegal) {
   const isQueued = p1QueuedMove === move.id;
-  const canChooseMove = (turnPhase === 'go' || turnPhase === 'scene') && !p1QueuedMove;
+  const canChooseMove = (
+    screen === 'playing' && isLocalChoiceMode()
+      ? turnPhase === 'scene'
+      : turnPhase === 'go' || turnPhase === 'scene'
+  ) && !p1QueuedMove;
   const relationAttributes = Object.fromEntries(
     Object.entries(MOVE_OUTLINE_RELATIONS).map(([hoveredMove, relations]) => [
       `data-${hoveredMove}-outline`,
@@ -1383,6 +1474,32 @@ function renderMoveButton(move, isLegal) {
         aria-label="${move.label}"
       ></canvas>
     </button>
+  `;
+}
+
+function renderTestOpponentControls() {
+  if (screen !== 'playing' || playMode !== 'test') {
+    return '';
+  }
+
+  const legalMoves = new Set(getPlayerLegalMoves(state, 'p2'));
+  const selectedMove = localTurnChoice?.moves.p2;
+  const canChooseMove = turnPhase === 'scene'
+    && state.status === 'playing'
+    && !isTransitioning
+    && !selectedMove;
+
+  return `
+    <nav class="test-opponent-controls" aria-label="Test opponent moves">
+      ${Object.values(MOVES).map((move) => `
+        <button
+          class="text-link test-opponent-link ${selectedMove === move.id ? 'selected' : ''}"
+          data-test-opponent-move="${move.id}"
+          type="button"
+          ${canChooseMove && legalMoves.has(move.id) ? '' : 'disabled'}
+        >${move.label.toLowerCase()}</button>
+      `).join('')}
+    </nav>
   `;
 }
 
@@ -1439,7 +1556,7 @@ function submitMove(p1Move) {
 
   if (
     isTransitioning ||
-    (turnPhase !== 'go' && turnPhase !== 'scene') ||
+    turnPhase !== 'scene' ||
     state.status !== 'playing' ||
     !getCurrentLegalMoves().includes(p1Move)
   ) {
@@ -1459,7 +1576,7 @@ function queueLocalPlayerMove(p1Move) {
 
   choice.moves.p1 = p1Move;
   p1QueuedMove = p1Move;
-  markLocalPlayerReady('p1');
+  handleLocalMoveQueued('p1');
 }
 
 function maybeStartComputerTurnChoice() {
@@ -1468,12 +1585,39 @@ function maybeStartComputerTurnChoice() {
     playMode !== 'local' ||
     state.status !== 'playing' ||
     isTransitioning ||
-    (turnPhase !== 'go' && turnPhase !== 'scene')
+    turnPhase !== 'scene'
   ) {
     return;
   }
 
   getOrCreateLocalTurnChoice();
+}
+
+function submitTestOpponentMove(p2Move) {
+  if (
+    screen !== 'playing' ||
+    playMode !== 'test' ||
+    isTransitioning ||
+    turnPhase !== 'scene' ||
+    state.status !== 'playing' ||
+    !getPlayerLegalMoves(state, 'p2').includes(p2Move)
+  ) {
+    return;
+  }
+
+  unlockSceneAudio();
+  queueTestOpponentMove(p2Move);
+}
+
+function queueTestOpponentMove(p2Move) {
+  const choice = getOrCreateLocalTurnChoice();
+
+  if (!choice || choice.moves.p2) {
+    return;
+  }
+
+  choice.moves.p2 = p2Move;
+  handleLocalMoveQueued('p2');
 }
 
 function getOrCreateLocalTurnChoice() {
@@ -1488,15 +1632,18 @@ function getOrCreateLocalTurnChoice() {
     key,
     moves: {
       p1: null,
-      p2: chooseAiMove(state, selectedOpponentId),
+      p2: null,
     },
+    phase: 'neutral',
     readyPlayerId: null,
     waitingPlayerId: null,
-    fullPresentation: null,
-    splitDoodle: null,
-    computerTimer: setTimeout(() => {
-      markLocalPlayerReady('p2');
-    }, COMPUTER_MOVE_DELAY_MS),
+    splitApplied: false,
+    computerTimer: playMode === 'local'
+      ? setTimeout(() => {
+        queueLocalComputerMove();
+      }, COMPUTER_MOVE_DELAY_MS)
+      : null,
+    safeTimer: null,
     timeoutTimer: null,
   };
   return localTurnChoice;
@@ -1512,33 +1659,137 @@ function getLocalTurnChoiceKey() {
   ].join(':');
 }
 
-function markLocalPlayerReady(playerId) {
+function queueLocalComputerMove() {
+  const choice = getOrCreateLocalTurnChoice();
+
+  if (!choice || choice.moves.p2) {
+    return;
+  }
+
+  choice.moves.p2 = chooseAiMove(state, selectedOpponentId);
+  handleLocalMoveQueued('p2');
+}
+
+function handleLocalMoveQueued(playerId) {
   const choice = localTurnChoice;
 
-  if (!choice || choice.readyPlayerId === playerId) {
+  if (!choice) {
     return;
   }
 
   if (!choice.readyPlayerId) {
-    choice.readyPlayerId = playerId;
-    choice.waitingPlayerId = playerId === 'p1' ? 'p2' : 'p1';
-    choice.fullPresentation = getDoodlePresentation(choice.moves.p1 ?? getFallbackMove('p1'), choice.moves.p2);
-    choice.splitDoodle = getSplitSceneDoodle(choice.fullPresentation.name, choice.moves, choice.readyPlayerId)
-      ?? choice.fullPresentation.name;
-
-    if (choice.waitingPlayerId === 'p1') {
-      choice.timeoutTimer = setTimeout(() => {
-        loseLocalRoundOnTimeout('p1');
-      }, WAITING_TIMEOUT_MS);
-    }
-
-    render();
+    beginLocalSafePhase(playerId);
     return;
   }
 
   if (choice.waitingPlayerId === playerId) {
+    clearLocalPhaseTimers();
     resolvePlayerSelection();
   }
+}
+
+function beginLocalSafePhase(readyPlayerId) {
+  const choice = localTurnChoice;
+
+  if (!choice) {
+    return;
+  }
+
+  choice.phase = 'safe';
+  choice.readyPlayerId = readyPlayerId;
+  choice.waitingPlayerId = readyPlayerId === 'p1' ? 'p2' : 'p1';
+  choice.safeTimer = setTimeout(() => {
+    beginLocalCountdownPhase();
+  }, READY_WAITING_SAFE_PHASE_MS);
+  render();
+}
+
+function beginLocalCountdownPhase() {
+  const choice = localTurnChoice;
+
+  if (!choice || !choice.waitingPlayerId || choice.moves[choice.waitingPlayerId]) {
+    return;
+  }
+
+  choice.phase = 'countdown';
+
+  choice.timeoutTimer = setTimeout(() => {
+    loseLocalRoundOnTimeout(choice.waitingPlayerId);
+  }, COUNTDOWN_PHASE_MS);
+  render();
+}
+
+function handleReadyWaitingSplit() {
+  const choice = localTurnChoice;
+
+  if (!choice || choice.splitApplied || choice.phase !== 'safe') {
+    return;
+  }
+
+  const splitPresentation = getReadySplitPresentation(choice.readyPlayerId);
+
+  if (!splitPresentation) {
+    return;
+  }
+
+  choice.splitApplied = true;
+  stagePresentation = splitPresentation;
+  replaceStagePresentation();
+}
+
+function replaceStagePresentation() {
+  const stage = app.querySelector('.doodle-stage');
+
+  if (!stage) {
+    return;
+  }
+
+  stage.innerHTML = renderStagePresentation();
+  mountSpriteRenderers(app.querySelectorAll('.sprite-canvas'));
+}
+
+function getReadySplitPresentation(readyPlayerId) {
+  const scene = stagePresentation.kind === 'doodle' ? stagePresentation.name : '';
+
+  if (!readyPlayerId || scene === 'shooting' || scene === 'stabbing') {
+    return null;
+  }
+
+  if (scene === 'reloading' || scene === 'clash' || scene === 'collision' || scene === 'hiding') {
+    return {
+      kind: 'doodle',
+      name: `split_scenes/${scene}-${readyPlayerId}_ready`,
+      flip: false,
+    };
+  }
+
+  if (scene === 'dodge') {
+    return getRoleSplitPresentation(scene, readyPlayerId, lastMoves[readyPlayerId] === 'shoot'
+      ? { role: 'shooter', basePlayerId: 'p1' }
+      : { role: 'dodger', basePlayerId: 'p2' });
+  }
+
+  if (scene === 'counterstab') {
+    return getRoleSplitPresentation(scene, readyPlayerId, lastMoves[readyPlayerId] === 'counterstab'
+      ? { role: 'counterer', basePlayerId: 'p2' }
+      : { role: 'stabber', basePlayerId: 'p1' });
+  }
+
+  if (scene === 'tricky') {
+    return getRoleSplitPresentation(scene, readyPlayerId, lastMoves[readyPlayerId] === 'reload'
+      ? { role: 'trickster', basePlayerId: 'p1' }
+      : { role: 'fooled', basePlayerId: 'p2' });
+  }
+
+  return null;
+}
+
+function getRoleSplitPresentation(scene, readyPlayerId, { role, basePlayerId }) {
+  return {
+    kind: 'doodle',
+    name: `split_scenes/${scene}-${basePlayerId}${role}is_ready`,
+    flip: readyPlayerId !== basePlayerId,
+  };
 }
 
 function clearLocalTurnChoice() {
@@ -1546,44 +1797,30 @@ function clearLocalTurnChoice() {
     clearTimeout(localTurnChoice.computerTimer);
   }
 
-  if (localTurnChoice?.timeoutTimer) {
-    clearTimeout(localTurnChoice.timeoutTimer);
-  }
-
+  clearLocalPhaseTimers();
   localTurnChoice = null;
 }
 
-function getSplitSceneDoodle(doodle, moves, readyPlayerId) {
-  const remainingPlayerId = readyPlayerId === 'p1' ? 'p2' : 'p1';
-  const remainingMove = moves[remainingPlayerId];
-
-  if (doodle === 'reloading' || doodle === 'clash' || doodle === 'collision' || doodle === 'hiding') {
-    return `split_scenes/${doodle}-${remainingPlayerId === 'p1' ? 'you' : 'them'}`;
+function clearLocalPhaseTimers() {
+  if (localTurnChoice?.safeTimer) {
+    clearTimeout(localTurnChoice.safeTimer);
+    localTurnChoice.safeTimer = null;
   }
 
-  if (doodle === 'dodge') {
-    return `split_scenes/dodge-${remainingMove === 'block' ? 'dodger' : 'shooter'}`;
+  if (localTurnChoice?.timeoutTimer) {
+    clearTimeout(localTurnChoice.timeoutTimer);
+    localTurnChoice.timeoutTimer = null;
   }
-
-  if (doodle === 'counterstab') {
-    return `split_scenes/counterstab-${remainingMove === 'counterstab' ? 'counterer' : 'stabber'}`;
-  }
-
-  if (doodle === 'tricky') {
-    return `split_scenes/tricky-${remainingMove === 'reload' ? 'fooled' : 'tricker'}`;
-  }
-
-  return null;
 }
 
 async function loseLocalRoundOnTimeout(playerId) {
   const token = loopToken;
 
   if (
-    playerId !== 'p1' ||
+    (playerId !== 'p1' && playerId !== 'p2') ||
     !isActiveLoop(token) ||
     !localTurnChoice ||
-    localTurnChoice.moves.p1 ||
+    localTurnChoice.moves[playerId] ||
     state.status !== 'playing'
   ) {
     return;
@@ -1594,7 +1831,7 @@ async function loseLocalRoundOnTimeout(playerId) {
   state = {
     ...state,
     status: 'finished',
-    winner: 'p2',
+    winner: playerId === 'p1' ? 'p2' : 'p1',
   };
   turnPhase = 'wipe';
   isTransitioning = true;
@@ -1704,6 +1941,24 @@ async function startTutorialFromTitle() {
   });
   isTransitioning = false;
   render();
+}
+
+async function startTestModeFromTitle() {
+  if (isTransitioning) {
+    return;
+  }
+
+  selectedOpponentId = DEFAULT_OPPONENT_ID;
+  playMode = 'test';
+  clearLocalTurnChoice();
+  requestMusicTrack('game');
+  unlockSceneAudio();
+  resetRoundWins();
+  isTransitioning = true;
+  await playWipeTransition(setNewRound);
+  isTransitioning = false;
+  render();
+  beginOpeningCues();
 }
 
 async function startLocalGame(opponentId) {
@@ -1931,7 +2186,7 @@ function getGameWinner() {
 
 function getMusicTopperFile() {
   if (
-    playMode !== 'local' ||
+    !isLocalChoiceMode() ||
     isGameOver() ||
     (roundWins.p1 !== GAME_TARGET_ROUNDS - 1 && roundWins.p2 !== GAME_TARGET_ROUNDS - 1)
   ) {
@@ -1945,19 +2200,23 @@ function getMusicTopperFile() {
   return getMusicTopperId('tension');
 }
 
+function isLocalChoiceMode() {
+  return playMode === 'local' || playMode === 'test';
+}
+
 function setNewRound() {
   clearLocalTurnChoice();
   state = createRoundState();
   screen = 'playing';
   rankedSnapshot = null;
-  turnPhase = 'intro-scene';
+  turnPhase = 'ready';
   p1QueuedMove = null;
   resetStageAudioKey();
   lastMoves = {
     p1: 'reload',
     p2: 'reload',
   };
-  stagePresentation = { kind: 'doodle', name: 'reloading', flip: false };
+  stagePresentation = { kind: 'cue', name: 'READY' };
   render();
 }
 
@@ -2153,13 +2412,6 @@ function beginOpeningCues() {
 }
 
 async function runOpeningCues(token) {
-  turnPhase = 'intro-scene';
-  await waitBeats(SCENE_BEATS, token);
-
-  if (!isActiveLoop(token)) {
-    return;
-  }
-
   turnPhase = 'ready';
   stagePresentation = { kind: 'cue', name: 'READY' };
   render();
@@ -2171,6 +2423,15 @@ async function runOpeningCues(token) {
 
   turnPhase = 'go';
   stagePresentation = { kind: 'cue', name: 'GO' };
+  render();
+  await waitBeats(1, token);
+
+  if (!isActiveLoop(token)) {
+    return;
+  }
+
+  turnPhase = 'scene';
+  stagePresentation = { kind: 'doodle', name: 'reloading', flip: false };
   render();
 }
 

@@ -8,8 +8,44 @@ export const DOODLE_FRAME_RATE = 8;
 const WIPE_FRAME_WIDTH = 1100;
 const WIPE_FRAME_HEIGHT = 825;
 const WIPE_STEP_DURATION = 58;
-const READY_WAITING_FRAME_WIDTH = 512;
+const READY_WAITING_FRAME_WIDTH = 300;
 const READY_WAITING_FRAME_HEIGHT = 256;
+const READY_WAITING_STEP_DURATION = 58;
+const WAITING_DOTS_FRAME_WIDTH = 135;
+const WAITING_DOTS_FRAME_HEIGHT = 55;
+const WAITING_DOTS_START_DELAY = (7 * READY_WAITING_STEP_DURATION) + 750;
+const WAITING_DOTS_STEP_FRAMES = 8;
+const WAITING_DOTS_STEP_MS = (WAITING_DOTS_STEP_FRAMES / DOODLE_FRAME_RATE) * 1000;
+export const READY_WAITING_SAFE_PHASE_MS = WAITING_DOTS_START_DELAY + (3 * WAITING_DOTS_STEP_MS);
+const COUNTDOWN_NUMBERS = Object.freeze([5, 4, 3, 2, 1]);
+const COUNTDOWN_STEP_MS = 1000;
+
+const READY_WAITING_READY_STEPS = Object.freeze([
+  '1',
+  '2',
+  '3',
+  '4',
+  '5',
+  '6',
+  '7',
+]);
+const READY_WAITING_SPLIT_STEP = 3;
+const SPLIT_READY_DOODLES = Object.freeze([
+  'split_scenes/reloading-p1_ready',
+  'split_scenes/reloading-p2_ready',
+  'split_scenes/clash-p1_ready',
+  'split_scenes/clash-p2_ready',
+  'split_scenes/collision-p1_ready',
+  'split_scenes/collision-p2_ready',
+  'split_scenes/hiding-p1_ready',
+  'split_scenes/hiding-p2_ready',
+  'split_scenes/dodge-p1shooteris_ready',
+  'split_scenes/dodge-p2dodgeris_ready',
+  'split_scenes/counterstab-p1stabberis_ready',
+  'split_scenes/counterstab-p2countereris_ready',
+  'split_scenes/tricky-p1tricksteris_ready',
+  'split_scenes/tricky-p2fooledis_ready',
+]);
 
 const INTERACTION_DOODLES = Object.freeze({
   'reload|reload': 'reloading',
@@ -42,41 +78,6 @@ const STARBURST_WIPE_STEPS = Object.freeze([
   Object.freeze(['1']),
 ]);
 
-const READY_WAITING_READY_STEPS = Object.freeze([
-  Object.freeze(['1']),
-  Object.freeze(['2']),
-  Object.freeze(['3']),
-  Object.freeze(['4']),
-  Object.freeze(['5']),
-  Object.freeze(['6']),
-  Object.freeze(['7']),
-]);
-const READY_WAITING_WAITING_STEPS = Object.freeze([
-  Object.freeze(['waiting1']),
-  Object.freeze(['waiting2']),
-  Object.freeze(['waiting3']),
-]);
-const SPLIT_SCENE_DOODLES = Object.freeze([
-  'split_scenes/clash-them',
-  'split_scenes/clash-you',
-  'split_scenes/collision-them',
-  'split_scenes/collision-you',
-  'split_scenes/counterstab-counterer',
-  'split_scenes/counterstab-stabber',
-  'split_scenes/dodge-dodger',
-  'split_scenes/dodge-shooter',
-  'split_scenes/hiding-them',
-  'split_scenes/hiding-you',
-  'split_scenes/reloading-them',
-  'split_scenes/reloading-you',
-  'split_scenes/tricky-fooled',
-  'split_scenes/tricky-tricker',
-]);
-const READY_WAITING_SPLIT_STEP = 3;
-const READY_WAITING_COUNTDOWN_MS = 5000;
-export const READY_WAITING_READY_MS = READY_WAITING_READY_STEPS.length * WIPE_STEP_DURATION;
-export const READY_WAITING_WAITING_MS = READY_WAITING_WAITING_STEPS.length * WIPE_STEP_DURATION;
-
 const doodleSheets = new Map();
 let doodleRenderers = [];
 
@@ -87,11 +88,14 @@ export function preloadDoodleSheets(doodles) {
 export function getRendererPreloadDoodles() {
   return [
     ...Object.values(INTERACTION_DOODLES),
+    ...SPLIT_READY_DOODLES,
     ...STARBURST_WIPE_STEPS.flat().map((name) => `starburst_wipe/${name}`),
-    ...READY_WAITING_READY_STEPS.flat().map((name) => `ready_waiting/${name}`),
-    ...READY_WAITING_WAITING_STEPS.flat().map((name) => `ready_waiting/${name}`),
-    ...Array.from({ length: 5 }, (_, index) => `ready_waiting/countdown${index + 1}`),
-    ...SPLIT_SCENE_DOODLES,
+    ...READY_WAITING_READY_STEPS.map((name) => `ready_waiting/${name}`),
+    'ready_waiting/rdy',
+    ...COUNTDOWN_NUMBERS.map((number) => `ready_waiting/countdown${number}`),
+    'ready_waiting/waiting1',
+    'ready_waiting/waiting2',
+    'ready_waiting/waiting3',
   ];
 }
 
@@ -144,6 +148,18 @@ export function mountReadyWaitingOverlays(canvases) {
   });
 }
 
+export function mountWaitingDotsOverlays(canvases) {
+  [...canvases].forEach((canvas) => {
+    startWaitingDotsLoop(canvas);
+  });
+}
+
+export function mountCountdownOverlays(canvases) {
+  [...canvases].forEach((canvas) => {
+    startCountdownLoop(canvas);
+  });
+}
+
 function createWipeOverlay(app) {
   const canvas = document.createElement('canvas');
   canvas.className = 'wipe-overlay';
@@ -160,12 +176,14 @@ function preloadStarburstWipe() {
 }
 
 function preloadReadyWaiting() {
-  const images = new Set([
-    ...READY_WAITING_READY_STEPS.flat(),
-    ...READY_WAITING_WAITING_STEPS.flat(),
-    ...Array.from({ length: 5 }, (_, index) => `countdown${index + 1}`),
+  return preloadDoodleSheets([
+    ...READY_WAITING_READY_STEPS.map((name) => `ready_waiting/${name}`),
+    'ready_waiting/rdy',
+    ...COUNTDOWN_NUMBERS.map((number) => `ready_waiting/countdown${number}`),
+    'ready_waiting/waiting1',
+    'ready_waiting/waiting2',
+    'ready_waiting/waiting3',
   ]);
-  return preloadDoodleSheets([...images].map((name) => `ready_waiting/${name}`));
 }
 
 function ensureImageLoaded(image) {
@@ -177,6 +195,171 @@ function ensureImageLoaded(image) {
     image.addEventListener('load', resolve, { once: true });
     image.addEventListener('error', resolve, { once: true });
   });
+}
+
+async function startReadyWaitingLoop(canvas) {
+  const context = canvas.getContext('2d');
+  await preloadReadyWaiting();
+
+  const startedAt = performance.now();
+  const holdReady = canvas.dataset.readyPhase === 'countdown';
+  let didRequestSplit = false;
+
+  function tick(now) {
+    if (!canvas.isConnected) {
+      return;
+    }
+
+    const elapsed = now - startedAt;
+    const stepIndex = getReadyWaitingStepIndex(elapsed);
+    const layers = holdReady ? ['rdy'] : getReadyWaitingLayersForStep(stepIndex);
+
+    if (!holdReady && !didRequestSplit && stepIndex >= READY_WAITING_SPLIT_STEP) {
+      didRequestSplit = true;
+      canvas.dispatchEvent(new CustomEvent('ready-waiting-split', { bubbles: true }));
+    }
+
+    drawReadyWaitingStep(canvas, context, layers, now);
+    requestAnimationFrame(tick);
+  }
+
+  requestAnimationFrame(tick);
+}
+
+function getReadyWaitingLayers(elapsed) {
+  return getReadyWaitingLayersForStep(getReadyWaitingStepIndex(elapsed));
+}
+
+function getReadyWaitingStepIndex(elapsed) {
+  return Math.min(
+    READY_WAITING_READY_STEPS.length - 1,
+    Math.floor(elapsed / READY_WAITING_STEP_DURATION),
+  );
+}
+
+function getReadyWaitingLayersForStep(stepIndex) {
+  return stepIndex >= READY_WAITING_READY_STEPS.length - 1
+    ? ['rdy']
+    : [READY_WAITING_READY_STEPS[stepIndex]];
+}
+
+function drawReadyWaitingStep(canvas, context, layers, now) {
+  const frame = Math.floor((now / 1000) * DOODLE_FRAME_RATE) % DOODLE_FRAME_COUNT;
+
+  context.clearRect(0, 0, canvas.width, canvas.height);
+
+  layers.forEach((layer) => {
+    const image = loadDoodleSheet(`ready_waiting/${layer}`);
+
+    if (!image.complete || !image.naturalWidth) {
+      return;
+    }
+
+    context.drawImage(
+      image,
+      0,
+      frame * READY_WAITING_FRAME_HEIGHT,
+      READY_WAITING_FRAME_WIDTH,
+      READY_WAITING_FRAME_HEIGHT,
+      0,
+      0,
+      canvas.width,
+      canvas.height,
+    );
+  });
+}
+
+async function startWaitingDotsLoop(canvas) {
+  const context = canvas.getContext('2d');
+  await preloadReadyWaiting();
+
+  const startedAt = performance.now();
+
+  function tick(now) {
+    if (!canvas.isConnected) {
+      return;
+    }
+
+    const elapsed = now - startedAt;
+    context.clearRect(0, 0, canvas.width, canvas.height);
+
+    if (elapsed >= WAITING_DOTS_START_DELAY) {
+      drawWaitingDotsStep(canvas, context, elapsed - WAITING_DOTS_START_DELAY, now);
+    }
+
+    requestAnimationFrame(tick);
+  }
+
+  requestAnimationFrame(tick);
+}
+
+function drawWaitingDotsStep(canvas, context, elapsed, now) {
+  const dotIndex = Math.floor(elapsed / WAITING_DOTS_STEP_MS) % 3;
+  const image = loadDoodleSheet(`ready_waiting/waiting${dotIndex + 1}`);
+
+  if (!image.complete || !image.naturalWidth) {
+    return;
+  }
+
+  const frame = Math.floor((now / 1000) * DOODLE_FRAME_RATE) % DOODLE_FRAME_COUNT;
+
+  context.drawImage(
+    image,
+    0,
+    frame * WAITING_DOTS_FRAME_HEIGHT,
+    WAITING_DOTS_FRAME_WIDTH,
+    WAITING_DOTS_FRAME_HEIGHT,
+    0,
+    0,
+    canvas.width,
+    canvas.height,
+  );
+}
+
+async function startCountdownLoop(canvas) {
+  const context = canvas.getContext('2d');
+  await preloadReadyWaiting();
+
+  const startedAt = performance.now();
+
+  function tick(now) {
+    if (!canvas.isConnected) {
+      return;
+    }
+
+    drawCountdownStep(canvas, context, now - startedAt, now);
+    requestAnimationFrame(tick);
+  }
+
+  requestAnimationFrame(tick);
+}
+
+function drawCountdownStep(canvas, context, elapsed, now) {
+  const number = COUNTDOWN_NUMBERS[Math.min(
+    COUNTDOWN_NUMBERS.length - 1,
+    Math.floor(elapsed / COUNTDOWN_STEP_MS),
+  )];
+  const image = loadDoodleSheet(`ready_waiting/countdown${number}`);
+
+  context.clearRect(0, 0, canvas.width, canvas.height);
+
+  if (!image.complete || !image.naturalWidth) {
+    return;
+  }
+
+  const frame = Math.floor((now / 1000) * DOODLE_FRAME_RATE) % DOODLE_FRAME_COUNT;
+
+  context.drawImage(
+    image,
+    0,
+    frame * READY_WAITING_FRAME_HEIGHT,
+    READY_WAITING_FRAME_WIDTH,
+    READY_WAITING_FRAME_HEIGHT,
+    0,
+    0,
+    canvas.width,
+    canvas.height,
+  );
 }
 
 function animateWipeSteps(canvas, firstStep, lastStep) {
@@ -240,98 +423,6 @@ function drawWipeStep(canvas, layers, now) {
       canvas.height,
     );
   });
-}
-
-async function startReadyWaitingLoop(canvas) {
-  const context = canvas.getContext('2d');
-  await preloadReadyWaiting();
-
-  const startedAt = performance.now();
-  let hasSplit = false;
-  const readyFlip = canvas.dataset.readyPlayer === 'p2';
-  const waitingFlip = canvas.dataset.waitingPlayer === 'p2';
-
-  function tick(now) {
-    if (!canvas.isConnected) {
-      return;
-    }
-
-    const elapsed = now - startedAt;
-
-    if (elapsed < READY_WAITING_READY_MS) {
-      const stepIndex = Math.min(
-        READY_WAITING_READY_STEPS.length - 1,
-        Math.floor(elapsed / WIPE_STEP_DURATION),
-      );
-
-      if (!hasSplit && stepIndex >= READY_WAITING_SPLIT_STEP) {
-        hasSplit = true;
-        canvas.dispatchEvent(new CustomEvent('ready-waiting-split', { bubbles: true }));
-      }
-
-      drawReadyWaitingStep(canvas, context, READY_WAITING_READY_STEPS[stepIndex], now, readyFlip);
-      requestAnimationFrame(tick);
-      return;
-    }
-
-    const waitingElapsed = elapsed - READY_WAITING_READY_MS;
-    const countdownIndex = getCountdownIndex(waitingElapsed);
-
-    if (countdownIndex) {
-      drawReadyWaitingStep(canvas, context, [`countdown${countdownIndex}`], now, waitingFlip);
-    } else {
-      const stepIndex = Math.floor(waitingElapsed / WIPE_STEP_DURATION) % READY_WAITING_WAITING_STEPS.length;
-      drawReadyWaitingStep(canvas, context, READY_WAITING_WAITING_STEPS[stepIndex], now, waitingFlip);
-    }
-
-    requestAnimationFrame(tick);
-  }
-
-  requestAnimationFrame(tick);
-}
-
-function drawReadyWaitingStep(canvas, context, layers, now, flip = false) {
-  const frame = Math.floor((now / 1000) * DOODLE_FRAME_RATE) % DOODLE_FRAME_COUNT;
-
-  context.clearRect(0, 0, canvas.width, canvas.height);
-  context.save();
-
-  if (flip) {
-    context.translate(canvas.width, 0);
-    context.scale(-1, 1);
-  }
-
-  layers.forEach((layer) => {
-    const image = loadDoodleSheet(`ready_waiting/${layer}`);
-
-    if (!image.complete || !image.naturalWidth) {
-      return;
-    }
-
-    context.drawImage(
-      image,
-      0,
-      frame * READY_WAITING_FRAME_HEIGHT,
-      READY_WAITING_FRAME_WIDTH,
-      READY_WAITING_FRAME_HEIGHT,
-      0,
-      0,
-      canvas.width,
-      canvas.height,
-    );
-  });
-
-  context.restore();
-}
-
-function getCountdownIndex(waitingElapsed) {
-  const countdownElapsed = waitingElapsed - READY_WAITING_WAITING_MS;
-
-  if (countdownElapsed < 0 || countdownElapsed >= READY_WAITING_COUNTDOWN_MS) {
-    return null;
-  }
-
-  return 5 - Math.floor(countdownElapsed / 1000);
 }
 
 function getDoodleForMoves(p1Move, p2Move) {

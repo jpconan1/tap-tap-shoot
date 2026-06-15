@@ -157,6 +157,8 @@ export class RankedDuelService {
       },
       roundState: createRoundState(),
       pendingMoves: new Map(),
+      readyPlayerKey: null,
+      waitingPlayerKey: null,
       timer: null,
       deadlineAt: this.now() + this.countdownMs,
       winner: null,
@@ -178,9 +180,11 @@ export class RankedDuelService {
 
     room.phase = 'choosing';
     room.pendingMoves.clear();
+    room.readyPlayerKey = null;
+    room.waitingPlayerKey = null;
     room.deadlineAt = this.now() + this.turnMs;
     this.broadcastRoom(room);
-    this.setRoomTimer(room, () => this.resolveRoomTurn(room), this.turnMs);
+    this.setRoomTimer(room, () => this.handleChoosingDeadline(room), this.turnMs);
   }
 
   submitMove(session, moveId) {
@@ -208,7 +212,31 @@ export class RankedDuelService {
 
     if (room.pendingMoves.size === 2) {
       this.resolveRoomTurn(room);
+      return;
     }
+
+    this.beginReadyWaiting(room, playerKey);
+  }
+
+  beginReadyWaiting(room, readyPlayerKey) {
+    room.readyPlayerKey = readyPlayerKey;
+    room.waitingPlayerKey = readyPlayerKey === 'p1' ? 'p2' : 'p1';
+    room.deadlineAt = this.now() + this.turnMs;
+    this.broadcastRoom(room);
+    this.setRoomTimer(room, () => this.handleChoosingDeadline(room), this.turnMs);
+  }
+
+  handleChoosingDeadline(room) {
+    if (room.phase !== 'choosing') {
+      return;
+    }
+
+    if (room.pendingMoves.size === 1 && room.waitingPlayerKey) {
+      this.finishRoundByTimeout(room, room.waitingPlayerKey);
+      return;
+    }
+
+    this.resolveRoomTurn(room);
   }
 
   resolveRoomTurn(room) {
@@ -217,6 +245,8 @@ export class RankedDuelService {
     }
 
     this.clearRoomTimer(room);
+    room.readyPlayerKey = null;
+    room.waitingPlayerKey = null;
 
     const p1Move = room.pendingMoves.get('p1') ?? getFallbackMove(room.roundState, 'p1');
     const p2Move = room.pendingMoves.get('p2') ?? getFallbackMove(room.roundState, 'p2');
@@ -245,6 +275,32 @@ export class RankedDuelService {
         room.roundState = createRoundState();
       }
 
+      this.beginChoosing(room);
+    }, this.revealMs);
+  }
+
+  finishRoundByTimeout(room, loserKey) {
+    this.clearRoomTimer(room);
+
+    const winnerKey = loserKey === 'p1' ? 'p2' : 'p1';
+    room.readyPlayerKey = null;
+    room.waitingPlayerKey = null;
+    room.roundState = {
+      ...room.roundState,
+      status: 'finished',
+      winner: winnerKey,
+    };
+    room.roundWins[winnerKey] += 1;
+    room.phase = 'revealed';
+    this.broadcastRoom(room, { timeout: { loser: loserKey, winner: winnerKey } });
+
+    if (room.roundWins.p1 >= GAME_TARGET_ROUNDS || room.roundWins.p2 >= GAME_TARGET_ROUNDS) {
+      this.finishRoom(room, winnerKey);
+      return;
+    }
+
+    this.setRoomTimer(room, () => {
+      room.roundState = createRoundState();
       this.beginChoosing(room);
     }, this.revealMs);
   }
@@ -330,6 +386,8 @@ export class RankedDuelService {
       opponentKey,
       phase: room.phase,
       deadlineAt: room.deadlineAt,
+      readyPlayerKey: room.readyPlayerKey,
+      waitingPlayerKey: room.waitingPlayerKey,
       roundWins: room.roundWins,
       winner: room.winner,
       ratings: room.ratings,
