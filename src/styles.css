@@ -94,9 +94,10 @@ button {
 }
 
 .loading-start {
-  display: grid;
-  gap: 18px;
-  place-items: center;
+  position: relative;
+  display: block;
+  width: 512px;
+  height: 520px;
   padding: 0;
   border: 0;
   background: transparent;
@@ -110,26 +111,31 @@ button {
 .loading-boil,
 .loading-progress,
 .loading-click-message {
-  display: block;
+  position: absolute;
+  left: 0;
   width: 512px;
   height: 256px;
   image-rendering: auto;
   filter: drop-shadow(3px 6px 0 rgba(29, 27, 24, 0.1));
 }
 
+.loading-boil {
+  top: 0;
+}
+
 .loading-progress {
-  margin-top: -54px;
+  top: 220px;
   transform: rotate(-0.35deg);
 }
 
 .loading-click-message {
-  display: none;
-  margin-top: -108px;
+  top: 0;
+  opacity: 0;
   transform: rotate(0.3deg);
 }
 
 .loading-start.ready .loading-click-message {
-  display: block;
+  opacity: 1;
 }
 
 .arena {
@@ -633,6 +639,9 @@ button {
 
 .move-card:disabled {
   cursor: not-allowed;
+}
+
+.move-card:disabled .move-button-art {
   opacity: 0.42;
 }
 

@@ -21,6 +21,7 @@ import {
 } from './audio.js';
 import { RankedClient } from './rankedClient.js';
 import {
+  DOODLE_FRAME_RATE,
   DOODLE_FRAME_HEIGHT,
   DOODLE_FRAME_WIDTH,
   READY_ANIMATION_LOOP_MS,
@@ -75,13 +76,15 @@ const READY_SELECTION_PAUSE_BEATS = 2;
 const LOADING_FRAME_WIDTH = 512;
 const LOADING_FRAME_HEIGHT = 256;
 const LOADING_FRAME_COUNT = 10;
-const LOADING_FRAME_RATE = 8;
-const LOADING_LOOP_COUNT = 1;
+const LOADING_FRAME_RATE = DOODLE_FRAME_RATE;
+const LOADING_LOOP_COUNT = 2;
 const LOADING_DURATION_MS = (LOADING_FRAME_COUNT / LOADING_FRAME_RATE) * LOADING_LOOP_COUNT * 1000;
 const LOADING_BAR_FRAME_COUNT = 3;
 const LOADING_BAR_FRAME_RATE = 8;
 const LOADING_CLICK_BLINK_MS = 1400;
-const LOADING_ANIMATION_URL = './assets/loading_animation_boil_sheet.webp';
+const LOADING_ANIMATION_FRAME_URLS = Object.freeze(
+  Array.from({ length: LOADING_FRAME_COUNT }, (_, index) => `./assets/loading_animation_frames/${index + 1}.webp`),
+);
 const LOADING_BAR_EMPTY_URL = './assets/progress_bar_empty_sheet.webp';
 const LOADING_BAR_FULL_URL = './assets/progress_bar_full_sheet.webp';
 const LOADING_CLICK_MESSAGE_URL = './assets/click_msg_sheet.webp';
@@ -347,7 +350,7 @@ async function boot() {
       return images;
     })
     .then((images) => {
-      if (!loadingScreen.isDone && images.boil && images.barEmpty && images.barFull && images.clickMessage) {
+      if (!loadingScreen.isDone && images.boilFrames?.length && images.barEmpty && images.barFull && images.clickMessage) {
         playLoadingScreen(loadingScreen, images);
       }
     })
@@ -358,7 +361,7 @@ async function boot() {
     console.warn('Could not preload all game assets', error);
   });
 
-  const minimumLoadingPromise = waitMsWithoutToken(LOADING_DURATION_MS);
+  const minimumLoadingPromise = loadingImagesPromise.then(() => waitMsWithoutToken(LOADING_DURATION_MS));
 
   await Promise.all([preloadPromise, minimumLoadingPromise]);
   stopLoadingScreen(loadingScreen, loadingImages);
@@ -366,7 +369,7 @@ async function boot() {
 
   try {
     unlockSceneAudio();
-    render();
+    await playWipeTransition(() => render());
   } catch (error) {
     console.error('Could not render title screen', error);
   }
@@ -376,12 +379,14 @@ function renderLoadingScreen() {
   app.innerHTML = `
     <section class="loading-screen" aria-label="Loading">
       <button class="loading-start" type="button" aria-label="Start" disabled>
-        <canvas
+        <img
           class="loading-boil"
+          src="${LOADING_ANIMATION_FRAME_URLS[0]}"
           width="${LOADING_FRAME_WIDTH}"
           height="${LOADING_FRAME_HEIGHT}"
+          alt=""
           aria-hidden="true"
-        ></canvas>
+        />
         <canvas
           class="loading-progress"
           width="${LOADING_FRAME_WIDTH}"
@@ -400,7 +405,7 @@ function renderLoadingScreen() {
 
   return {
     button: app.querySelector('.loading-start'),
-    boilCanvas: app.querySelector('.loading-boil'),
+    boilImage: app.querySelector('.loading-boil'),
     progressCanvas: app.querySelector('.loading-progress'),
     clickMessageCanvas: app.querySelector('.loading-click-message'),
     animationFrameId: null,
@@ -411,12 +416,12 @@ function renderLoadingScreen() {
 
 function preloadLoadingImages() {
   return Promise.all([
-    loadImageAsset(LOADING_ANIMATION_URL, { decode: false }),
+    Promise.all(LOADING_ANIMATION_FRAME_URLS.map((url) => loadImageAsset(url, { decode: false }))),
     loadImageAsset(LOADING_BAR_EMPTY_URL, { decode: false }),
     loadImageAsset(LOADING_BAR_FULL_URL, { decode: false }),
     loadImageAsset(LOADING_CLICK_MESSAGE_URL, { decode: false }),
-  ]).then(([boil, barEmpty, barFull, clickMessage]) => ({
-    boil,
+  ]).then(([boilFrames, barEmpty, barFull, clickMessage]) => ({
+    boilFrames,
     barEmpty,
     barFull,
     clickMessage,
@@ -445,32 +450,14 @@ function drawLoadingScreen(loadingScreen, images, now) {
 
   const elapsed = Math.max(0, now - loadingScreen.startedAt);
   const progress = loadingScreen.isDone ? 1 : Math.min(1, elapsed / LOADING_DURATION_MS);
-  const boilContext = loadingScreen.boilCanvas?.getContext('2d');
   const progressContext = loadingScreen.progressCanvas?.getContext('2d');
   const clickMessageContext = loadingScreen.clickMessageCanvas?.getContext('2d');
+  const currentBoilFrame = loadingScreen.isDone
+    ? LOADING_FRAME_COUNT - 1
+    : Math.floor((elapsed / 1000) * LOADING_FRAME_RATE) % LOADING_FRAME_COUNT;
 
-  if (boilContext) {
-    boilContext.clearRect(0, 0, LOADING_FRAME_WIDTH, LOADING_FRAME_HEIGHT);
-
-    if (!loadingScreen.isDone) {
-      const boilFrame = Math.min(
-        LOADING_FRAME_COUNT - 1,
-        Math.floor((elapsed / 1000) * LOADING_FRAME_RATE),
-      );
-      if (images.boil) {
-        boilContext.drawImage(
-          images.boil,
-          0,
-          boilFrame * LOADING_FRAME_HEIGHT,
-          LOADING_FRAME_WIDTH,
-          LOADING_FRAME_HEIGHT,
-          0,
-          0,
-          LOADING_FRAME_WIDTH,
-          LOADING_FRAME_HEIGHT,
-        );
-      }
-    }
+  if (loadingScreen.boilImage && images.boilFrames?.[currentBoilFrame]) {
+    loadingScreen.boilImage.src = images.boilFrames[currentBoilFrame].src;
   }
 
   if (!progressContext || !images.barEmpty || !images.barFull) {
@@ -540,7 +527,7 @@ function stopLoadingScreen(loadingScreen, images) {
     drawLoadingScreen(loadingScreen, images, loadingScreen.startedAt + LOADING_DURATION_MS);
   }
 
-  loadingScreen.boilCanvas?.remove();
+  loadingScreen.boilImage?.remove();
   loadingScreen.button?.classList.add('ready');
   loadingScreen.button?.removeAttribute('disabled');
 }
