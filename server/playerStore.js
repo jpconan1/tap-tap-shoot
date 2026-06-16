@@ -71,8 +71,8 @@ export class JsonPlayerStore extends MemoryPlayerStore {
 }
 
 export class SupabasePlayerStore {
-  constructor({ url, serviceRoleKey, client = null }) {
-    this.client = client ?? createClient(url, serviceRoleKey, {
+  constructor({ url, secretKey, serviceRoleKey, client = null }) {
+    this.client = client ?? createClient(url, secretKey ?? serviceRoleKey, {
       auth: {
         persistSession: false,
         autoRefreshToken: false,

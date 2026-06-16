@@ -12,7 +12,7 @@ const WS_MAX_MESSAGE_BYTES = Number(process.env.WS_MAX_MESSAGE_BYTES ?? 16 * 102
 const WS_MAX_BUFFERED_BYTES = Number(process.env.WS_MAX_BUFFERED_BYTES ?? 256 * 1024);
 const WS_HEARTBEAT_MS = Number(process.env.WS_HEARTBEAT_MS ?? 30 * 1000);
 const SUPABASE_URL = process.env.SUPABASE_URL;
-const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const SUPABASE_SECRET_KEY = process.env.SUPABASE_SECRET_KEY ?? process.env.SUPABASE_SERVICE_ROLE_KEY;
 const ROOT = process.cwd();
 const PUBLIC_TYPES = new Map([
   ['.css', 'text/css; charset=utf-8'],
@@ -23,10 +23,10 @@ const PUBLIC_TYPES = new Map([
   ['.mp3', 'audio/mpeg'],
 ]);
 
-const playerStore = SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY
+const playerStore = SUPABASE_URL && SUPABASE_SECRET_KEY
   ? new SupabasePlayerStore({
     url: SUPABASE_URL,
-    serviceRoleKey: SUPABASE_SERVICE_ROLE_KEY,
+    secretKey: SUPABASE_SECRET_KEY,
   })
   : new JsonPlayerStore(join(ROOT, '.ranked-players.json'));
 const rankedDuel = new RankedDuelService({ playerStore });
