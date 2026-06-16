@@ -1,7 +1,5 @@
 import { readFile, writeFile } from 'node:fs/promises';
 
-import { createClient } from '@supabase/supabase-js';
-
 import { DEFAULT_RATING } from './elo.js';
 
 export class MemoryPlayerStore {
@@ -71,46 +69,68 @@ export class JsonPlayerStore extends MemoryPlayerStore {
 }
 
 export class SupabasePlayerStore {
-  constructor({ url, secretKey, serviceRoleKey, client = null }) {
-    this.client = client ?? createClient(url, secretKey ?? serviceRoleKey, {
-      auth: {
-        persistSession: false,
-        autoRefreshToken: false,
-      },
-    });
+  constructor({ url, secretKey, serviceRoleKey, fetchImpl = fetch }) {
+    this.url = url.replace(/\/$/, '');
+    this.secretKey = secretKey ?? serviceRoleKey;
+    this.fetch = fetchImpl;
   }
 
   async getPlayer(playerId) {
-    const { data, error } = await this.client
-      .from('players')
-      .select('id, rating, wins, losses, last_played')
-      .eq('id', playerId)
-      .maybeSingle();
+    const url = this.createRestUrl('/players', {
+      select: 'id,rating,wins,losses,last_played',
+      id: `eq.${playerId}`,
+      limit: '1',
+    });
+    const response = await this.fetch(url, {
+      headers: this.createHeaders(),
+    });
 
-    if (error) {
-      throw error;
+    if (!response.ok) {
+      await throwSupabaseResponseError('load player', response);
     }
 
-    if (data) {
-      return fromPlayerRow(data);
-    }
+    const [row] = await response.json();
 
-    const created = createDefaultPlayer(playerId);
-    return this.savePlayer(created);
+    return row ? fromPlayerRow(row) : this.savePlayer(createDefaultPlayer(playerId));
   }
 
   async savePlayer(player) {
-    const { data, error } = await this.client
-      .from('players')
-      .upsert(toPlayerRow(player), { onConflict: 'id' })
-      .select('id, rating, wins, losses, last_played')
-      .single();
+    const url = this.createRestUrl('/players', {
+      on_conflict: 'id',
+      select: 'id,rating,wins,losses,last_played',
+    });
+    const response = await this.fetch(url, {
+      method: 'POST',
+      headers: {
+        ...this.createHeaders(),
+        Prefer: 'resolution=merge-duplicates,return=representation',
+      },
+      body: JSON.stringify(toPlayerRow(player)),
+    });
 
-    if (error) {
-      throw error;
+    if (!response.ok) {
+      await throwSupabaseResponseError('save player', response);
     }
 
-    return fromPlayerRow(data);
+    const [row] = await response.json();
+    return fromPlayerRow(row);
+  }
+
+  createRestUrl(pathname, params) {
+    const url = new URL(`${this.url}/rest/v1${pathname}`);
+
+    for (const [key, value] of Object.entries(params)) {
+      url.searchParams.set(key, value);
+    }
+
+    return url;
+  }
+
+  createHeaders() {
+    return {
+      apikey: this.secretKey,
+      'Content-Type': 'application/json',
+    };
   }
 }
 
@@ -142,4 +162,20 @@ function toPlayerRow(player) {
     losses: player.losses,
     last_played: player.lastPlayed,
   };
+}
+
+async function throwSupabaseResponseError(action, response) {
+  const body = await response.text();
+
+  try {
+    const parsed = JSON.parse(body);
+    const message = parsed.message ?? parsed.error ?? body;
+    throw new Error(`Could not ${action}: ${message}`);
+  } catch (error) {
+    if (error instanceof SyntaxError) {
+      throw new Error(`Could not ${action}: ${response.status} ${body}`);
+    }
+
+    throw error;
+  }
 }

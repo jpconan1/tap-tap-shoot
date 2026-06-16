@@ -15,6 +15,8 @@ const DEFAULT_TURN_MS = READY_WAITING_SAFE_MS + READY_WAITING_COUNTDOWN_MS;
 const DEFAULT_REVEAL_MS = 2 * 750;
 const INITIAL_SEARCH_SPREAD = 100;
 const SEARCH_SPREAD_PER_SECOND = 75;
+const DEFAULT_DISPLAY_NAME = 'Guest';
+const MAX_DISPLAY_NAME_LENGTH = 50;
 
 export class RankedDuelService {
   constructor({
@@ -27,6 +29,7 @@ export class RankedDuelService {
     revealMs = DEFAULT_REVEAL_MS,
     now = () => Date.now(),
     createId = randomUUID,
+    onError = () => {},
   } = {}) {
     this.playerStore = playerStore;
     this.countdownMs = countdownMs;
@@ -37,6 +40,7 @@ export class RankedDuelService {
     this.revealMs = revealMs;
     this.now = now;
     this.createId = createId;
+    this.onError = onError;
     this.sessions = new Map();
     this.queue = [];
     this.rooms = new Map();
@@ -48,6 +52,7 @@ export class RankedDuelService {
     const session = {
       id: this.createId(),
       player,
+      displayName: DEFAULT_DISPLAY_NAME,
       client,
       roomId: null,
       queuedAt: null,
@@ -71,6 +76,7 @@ export class RankedDuelService {
     }
 
     if (message.type === 'joinRanked') {
+      session.displayName = sanitizeDisplayName(message.displayName);
       this.joinRanked(session);
       return;
     }
@@ -149,6 +155,11 @@ export class RankedDuelService {
 
     for (let index = startIndex; index < this.queue.length; index += 1) {
       const candidate = this.queue[index];
+
+      if (candidate.player.id === session.player.id) {
+        continue;
+      }
+
       const ratingDelta = Math.abs(candidate.player.rating - session.player.rating);
 
       if (ratingDelta <= spread) {
@@ -454,7 +465,14 @@ export class RankedDuelService {
     this.clearRoomTimer(room);
     room.phase = 'gameOver';
     room.winner = winnerKey;
-    room.ratings = await this.saveMatchResult(room, winnerKey);
+
+    try {
+      room.ratings = await this.saveMatchResult(room, winnerKey);
+    } catch (error) {
+      room.ratings = null;
+      this.onError(error);
+    }
+
     this.broadcastRoom(room);
     this.releaseRoom(room);
   }
@@ -510,6 +528,10 @@ export class RankedDuelService {
     return room.players.p1 === session ? 'p1' : 'p2';
   }
 
+  getOnlinePlayerCount() {
+    return [...this.sessions.values()].filter((session) => !session.closed).length;
+  }
+
   broadcastRoom(room, extra = {}) {
     for (const playerKey of ['p1', 'p2']) {
       this.send(room.players[playerKey], 'matchState', {
@@ -539,12 +561,14 @@ export class RankedDuelService {
       ratings: room.ratings,
       players: {
         p1: {
+          displayName: room.players.p1.displayName,
           ap: room.roundState.players.p1.ap,
           legalMoves: room.phase === 'choosing' ? getPlayerLegalMoves(room.roundState, 'p1') : [],
           canContinue: room.phase === 'roundOver' && !room.pendingContinues.has('p1'),
           rating: room.players.p1.player.rating,
         },
         p2: {
+          displayName: room.players.p2.displayName,
           ap: room.roundState.players.p2.ap,
           legalMoves: room.phase === 'choosing' ? getPlayerLegalMoves(room.roundState, 'p2') : [],
           canContinue: room.phase === 'roundOver' && !room.pendingContinues.has('p2'),
@@ -588,4 +612,18 @@ export class RankedDuelService {
 function getFallbackMove(state, playerKey) {
   const legalMoves = getPlayerLegalMoves(state, playerKey);
   return legalMoves.includes('reload') ? 'reload' : legalMoves[0];
+}
+
+export function sanitizeDisplayName(value) {
+  if (typeof value !== 'string') {
+    return DEFAULT_DISPLAY_NAME;
+  }
+
+  const normalized = value.replace(/\s+/g, ' ').trim();
+
+  if (!normalized) {
+    return DEFAULT_DISPLAY_NAME;
+  }
+
+  return Array.from(normalized).slice(0, MAX_DISPLAY_NAME_LENGTH).join('');
 }

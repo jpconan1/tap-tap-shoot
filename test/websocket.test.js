@@ -49,8 +49,8 @@ test('WebSocket clients can connect, queue, and receive match state', async (t) 
     assert.equal((await p1Hello).rating, 1000);
     assert.equal((await p2Hello).rating, 1000);
 
-    p1.send(JSON.stringify({ type: 'joinRanked' }));
-    p2.send(JSON.stringify({ type: 'joinRanked' }));
+    p1.send(JSON.stringify({ type: 'joinRanked', displayName: 'JP' }));
+    p2.send(JSON.stringify({ type: 'joinRanked', displayName: 'Chatman' }));
 
     const p1State = await waitForType(p1, 'matchState');
     const p2State = await waitForType(p2, 'matchState');
@@ -58,6 +58,8 @@ test('WebSocket clients can connect, queue, and receive match state', async (t) 
     assert.equal(p1State.phase, 'countdown');
     assert.equal(p2State.phase, 'countdown');
     assert.notEqual(p1State.playerKey, p2State.playerKey);
+    assert.equal(p1State.players[p1State.playerKey].displayName, 'JP');
+    assert.equal(p2State.players[p2State.playerKey].displayName, 'Chatman');
   } finally {
     p1.close();
     p2.close();

@@ -93,6 +93,66 @@ const LOADING_BAR_EMPTY_URL = './assets/progress_bar_empty_sheet.webp';
 const LOADING_BAR_FULL_URL = './assets/progress_bar_full_sheet.webp';
 const LOADING_CLICK_MESSAGE_URL = './assets/click_msg_sheet.webp';
 const PAPER_BACKGROUND_URL = './assets/crumpled_paper_background.webp';
+const ONLINE_STATUS_POLL_MS = 5000;
+const RANKED_DISPLAY_NAME_KEY = 'tapTapShoot.rankedDisplayName';
+const DEFAULT_RANKED_DISPLAY_NAME = 'Guest';
+const MAX_RANKED_DISPLAY_NAME_LENGTH = 50;
+const NAME_PREFIXES = Object.freeze([
+  'Steely',
+  'Mega',
+  'Supa',
+  'Ultra',
+  'Omega',
+  'SSJ',
+  'Sneaky',
+  'Sharp',
+  'Gung-Ho',
+  'Fidgety',
+  'Slippery',
+  'Thick',
+  'Tsar',
+  'Stabby',
+  'Gunslinger',
+  'Baby',
+  "Ol'",
+  'King',
+  'Grandmaster',
+]);
+const NAME_MAINS = Object.freeze([
+  'Pete',
+  'Vega',
+  'Samwise',
+  'Paul',
+  'Goku',
+  'Niki',
+  'Louise',
+  'Frank',
+  'Clark',
+  'Hippo',
+  'Gizmo',
+  'Alexander',
+  'Burger',
+]);
+const NAME_SUFFIXES = Object.freeze([
+  ', Certified Fraud',
+  'the Chill',
+  ', Reborn',
+  'Marks',
+  'Dodge',
+  ', Counterer',
+  ', Doodler',
+  'Bigups',
+  'the Stank',
+  ', Harasser',
+  'Waters',
+  'Rigby',
+  'Conan',
+  'Cooney',
+  'Clever',
+  'K. Rool',
+  'Parker',
+  '####',
+]);
 const MOVE_BUTTON_DOODLES = Object.freeze({
   reload: 'reload_button',
   shoot: 'shoot_button',
@@ -321,6 +381,9 @@ let isApplyingRankedSnapshot = false;
 let rankedReadyWaiting = null;
 let rankedReadyWaitingTimer = null;
 let rankedRoundAudioKey = null;
+let rankedDisplayName = readStoredDisplayName();
+let onlinePlayerCount = null;
+let onlineStatusTimer = null;
 let findingMatchStep = 0;
 let findingMatchTimer = null;
 let tutorialSlideIndex = 0;
@@ -719,6 +782,76 @@ function updateFrameScale() {
   app.style.setProperty('--ui-scale', scale.toFixed(4));
 }
 
+function sanitizeDisplayName(value) {
+  if (typeof value !== 'string') {
+    return DEFAULT_RANKED_DISPLAY_NAME;
+  }
+
+  const normalized = value.replace(/\s+/g, ' ').trim();
+
+  if (!normalized) {
+    return DEFAULT_RANKED_DISPLAY_NAME;
+  }
+
+  return Array.from(normalized).slice(0, MAX_RANKED_DISPLAY_NAME_LENGTH).join('');
+}
+
+function generateDisplayName() {
+  const prefix = pickRandom(NAME_PREFIXES);
+  const main = pickRandom(NAME_MAINS);
+  const suffix = pickRandom(NAME_SUFFIXES).replace('####', generateDigitString(4));
+  const pattern = Math.floor(Math.random() * 4);
+  const parts = [
+    [prefix, main, suffix],
+    [prefix, main],
+    [main, suffix],
+    [prefix, suffix],
+  ][pattern];
+  const spacedName = parts.join(' ').replace(' ,', ',');
+  const separator = spacedName.includes(',') ? ' ' : pickRandom([' ', '_', '-']);
+  const name = spacedName.replaceAll(' ', separator);
+
+  if (Math.random() < 0.75) {
+    return name;
+  }
+
+  return Math.random() < 0.5 ? `xXx_${name}_xXx` : `-${name}-`;
+}
+
+function pickRandom(items) {
+  return items[Math.floor(Math.random() * items.length)];
+}
+
+function generateDigitString(length) {
+  return Array.from({ length }, () => Math.floor(Math.random() * 10)).join('');
+}
+
+function readStoredDisplayName() {
+  try {
+    const savedName = sanitizeDisplayName(window.localStorage.getItem(RANKED_DISPLAY_NAME_KEY));
+    return savedName === DEFAULT_RANKED_DISPLAY_NAME ? generateDisplayName() : savedName;
+  } catch {
+    return generateDisplayName();
+  }
+}
+
+function writeStoredDisplayName(value) {
+  try {
+    window.localStorage.setItem(RANKED_DISPLAY_NAME_KEY, value);
+  } catch {
+    // Online play still works for this tab; it just cannot remember the name.
+  }
+}
+
+function escapeHtml(value) {
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 function render() {
   if (screen === 'title') {
     renderTitleScreen();
@@ -727,6 +860,11 @@ function render() {
 
   if (screen === 'opponent-select') {
     renderOpponentSelectScreen();
+    return;
+  }
+
+  if (screen === 'online-name') {
+    renderOnlineNameScreen();
     return;
   }
 
@@ -751,6 +889,7 @@ function render() {
       </figure>
       ${renderTestOpponentControls()}
       ${renderReadyWaitingOverlay()}
+      ${renderApMeters()}
     </section>
 
     <section class="moves" aria-label="Moves">
@@ -1016,6 +1155,7 @@ function shouldClearStageForCountdown() {
 
 function renderTitleScreen() {
   stopFindingMatchTicker();
+  stopOnlineStatusPolling();
   requestMusicTrack('title');
 
   app.innerHTML = `
@@ -1079,6 +1219,51 @@ function renderTitleScreen() {
   mountSpriteRenderers(app.querySelectorAll('.sprite-canvas'));
 }
 
+function renderOnlineNameScreen() {
+  stopFindingMatchTicker();
+  requestMusicTrack('title');
+
+  app.innerHTML = `
+    <section class="title-screen online-name-screen" aria-label="Online name">
+      <canvas
+        class="sprite-canvas title-logo"
+        data-doodle="title/LOGO"
+        data-frame-width="${TITLE_FRAME_WIDTH}"
+        data-frame-height="${TITLE_FRAME_HEIGHT}"
+        width="${TITLE_FRAME_WIDTH}"
+        height="${TITLE_FRAME_HEIGHT}"
+        aria-label="Tap Tap Shoot"
+      ></canvas>
+
+      <form class="online-name-form">
+        <label class="online-name-label" for="online-name-input">Name</label>
+        <input
+          id="online-name-input"
+          class="online-name-input"
+          name="displayName"
+          maxlength="${MAX_RANKED_DISPLAY_NAME_LENGTH}"
+          autocomplete="nickname"
+          spellcheck="false"
+          value="${escapeHtml(rankedDisplayName)}"
+        />
+        <p class="online-player-count" aria-live="polite">${renderOnlinePlayerCount()}</p>
+        <button class="ghost online-name-random" data-action="random-name" type="button">Random</button>
+        <div class="online-name-actions">
+          <button class="ghost online-name-back" data-action="back-title" type="button">Back</button>
+          <button class="ghost online-name-submit" type="submit">Find match</button>
+        </div>
+      </form>
+    </section>
+  `;
+
+  app.querySelector('.online-name-form').addEventListener('submit', submitOnlineName);
+  app.querySelector('[data-action="back-title"]').addEventListener('click', returnToTitleFromOnlineName);
+  app.querySelector('[data-action="random-name"]').addEventListener('click', generateOnlineName);
+  startOnlineStatusPolling();
+  mountSpriteRenderers(app.querySelectorAll('.sprite-canvas'));
+  app.querySelector('.online-name-input')?.focus();
+}
+
 function renderTutorialScreen() {
   stopFindingMatchTicker();
   requestMusicTrack('game');
@@ -1091,6 +1276,7 @@ function renderTutorialScreen() {
       <figure class="doodle-stage tutorial-stage">
         ${renderTutorialStage()}
       </figure>
+      ${renderApMeters()}
     </section>
 
     <section class="moves tutorial-moves" aria-label="Tutorial controls">
@@ -1400,7 +1586,7 @@ function renderQueueScreen() {
 function renderStageHud() {
   return `
     <div class="stage-hud" aria-label="Game status">
-      ${renderApMeter('p1', state.players.p1.ap)}
+      ${renderPlayerIdentity('p1')}
       ${renderWinMeter('p1')}
       <canvas
         class="sprite-canvas turn-counter"
@@ -1412,6 +1598,43 @@ function renderStageHud() {
         aria-label="Turn ${state.turn}"
       ></canvas>
       ${renderWinMeter('p2')}
+      ${renderPlayerIdentity('p2')}
+    </div>
+  `;
+}
+
+function renderPlayerIdentity(playerId) {
+  const identity = getPlayerIdentity(playerId);
+
+  return `
+    <div class="player-identity ${playerId}" aria-label="${escapeHtml(identity.name)}${identity.rating ? ` rating ${identity.rating}` : ''}">
+      <div class="player-name">${escapeHtml(identity.name)}</div>
+      ${identity.rating ? `<div class="player-rating">${identity.rating}</div>` : ''}
+    </div>
+  `;
+}
+
+function getPlayerIdentity(playerId) {
+  if (playMode === 'online' && rankedSnapshot) {
+    const rankedKey = playerId === 'p1' ? rankedSnapshot.playerKey : rankedSnapshot.opponentKey;
+    const player = rankedSnapshot.players[rankedKey];
+
+    return {
+      name: player?.displayName || DEFAULT_RANKED_DISPLAY_NAME,
+      rating: player?.rating,
+    };
+  }
+
+  return {
+    name: playerId === 'p1' ? 'YOU' : OPPONENTS[selectedOpponentId]?.name ?? 'THEM',
+    rating: null,
+  };
+}
+
+function renderApMeters() {
+  return `
+    <div class="ap-super-meters" aria-label="Action points">
+      ${renderApMeter('p1', state.players.p1.ap)}
       ${renderApMeter('p2', state.players.p2.ap)}
     </div>
   `;
@@ -2362,6 +2585,60 @@ function startRankedFromTitle() {
     return;
   }
 
+  playMode = 'online';
+  clearLocalTurnChoice();
+  screen = 'online-name';
+  p1QueuedMove = null;
+  rankedSnapshot = null;
+  pendingRankedSnapshot = null;
+  rankedReadyWaiting = null;
+  rankedRoundAudioKey = null;
+  render();
+}
+
+function returnToTitleFromOnlineName() {
+  if (isTransitioning) {
+    return;
+  }
+
+  stopOnlineStatusPolling();
+  screen = 'title';
+  p1QueuedMove = null;
+  rankedSnapshot = null;
+  pendingRankedSnapshot = null;
+  rankedReadyWaiting = null;
+  rankedRoundAudioKey = null;
+  render();
+}
+
+function submitOnlineName(event) {
+  event.preventDefault();
+
+  if (isTransitioning) {
+    return;
+  }
+
+  const formData = new FormData(event.currentTarget);
+  rankedDisplayName = sanitizeDisplayName(formData.get('displayName'));
+  writeStoredDisplayName(rankedDisplayName);
+  beginRankedQueue();
+}
+
+function generateOnlineName() {
+  const input = app.querySelector('.online-name-input');
+
+  if (!input) {
+    return;
+  }
+
+  rankedDisplayName = sanitizeDisplayName(generateDisplayName());
+  input.value = rankedDisplayName;
+  input.focus();
+  input.select();
+}
+
+function beginRankedQueue() {
+  stopOnlineStatusPolling();
   unlockSceneAudio();
   playMode = 'online';
   clearLocalTurnChoice();
@@ -2373,7 +2650,7 @@ function startRankedFromTitle() {
   rankedReadyWaiting = null;
   rankedRoundAudioKey = null;
   findingMatchStep = 0;
-  rankedClient.connect();
+  rankedClient.connect(rankedDisplayName);
   render();
 }
 
@@ -2772,6 +3049,64 @@ function stopFindingMatchTicker() {
 
   clearInterval(findingMatchTimer);
   findingMatchTimer = null;
+}
+
+function renderOnlinePlayerCount() {
+  return `players online: ${onlinePlayerCount ?? '?'}`;
+}
+
+function startOnlineStatusPolling() {
+  if (onlineStatusTimer) {
+    return;
+  }
+
+  updateOnlineStatus();
+  onlineStatusTimer = setInterval(() => {
+    if (screen !== 'online-name') {
+      stopOnlineStatusPolling();
+      return;
+    }
+
+    updateOnlineStatus();
+  }, ONLINE_STATUS_POLL_MS);
+}
+
+function stopOnlineStatusPolling() {
+  if (!onlineStatusTimer) {
+    return;
+  }
+
+  clearInterval(onlineStatusTimer);
+  onlineStatusTimer = null;
+}
+
+async function updateOnlineStatus() {
+  try {
+    const response = await fetch(getOnlineStatusUrl(), { cache: 'no-store' });
+
+    if (!response.ok) {
+      return;
+    }
+
+    const status = await response.json();
+    onlinePlayerCount = Number.isFinite(status.playersOnline) ? status.playersOnline : null;
+    updateOnlinePlayerCountText();
+  } catch {
+    onlinePlayerCount = null;
+    updateOnlinePlayerCountText();
+  }
+}
+
+function updateOnlinePlayerCountText() {
+  app.querySelector('.online-player-count')?.replaceChildren(renderOnlinePlayerCount());
+}
+
+function getOnlineStatusUrl() {
+  if (window.location.protocol === 'file:') {
+    return 'http://localhost:8787/api/ranked-status';
+  }
+
+  return '/api/ranked-status';
 }
 
 function beginGameLoop() {

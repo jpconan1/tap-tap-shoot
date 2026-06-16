@@ -9,8 +9,9 @@ export class RankedClient {
     this.playerId = readLocalStorage(RANKED_PLAYER_ID_KEY);
   }
 
-  connect() {
+  connect(displayName = '') {
     this.close();
+    this.displayName = displayName;
 
     const socket = new WebSocket(this.getSocketUrl());
     this.socket = socket;
@@ -92,7 +93,7 @@ export class RankedClient {
     if (message.type === 'hello') {
       this.playerId = message.playerId;
       writeLocalStorage(RANKED_PLAYER_ID_KEY, this.playerId);
-      this.send({ type: 'joinRanked' });
+      this.send({ type: 'joinRanked', displayName: this.displayName });
       return;
     }
 

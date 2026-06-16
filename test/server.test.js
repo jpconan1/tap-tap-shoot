@@ -21,6 +21,47 @@ test('matchmaking pairs similarly rated players into a ranked room', async () =>
   assert.equal(lastMessage(p2).phase, 'countdown');
 });
 
+test('online player count tracks connected sessions', async () => {
+  const service = createTestService();
+  const p1 = await connectTestPlayer(service, 'p1');
+  const p2 = await connectTestPlayer(service, 'p2');
+
+  assert.equal(service.getOnlinePlayerCount(), 2);
+  service.disconnect(p1.session);
+  assert.equal(service.getOnlinePlayerCount(), 1);
+  service.disconnect(p2.session);
+  assert.equal(service.getOnlinePlayerCount(), 0);
+});
+
+test('matchmaking snapshots include guest display names', async () => {
+  const service = createTestService();
+  const p1 = await connectTestPlayer(service, 'p1');
+  const p2 = await connectTestPlayer(service, 'p2');
+
+  service.receive(p1.session, { type: 'joinRanked', displayName: 'JP' });
+  service.receive(p2.session, { type: 'joinRanked', displayName: 'Chatman' });
+
+  assert.equal(lastMessage(p1).players.p1.displayName, 'JP');
+  assert.equal(lastMessage(p1).players.p2.displayName, 'Chatman');
+  assert.equal(lastMessage(p2).players.p1.displayName, 'JP');
+  assert.equal(lastMessage(p2).players.p2.displayName, 'Chatman');
+});
+
+test('guest display names are session-only and sanitized', async () => {
+  const service = createTestService();
+  const p1 = await connectTestPlayer(service, 'p1');
+  const p2 = await connectTestPlayer(service, 'p2');
+  const longName = 'x'.repeat(70);
+
+  service.receive(p1.session, { type: 'joinRanked', displayName: '   ' });
+  service.receive(p2.session, { type: 'joinRanked', displayName: `  ${longName}  ` });
+
+  assert.equal(lastMessage(p1).players.p1.displayName, 'Guest');
+  assert.equal(lastMessage(p1).players.p2.displayName, 'x'.repeat(50));
+  assert.equal(service.playerStore.players.get('p1').displayName, undefined);
+  assert.equal(service.playerStore.players.get('p2').displayName, undefined);
+});
+
 test('matchmaking waits on rating gaps until search spread widens', async () => {
   let now = 0;
   const store = new MemoryPlayerStore(new Map([
@@ -39,6 +80,18 @@ test('matchmaking waits on rating gaps until search spread widens', async () => 
   now = 3000;
   service.tryMatchmaking();
   assert.equal(service.rooms.size, 1);
+});
+
+test('matchmaking does not pair two sessions for the same player', async () => {
+  const service = createTestService();
+  const firstSession = await connectTestPlayer(service, 'p1');
+  const secondSession = await connectTestPlayer(service, 'p1');
+
+  service.receive(firstSession.session, { type: 'joinRanked' });
+  service.receive(secondSession.session, { type: 'joinRanked' });
+
+  assert.equal(service.rooms.size, 0);
+  assert.equal(service.queue.length, 2);
 });
 
 test('submitted moves resolve immediately when both players lock in', async () => {

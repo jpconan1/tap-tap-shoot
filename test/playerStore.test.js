@@ -5,7 +5,12 @@ import { SupabasePlayerStore } from '../server/playerStore.js';
 
 test('SupabasePlayerStore creates missing players', async () => {
   const rows = new Map();
-  const store = new SupabasePlayerStore({ client: createFakeSupabaseClient(rows) });
+  const requests = [];
+  const store = new SupabasePlayerStore({
+    url: 'https://example.supabase.co',
+    secretKey: 'sb_secret_test',
+    fetchImpl: createFakeSupabaseFetch(rows, requests),
+  });
 
   const player = await store.getPlayer('p1');
 
@@ -23,11 +28,17 @@ test('SupabasePlayerStore creates missing players', async () => {
     losses: 0,
     last_played: null,
   });
+  assert.equal(requests[0].headers.apikey, 'sb_secret_test');
+  assert.equal(requests[0].headers.Authorization, undefined);
 });
 
 test('SupabasePlayerStore maps saved player fields to database columns', async () => {
   const rows = new Map();
-  const store = new SupabasePlayerStore({ client: createFakeSupabaseClient(rows) });
+  const store = new SupabasePlayerStore({
+    url: 'https://example.supabase.co',
+    secretKey: 'sb_secret_test',
+    fetchImpl: createFakeSupabaseFetch(rows),
+  });
 
   const saved = await store.savePlayer({
     id: 'p1',
@@ -47,49 +58,27 @@ test('SupabasePlayerStore maps saved player fields to database columns', async (
   assert.equal(rows.get('p1').last_played, '2026-06-16T12:00:00.000Z');
 });
 
-function createFakeSupabaseClient(rows) {
-  return {
-    from(tableName) {
-      assert.equal(tableName, 'players');
-      return new FakePlayersQuery(rows);
-    },
+function createFakeSupabaseFetch(rows, requests = []) {
+  return async (url, options = {}) => {
+    requests.push({ url, ...options });
+
+    if (options.method === 'POST') {
+      const row = JSON.parse(options.body);
+      rows.set(row.id, row);
+      return createJsonResponse([row]);
+    }
+
+    const id = url.searchParams.get('id')?.replace(/^eq\./, '');
+    const row = rows.get(id);
+    return createJsonResponse(row ? [row] : []);
   };
 }
 
-class FakePlayersQuery {
-  constructor(rows) {
-    this.rows = rows;
-    this.pendingRow = null;
-    this.filterId = null;
-  }
-
-  select() {
-    return this;
-  }
-
-  eq(column, value) {
-    assert.equal(column, 'id');
-    this.filterId = value;
-    return this;
-  }
-
-  maybeSingle() {
-    return {
-      data: this.rows.get(this.filterId) ?? null,
-      error: null,
-    };
-  }
-
-  upsert(row) {
-    this.pendingRow = { ...row };
-    return this;
-  }
-
-  single() {
-    this.rows.set(this.pendingRow.id, this.pendingRow);
-    return {
-      data: this.pendingRow,
-      error: null,
-    };
-  }
+function createJsonResponse(data) {
+  return {
+    ok: true,
+    async json() {
+      return data;
+    },
+  };
 }

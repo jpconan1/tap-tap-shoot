@@ -29,7 +29,12 @@ const playerStore = SUPABASE_URL && SUPABASE_SECRET_KEY
     secretKey: SUPABASE_SECRET_KEY,
   })
   : new JsonPlayerStore(join(ROOT, '.ranked-players.json'));
-const rankedDuel = new RankedDuelService({ playerStore });
+const rankedDuel = new RankedDuelService({
+  playerStore,
+  onError(error) {
+    console.error('Ranked service failed:', getErrorMessage(error));
+  },
+});
 const server = createServer(handleStaticRequest);
 
 attachWebSocketServer(server, {
@@ -43,12 +48,24 @@ attachWebSocketServer(server, {
     rankedDuel.connect(connection, params.get('playerId')).then((session) => {
       connection.onMessage((raw) => {
         try {
-          rankedDuel.receive(session, JSON.parse(raw));
-        } catch {
+          const result = rankedDuel.receive(session, JSON.parse(raw));
+
+          if (result?.catch) {
+            result.catch((error) => {
+              console.error('Ranked message failed:', getErrorMessage(error));
+              connection.send(JSON.stringify({ type: 'error', message: 'server error' }));
+            });
+          }
+        } catch (error) {
+          console.error('Bad ranked message:', getErrorMessage(error));
           connection.send(JSON.stringify({ type: 'error', message: 'bad message' }));
         }
       });
       connection.onClose(() => rankedDuel.disconnect(session));
+    }).catch((error) => {
+      console.error('Ranked connection failed:', getErrorMessage(error));
+      connection.send(JSON.stringify({ type: 'error', message: 'server error' }));
+      connection.close();
     });
   },
 });
@@ -64,6 +81,14 @@ async function handleStaticRequest(request, response) {
   }
 
   const url = new URL(request.url, `http://${request.headers.host}`);
+
+  if (url.pathname === '/api/ranked-status') {
+    writeJson(response, {
+      playersOnline: rankedDuel.getOnlinePlayerCount(),
+    });
+    return;
+  }
+
   const pathname = url.pathname === '/' ? '/index.html' : url.pathname;
   const filePath = getSafePath(pathname);
 
@@ -89,10 +114,26 @@ async function handleStaticRequest(request, response) {
   }
 }
 
+function writeJson(response, payload) {
+  response.writeHead(200, {
+    'Content-Type': 'application/json; charset=utf-8',
+    'Cache-Control': 'no-store',
+  });
+  response.end(JSON.stringify(payload));
+}
+
 function getSafePath(pathname) {
   const decoded = decodeURIComponent(pathname);
   const normalized = normalize(decoded).replace(/^(\.\.[/\\])+/, '');
   const filePath = join(ROOT, normalized);
 
   return filePath.startsWith(ROOT) ? filePath : null;
+}
+
+function getErrorMessage(error) {
+  if (error instanceof Error) {
+    return error.stack ?? error.message;
+  }
+
+  return JSON.stringify(error);
 }
