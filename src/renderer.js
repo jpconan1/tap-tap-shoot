@@ -463,11 +463,6 @@ function installSpriteFallback(canvas, image) {
   canvas.style.backgroundSize = '100% auto';
 }
 
-function shouldKeepSpriteFallback() {
-  return /iPhone|iPad|iPod/.test(navigator.userAgent)
-    || (navigator.maxTouchPoints > 1 && /Safari/.test(navigator.userAgent));
-}
-
 function loadDoodleSheet(doodle) {
   if (doodleSheets.has(doodle)) {
     return doodleSheets.get(doodle);
@@ -503,7 +498,7 @@ function drawDoodleFrame(now) {
   const frame = Math.floor((now / 1000) * DOODLE_FRAME_RATE) % DOODLE_FRAME_COUNT;
 
   doodleRenderers.forEach(({ canvas, context, image, frameWidth, frameHeight, flip }) => {
-    if (!image.complete || !image.naturalWidth) {
+    if (!canvas.isConnected || !image.complete || !image.naturalWidth) {
       return;
     }
 
@@ -528,8 +523,6 @@ function drawDoodleFrame(now) {
     );
     context.restore();
 
-    if (!shouldKeepSpriteFallback()) {
-      canvas.style.backgroundImage = 'none';
-    }
+    canvas.style.backgroundImage = 'none';
   });
 }
