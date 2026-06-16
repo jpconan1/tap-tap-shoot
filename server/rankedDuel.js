@@ -393,6 +393,7 @@ export class RankedDuelService {
       room.winner = null;
       room.ratings = null;
       this.broadcastRoom(room);
+      this.releaseRoom(room);
       return;
     }
 
@@ -455,6 +456,7 @@ export class RankedDuelService {
     room.winner = winnerKey;
     room.ratings = await this.saveMatchResult(room, winnerKey);
     this.broadcastRoom(room);
+    this.releaseRoom(room);
   }
 
   async saveMatchResult(room, winnerKey) {
@@ -573,6 +575,13 @@ export class RankedDuelService {
       clearTimeout(room.timer);
       room.timer = null;
     }
+  }
+
+  releaseRoom(room) {
+    this.clearRoomTimer(room);
+    room.players.p1.roomId = null;
+    room.players.p2.roomId = null;
+    this.rooms.delete(room.id);
   }
 }
 

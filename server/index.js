@@ -2,11 +2,17 @@ import { createServer } from 'node:http';
 import { extname, join, normalize } from 'node:path';
 import { readFile } from 'node:fs/promises';
 
-import { JsonPlayerStore } from './playerStore.js';
+import { JsonPlayerStore, SupabasePlayerStore } from './playerStore.js';
 import { RankedDuelService } from './rankedDuel.js';
 import { attachWebSocketServer } from './webSocket.js';
 
 const PORT = Number(process.env.PORT ?? 8787);
+const WS_MAX_CONNECTIONS = Number(process.env.WS_MAX_CONNECTIONS ?? 2000);
+const WS_MAX_MESSAGE_BYTES = Number(process.env.WS_MAX_MESSAGE_BYTES ?? 16 * 1024);
+const WS_MAX_BUFFERED_BYTES = Number(process.env.WS_MAX_BUFFERED_BYTES ?? 256 * 1024);
+const WS_HEARTBEAT_MS = Number(process.env.WS_HEARTBEAT_MS ?? 30 * 1000);
+const SUPABASE_URL = process.env.SUPABASE_URL;
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const ROOT = process.cwd();
 const PUBLIC_TYPES = new Map([
   ['.css', 'text/css; charset=utf-8'],
@@ -17,12 +23,21 @@ const PUBLIC_TYPES = new Map([
   ['.mp3', 'audio/mpeg'],
 ]);
 
-const playerStore = new JsonPlayerStore(join(ROOT, '.ranked-players.json'));
+const playerStore = SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY
+  ? new SupabasePlayerStore({
+    url: SUPABASE_URL,
+    serviceRoleKey: SUPABASE_SERVICE_ROLE_KEY,
+  })
+  : new JsonPlayerStore(join(ROOT, '.ranked-players.json'));
 const rankedDuel = new RankedDuelService({ playerStore });
 const server = createServer(handleStaticRequest);
 
 attachWebSocketServer(server, {
   path: '/ws',
+  maxConnections: WS_MAX_CONNECTIONS,
+  maxMessageBytes: WS_MAX_MESSAGE_BYTES,
+  maxBufferedBytes: WS_MAX_BUFFERED_BYTES,
+  heartbeatMs: WS_HEARTBEAT_MS,
   onConnection(connection, request) {
     const params = new URL(request.url, `http://${request.headers.host}`).searchParams;
     rankedDuel.connect(connection, params.get('playerId')).then((session) => {

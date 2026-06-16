@@ -236,6 +236,39 @@ test('disconnect forfeits active match', async () => {
   assert.equal((await store.getPlayer('p2')).wins, 1);
 });
 
+test('finished matches are removed from active rooms', async () => {
+  const { service, p1, p2 } = await createMatchedService({ revealMs: 1 });
+  const room = onlyRoom(service);
+
+  room.roundWins.p1 = 4;
+  service.beginChoosing(room);
+  service.receive(p1.session, { type: 'submitMove', moveId: 'shoot' });
+  service.receive(p2.session, { type: 'submitMove', moveId: 'stab' });
+  await wait(10);
+
+  assert.equal(room.phase, 'gameOver');
+  assert.equal(service.rooms.size, 0);
+  assert.equal(p1.session.roomId, null);
+  assert.equal(p2.session.roomId, null);
+});
+
+test('no-contest matches are removed from active rooms', async () => {
+  const { service, p1, p2 } = await createMatchedService({
+    noSelectionGraceMs: 1,
+    noContestWaitingMs: 1,
+    noContestCountdownMs: 1,
+  });
+  const room = onlyRoom(service);
+
+  service.beginChoosing(room);
+  await wait(10);
+
+  assert.equal(room.phase, 'gameOver');
+  assert.equal(service.rooms.size, 0);
+  assert.equal(p1.session.roomId, null);
+  assert.equal(p2.session.roomId, null);
+});
+
 function createTestService({
   store = new MemoryPlayerStore(),
   now = () => 0,

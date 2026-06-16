@@ -7,6 +7,9 @@
     "assets:compress-staged": "scripts/compress-staged-assets.sh",
     "assets:check": "scripts/check-compressed-assets.sh",
     "test": "node --test",
-    "server": "node server/index.js"
+    "server": "node --env-file-if-exists=.env server/index.js"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.108.2"
   }
 }
