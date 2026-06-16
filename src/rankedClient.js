@@ -48,6 +48,24 @@ export class RankedClient {
     return true;
   }
 
+  submitContinue(snapshot) {
+    if (
+      !this.socket ||
+      this.socket.readyState !== WebSocket.OPEN ||
+      !snapshot ||
+      snapshot.phase !== 'roundOver' ||
+      !snapshot.players[snapshot.playerKey].canContinue
+    ) {
+      return false;
+    }
+
+    this.send({
+      type: 'submitContinue',
+      matchId: snapshot.matchId,
+    });
+    return true;
+  }
+
   close() {
     if (!this.socket) {
       return;

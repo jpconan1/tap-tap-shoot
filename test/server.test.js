@@ -109,6 +109,29 @@ test('turn timeout gives the ready player the round', async () => {
   assert.equal(room.timeoutStrikes.p2, 1);
 });
 
+test('finished round waits for both players to continue', async () => {
+  const { service, p1, p2 } = await createMatchedService({ revealMs: 1 });
+  const room = onlyRoom(service);
+
+  service.beginChoosing(room);
+  service.receive(p1.session, { type: 'submitMove', moveId: 'shoot' });
+  service.receive(p2.session, { type: 'submitMove', moveId: 'stab' });
+  await wait(10);
+
+  assert.equal(room.phase, 'roundOver');
+  assert.equal(lastMessage(p1).players.p1.canContinue, true);
+
+  service.receive(p1.session, { type: 'submitContinue' });
+  assert.equal(room.phase, 'roundOver');
+  assert.equal(room.readyPlayerKey, 'p1');
+  assert.equal(room.waitingPlayerKey, 'p2');
+  assert.equal(lastMessage(p2).waitingPlayerKey, 'p2');
+
+  service.receive(p2.session, { type: 'submitContinue' });
+  assert.equal(room.phase, 'choosing');
+  assert.equal(room.roundState.status, 'playing');
+});
+
 test('third timeout loses match regardless of score', async () => {
   const { service, p1, p2, store } = await createMatchedService({ turnMs: 10 });
   const room = onlyRoom(service);
@@ -177,7 +200,7 @@ test('no contest awards match to current round leader', async () => {
 });
 
 test('first to five ends match and updates Elo once', async () => {
-  const { service, p1, p2, store } = await createMatchedService();
+  const { service, p1, p2, store } = await createMatchedService({ revealMs: 1 });
   const room = onlyRoom(service);
 
   for (let win = 0; win < 5; win += 1) {
@@ -193,7 +216,7 @@ test('first to five ends match and updates Elo once', async () => {
     }
   }
 
-  await wait(0);
+  await wait(10);
   const expected = updateRatings(DEFAULT_RATING, DEFAULT_RATING, true);
   assert.equal(room.phase, 'gameOver');
   assert.equal(room.winner, 'p1');
@@ -217,6 +240,7 @@ function createTestService({
   store = new MemoryPlayerStore(),
   now = () => 0,
   turnMs = 1000,
+  revealMs = 1000,
   noSelectionGraceMs = 1000,
   noContestWaitingMs = 1000,
   noContestCountdownMs = 1000,
@@ -224,7 +248,7 @@ function createTestService({
   return new RankedDuelService({
     playerStore: store,
     countdownMs: 1000,
-    revealMs: 1000,
+    revealMs,
     turnMs,
     noSelectionGraceMs,
     noContestWaitingMs,

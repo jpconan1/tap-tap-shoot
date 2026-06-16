@@ -91,6 +91,23 @@ export function queueMusicTrackOnce(trackId, returnTrackId) {
   syncMusicTrack();
 }
 
+export function finishMusicLoopThenStop() {
+  desiredMusicTrack = null;
+  queuedMusicTrack = null;
+  queuedMusicSegment = null;
+
+  if (currentMusicSegment) {
+    currentMusicSegment.returnTrackId = null;
+  }
+
+  if (htmlMusicAudio) {
+    htmlMusicAudio.onended = () => {
+      htmlMusicAudio = null;
+      htmlMusicTrack = null;
+    };
+  }
+}
+
 export function restartMusicTrack(trackId) {
   if (!MUSIC_TRACKS[trackId]) {
     return;

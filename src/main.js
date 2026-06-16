@@ -3,6 +3,7 @@ import { createRoundState, getPlayerLegalMoves, playTurn } from './engine/gameSt
 import { chooseRivalMove as chooseAiMove, DEFAULT_RIVAL_ID, RIVALS } from './engine/rivalAi.js';
 import {
   configureAudio,
+  finishMusicLoopThenStop,
   getMusicTopperId,
   installAudioUnlockListeners,
   interruptMusicFileOnce,
@@ -314,8 +315,11 @@ let turnPhase = 'idle';
 let p1QueuedMove = null;
 let localTurnChoice = null;
 let rankedSnapshot = null;
+let pendingRankedSnapshot = null;
+let isApplyingRankedSnapshot = false;
 let rankedReadyWaiting = null;
 let rankedReadyWaitingTimer = null;
+let rankedRoundAudioKey = null;
 let findingMatchStep = 0;
 let findingMatchTimer = null;
 let tutorialSlideIndex = 0;
@@ -611,7 +615,6 @@ function getGamePreloadDoodles() {
   return [
     ...getRendererPreloadDoodles(),
     'READY',
-    'GO',
     'action_points',
     'ap_icon',
     'back_button',
@@ -773,11 +776,18 @@ function render() {
   mountWaitingDotsOverlays(app.querySelectorAll('.waiting-dots-overlay'));
   mountCountdownOverlays(app.querySelectorAll('.countdown-overlay'));
   playStageAudio({
-    isTransitioning,
+    isTransitioning: isTransitioning || shouldSuppressStageAudio(),
     presentation: shouldClearStageForCountdown() ? { kind: 'cue', name: 'countdown' } : stagePresentation,
     audioKey: `${state.turn}:${turnPhase}:${stagePresentation.name}:${stagePresentation.flip}`,
   });
   maybeStartComputerTurnChoice();
+}
+
+function shouldSuppressStageAudio() {
+  return playMode === 'online'
+    && rankedSnapshot?.phase === 'choosing'
+    && !rankedSnapshot.readyPlayerKey
+    && Boolean(rankedSnapshot.round.lastTurn);
 }
 
 function renderPickHistories() {
@@ -929,7 +939,11 @@ function getReadyWaitingRoleClass(playerId) {
 }
 
 function getActiveReadyWaiting() {
-  if (screen !== 'playing' || state.status !== 'playing' || isTransitioning) {
+  if (
+    screen !== 'playing' ||
+    isTransitioning ||
+    (state.status !== 'playing' && rankedSnapshot?.phase !== 'roundOver')
+  ) {
     return null;
   }
 
@@ -974,7 +988,7 @@ function getRankedReadyWaitingFromSnapshot(snapshot) {
 
   if (
     playMode !== 'online' ||
-    snapshot?.phase !== 'choosing' ||
+    !['choosing', 'roundOver'].includes(snapshot?.phase) ||
     !snapshot.readyPlayerKey ||
     !snapshot.waitingPlayerKey
   ) {
@@ -995,7 +1009,10 @@ function getLocalPlayerIdFromRankedKey(snapshot, playerKey) {
 }
 
 function shouldClearStageForCountdown() {
-  return getActiveReadyWaiting()?.phase === 'countdown';
+  const readyWaiting = getActiveReadyWaiting();
+
+  return readyWaiting?.phase === 'countdown'
+    || (playMode === 'online' && rankedSnapshot?.phase === 'roundOver' && Boolean(readyWaiting));
 }
 
 function renderTitleScreen() {
@@ -1489,6 +1506,10 @@ function renderActionButtons(legalMoves) {
     if (playMode === 'online') {
       if (rankedSnapshot?.noContest && !rankedSnapshot.winner) {
         return renderSheetButton('quit', 'quit_button', 'Back to menu', 'quit-button');
+      }
+
+      if (rankedSnapshot?.phase === 'roundOver') {
+        return renderContinueButton();
       }
 
       return renderSheetButton('rematch', 'rematch_button', 'Rematch', 'rematch-button');
@@ -2201,6 +2222,7 @@ async function goBackTutorial() {
 
 async function continueGame() {
   if (playMode === 'online') {
+    submitRankedContinue();
     return;
   }
 
@@ -2278,7 +2300,7 @@ function getGameWinner() {
 
 function getMusicTopperFile() {
   if (
-    !isLocalChoiceMode() ||
+    !shouldUseMusicTopper() ||
     isGameOver() ||
     (roundWins.p1 !== GAME_TARGET_ROUNDS - 1 && roundWins.p2 !== GAME_TARGET_ROUNDS - 1)
   ) {
@@ -2290,6 +2312,15 @@ function getMusicTopperFile() {
   }
 
   return getMusicTopperId('tension');
+}
+
+function shouldUseMusicTopper() {
+  return isLocalChoiceMode()
+    || (
+      playMode === 'online' &&
+      ['choosing', 'roundOver'].includes(rankedSnapshot?.phase) &&
+      !rankedSnapshot.noContest
+    );
 }
 
 function isLocalChoiceMode() {
@@ -2339,7 +2370,9 @@ function startRankedFromTitle() {
   screen = 'queue';
   p1QueuedMove = null;
   rankedSnapshot = null;
+  pendingRankedSnapshot = null;
   rankedReadyWaiting = null;
+  rankedRoundAudioKey = null;
   findingMatchStep = 0;
   rankedClient.connect();
   render();
@@ -2356,20 +2389,124 @@ function handleRankedClose() {
     rankedReadyWaiting = null;
     screen = 'title';
     rankedSnapshot = null;
+    pendingRankedSnapshot = null;
+    rankedRoundAudioKey = null;
     render();
   }
 }
 
 function applyRankedSnapshot(snapshot) {
+  pendingRankedSnapshot = snapshot;
+  drainRankedSnapshots();
+}
+
+async function drainRankedSnapshots() {
+  if (isApplyingRankedSnapshot) {
+    return;
+  }
+
+  isApplyingRankedSnapshot = true;
+
+  try {
+    while (pendingRankedSnapshot) {
+      const snapshot = pendingRankedSnapshot;
+      pendingRankedSnapshot = null;
+
+      if (playMode !== 'online') {
+        continue;
+      }
+
+      await processRankedSnapshot(snapshot);
+    }
+  } finally {
+    isApplyingRankedSnapshot = false;
+  }
+}
+
+async function processRankedSnapshot(snapshot) {
   stopFindingMatchTicker();
-  const previousPhase = rankedSnapshot?.phase;
+  const previousSnapshot = rankedSnapshot;
+  const previousPhase = previousSnapshot?.phase;
+
+  if (shouldWipeToRankedSnapshot(previousSnapshot, snapshot)) {
+    await wipeToRankedSnapshot(snapshot, previousPhase);
+    return;
+  }
+
+  commitRankedSnapshot(snapshot, previousPhase);
+  render();
+}
+
+async function wipeToRankedSnapshot(snapshot, previousPhase) {
+  if (snapshot.noContest) {
+    finishMusicLoopThenStop();
+  }
+
+  clearRankedReadyWaitingTimer();
+  isTransitioning = true;
+  await playWipeTransition(() => {
+    commitRankedSnapshot(snapshot, previousPhase);
+    render();
+  });
+  isTransitioning = false;
+  render();
+}
+
+function shouldWipeToRankedSnapshot(previousSnapshot, snapshot) {
+  return shouldWipeToRankedNoContest(previousSnapshot, snapshot)
+    || shouldWipeToRankedReveal(previousSnapshot, snapshot)
+    || shouldWipeToRankedRoundOver(previousSnapshot, snapshot)
+    || shouldWipeToRankedGameOver(previousSnapshot, snapshot)
+    || shouldWipeToRankedNextTurn(previousSnapshot, snapshot);
+}
+
+function shouldWipeToRankedNoContest(previousSnapshot, snapshot) {
+  return playMode === 'online'
+    && snapshot.phase === 'gameOver'
+    && snapshot.noContest
+    && previousSnapshot?.phase !== 'gameOver'
+    && !isTransitioning;
+}
+
+function shouldWipeToRankedReveal(previousSnapshot, snapshot) {
+  return playMode === 'online'
+    && previousSnapshot?.phase === 'choosing'
+    && snapshot.phase === 'revealed'
+    && Boolean(snapshot.revealedMoves)
+    && !isTransitioning;
+}
+
+function shouldWipeToRankedRoundOver(previousSnapshot, snapshot) {
+  return playMode === 'online'
+    && previousSnapshot?.phase === 'revealed'
+    && snapshot.phase === 'roundOver'
+    && !isTransitioning;
+}
+
+function shouldWipeToRankedGameOver(previousSnapshot, snapshot) {
+  return playMode === 'online'
+    && ['revealed', 'roundOver'].includes(previousSnapshot?.phase)
+    && snapshot.phase === 'gameOver'
+    && !snapshot.noContest
+    && !isTransitioning;
+}
+
+function shouldWipeToRankedNextTurn(previousSnapshot, snapshot) {
+  return playMode === 'online'
+    && previousSnapshot?.phase === 'roundOver'
+    && snapshot.phase === 'choosing'
+    && !isTransitioning;
+}
+
+function commitRankedSnapshot(snapshot, previousPhase = rankedSnapshot?.phase) {
   rankedSnapshot = snapshot;
   rankedReadyWaiting = getRankedReadyWaitingFromSnapshot(snapshot);
   screen = 'playing';
   state = getLocalStateFromRankedSnapshot(snapshot);
   roundWins = getLocalRoundWinsFromRankedSnapshot(snapshot);
+  syncMusicTopper();
   turnPhase = getTurnPhaseFromRankedSnapshot(snapshot);
-  p1QueuedMove = snapshot.phase === 'choosing' ? p1QueuedMove : null;
+  p1QueuedMove = snapshot.phase === 'choosing' && previousPhase === 'choosing' ? p1QueuedMove : null;
   if (previousPhase !== snapshot.phase) {
     resetStageAudioKey();
   }
@@ -2381,16 +2518,23 @@ function applyRankedSnapshot(snapshot) {
       name: 'nocontest',
       flip: false,
     };
-  } else if (snapshot.revealedMoves || snapshot.round.lastTurn) {
+  } else if (snapshot.phase === 'revealed') {
     lastMoves = getLocalMovesFromRankedSnapshot(snapshot);
     stagePresentation = getDoodlePresentation(lastMoves.p1, lastMoves.p2);
+  } else if (snapshot.phase === 'roundOver') {
+    stagePresentation = {
+      kind: 'doodle',
+      name: getRoundOverDoodle(getLocalRoundWinnerFromRankedSnapshot(snapshot), true),
+      flip: false,
+    };
   } else if (snapshot.phase === 'countdown') {
     stagePresentation = { kind: 'cue', name: 'READY' };
   } else if (snapshot.phase === 'choosing' && snapshot.readyPlayerKey) {
     stagePresentation = getRankedChoosingPresentation(snapshot);
   } else if (snapshot.phase === 'choosing') {
-    stagePresentation = { kind: 'cue', name: 'GO' };
+    stagePresentation = getRankedIdleChoosingPresentation(snapshot);
   } else if (snapshot.phase === 'gameOver') {
+    finishMusicLoopThenStop();
     stagePresentation = {
       kind: 'doodle',
       name: snapshot.winner === snapshot.playerKey ? 'winner' : 'loser',
@@ -2398,7 +2542,40 @@ function applyRankedSnapshot(snapshot) {
     };
   }
 
-  render();
+  maybePlayRankedRoundResultAudio(snapshot);
+}
+
+function maybePlayRankedRoundResultAudio(snapshot) {
+  if (snapshot.phase !== 'revealed' || !snapshot.round.winner) {
+    return;
+  }
+
+  const audioKey = [
+    snapshot.matchId,
+    snapshot.round.turn,
+    snapshot.round.winner,
+    snapshot.roundWins.p1,
+    snapshot.roundWins.p2,
+  ].join(':');
+
+  if (rankedRoundAudioKey === audioKey) {
+    return;
+  }
+
+  rankedRoundAudioKey = audioKey;
+
+  const didWinRound = snapshot.round.winner === snapshot.playerKey;
+  const isFinalRound = snapshot.roundWins.p1 >= GAME_TARGET_ROUNDS || snapshot.roundWins.p2 >= GAME_TARGET_ROUNDS;
+  interruptMusicFileOnce(didWinRound ? WIN_SOUND_AUDIO : LOSE_JINGLE_AUDIO, isFinalRound ? null : 'game', !isFinalRound);
+}
+
+function getRankedIdleChoosingPresentation(snapshot) {
+  if (snapshot.round.lastTurn) {
+    const moves = getLocalMovesFromRankedSnapshot(snapshot);
+    return getDoodlePresentation(moves.p1, moves.p2);
+  }
+
+  return { kind: 'doodle', name: 'reloading', flip: false };
 }
 
 function getRankedChoosingPresentation(snapshot) {
@@ -2440,6 +2617,18 @@ function getLocalRoundWinsFromRankedSnapshot(snapshot) {
   };
 }
 
+function getLocalRoundWinnerFromRankedSnapshot(snapshot) {
+  if (snapshot.round.winner === snapshot.playerKey) {
+    return 'p1';
+  }
+
+  if (snapshot.round.winner === snapshot.opponentKey) {
+    return 'p2';
+  }
+
+  return null;
+}
+
 function getTurnPhaseFromRankedSnapshot(snapshot) {
   if (snapshot.phase === 'countdown') {
     return 'ready';
@@ -2459,12 +2648,12 @@ function getTurnPhaseFromRankedSnapshot(snapshot) {
 function scheduleRankedReadyWaitingRender() {
   clearRankedReadyWaitingTimer();
 
-  if (!rankedSnapshot || rankedSnapshot.phase !== 'choosing') {
+  if (!rankedSnapshot || !['choosing', 'roundOver'].includes(rankedSnapshot.phase)) {
     return;
   }
 
   if (!rankedReadyWaiting) {
-    if (!rankedSnapshot.noContestWaitingAt) {
+    if (rankedSnapshot.phase !== 'choosing' || !rankedSnapshot.noContestWaitingAt) {
       return;
     }
 
@@ -2521,6 +2710,14 @@ function submitRankedMove(moveId) {
   render();
 }
 
+function submitRankedContinue() {
+  if (!rankedClient.submitContinue(rankedSnapshot)) {
+    return;
+  }
+
+  render();
+}
+
 function leaveRanked() {
   rankedClient.close();
   stopFindingMatchTicker();
@@ -2528,7 +2725,9 @@ function leaveRanked() {
   playMode = 'local';
   clearLocalTurnChoice();
   rankedSnapshot = null;
+  pendingRankedSnapshot = null;
   rankedReadyWaiting = null;
+  rankedRoundAudioKey = null;
   screen = 'title';
   turnPhase = 'idle';
   p1QueuedMove = null;
@@ -2576,15 +2775,6 @@ async function runOpeningCues(token) {
   stagePresentation = { kind: 'cue', name: 'READY' };
   render();
   await waitBeats(READY_BEATS, token);
-
-  if (!isActiveLoop(token)) {
-    return;
-  }
-
-  turnPhase = 'go';
-  stagePresentation = { kind: 'cue', name: 'GO' };
-  render();
-  await waitBeats(1, token);
 
   if (!isActiveLoop(token)) {
     return;
