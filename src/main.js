@@ -12,6 +12,7 @@ import {
   preloadSceneAudio,
   playStageAudio,
   queueMusicTrackOnce,
+  READY_AUDIO,
   requestMusicTrack,
   resetStageAudioKey,
   restartMusicTrackOnce,
@@ -785,9 +786,7 @@ function render() {
 
 function shouldSuppressStageAudio() {
   return playMode === 'online'
-    && rankedSnapshot?.phase === 'choosing'
-    && !rankedSnapshot.readyPlayerKey
-    && Boolean(rankedSnapshot.round.lastTurn);
+    && rankedSnapshot?.phase === 'choosing';
 }
 
 function renderPickHistories() {
@@ -2702,8 +2701,16 @@ function getLocalMovesFromRankedSnapshot(snapshot) {
 }
 
 function submitRankedMove(moveId) {
+  const isReadyPlayer = rankedSnapshot?.phase === 'choosing'
+    && !rankedSnapshot.readyPlayerKey
+    && !rankedSnapshot.waitingPlayerKey;
+
   if (p1QueuedMove || !rankedClient.submitMove(rankedSnapshot, moveId)) {
     return;
+  }
+
+  if (isReadyPlayer) {
+    playOneShotAudio(READY_AUDIO);
   }
 
   p1QueuedMove = moveId;
@@ -2711,8 +2718,16 @@ function submitRankedMove(moveId) {
 }
 
 function submitRankedContinue() {
+  const isReadyPlayer = rankedSnapshot?.phase === 'roundOver'
+    && !rankedSnapshot.readyPlayerKey
+    && !rankedSnapshot.waitingPlayerKey;
+
   if (!rankedClient.submitContinue(rankedSnapshot)) {
     return;
+  }
+
+  if (isReadyPlayer) {
+    playOneShotAudio(READY_AUDIO);
   }
 
   render();

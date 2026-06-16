@@ -1,5 +1,6 @@
 export const STARBURST_WIPE_AUDIO = 'starbust.mp3';
 export const LOSE_JINGLE_AUDIO = 'lose_jingle.mp3';
+export const READY_AUDIO = 'ready.mp3';
 export const WIN_SOUND_AUDIO = 'win_sound.mp3';
 
 const SCENE_AUDIO = Object.freeze({
@@ -729,6 +730,7 @@ function getAudioFiles() {
       ...Object.values(SCENE_AUDIO),
       STARBURST_WIPE_AUDIO,
       LOSE_JINGLE_AUDIO,
+      READY_AUDIO,
       WIN_SOUND_AUDIO,
       ...Object.values(MUSIC_TRACKS),
       ...Object.values(MUSIC_TOPPERS),
