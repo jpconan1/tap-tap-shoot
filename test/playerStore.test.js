@@ -29,7 +29,7 @@ test('SupabasePlayerStore creates missing players', async () => {
     last_played: null,
   });
   assert.equal(requests[0].headers.apikey, 'sb_secret_test');
-  assert.equal(requests[0].headers.Authorization, undefined);
+  assert.equal(requests[0].headers.Authorization, 'Bearer sb_secret_test');
 });
 
 test('SupabasePlayerStore maps saved player fields to database columns', async () => {
@@ -58,6 +58,28 @@ test('SupabasePlayerStore maps saved player fields to database columns', async (
   assert.equal(rows.get('p1').last_played, '2026-06-16T12:00:00.000Z');
 });
 
+test('SupabasePlayerStore reports Supabase errors', async () => {
+  const store = new SupabasePlayerStore({
+    url: 'https://example.supabase.co',
+    secretKey: 'sb_secret_test',
+    fetchImpl: async () => createJsonResponse({
+      message: 'permission denied for table players',
+    }, { ok: false, status: 401 }),
+  });
+
+  await assert.rejects(
+    () => store.getPlayer('p1'),
+    /Could not load player: permission denied for table players/,
+  );
+});
+
+test('SupabasePlayerStore requires credentials', () => {
+  assert.throws(
+    () => new SupabasePlayerStore({ url: '', secretKey: '' }),
+    /requires a url and secret key/,
+  );
+});
+
 function createFakeSupabaseFetch(rows, requests = []) {
   return async (url, options = {}) => {
     requests.push({ url, ...options });
@@ -74,11 +96,15 @@ function createFakeSupabaseFetch(rows, requests = []) {
   };
 }
 
-function createJsonResponse(data) {
+function createJsonResponse(data, { ok = true, status = 200 } = {}) {
   return {
-    ok: true,
+    ok,
+    status,
     async json() {
       return data;
+    },
+    async text() {
+      return JSON.stringify(data);
     },
   };
 }

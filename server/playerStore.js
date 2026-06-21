@@ -70,9 +70,14 @@ export class JsonPlayerStore extends MemoryPlayerStore {
 
 export class SupabasePlayerStore {
   constructor({ url, secretKey, serviceRoleKey, fetchImpl = fetch }) {
-    this.url = url.replace(/\/$/, '');
     this.secretKey = secretKey ?? serviceRoleKey;
     this.fetch = fetchImpl;
+
+    if (!url || !this.secretKey) {
+      throw new Error('SupabasePlayerStore requires a url and secret key');
+    }
+
+    this.url = url.replace(/\/$/, '');
   }
 
   async getPlayer(playerId) {
@@ -89,7 +94,7 @@ export class SupabasePlayerStore {
       await throwSupabaseResponseError('load player', response);
     }
 
-    const [row] = await response.json();
+    const [row] = await readSupabaseJson(response);
 
     return row ? fromPlayerRow(row) : this.savePlayer(createDefaultPlayer(playerId));
   }
@@ -112,7 +117,12 @@ export class SupabasePlayerStore {
       await throwSupabaseResponseError('save player', response);
     }
 
-    const [row] = await response.json();
+    const [row] = await readSupabaseJson(response);
+
+    if (!row) {
+      throw new Error('Could not save player: Supabase returned no row');
+    }
+
     return fromPlayerRow(row);
   }
 
@@ -129,6 +139,7 @@ export class SupabasePlayerStore {
   createHeaders() {
     return {
       apikey: this.secretKey,
+      Authorization: `Bearer ${this.secretKey}`,
       'Content-Type': 'application/json',
     };
   }
@@ -162,6 +173,14 @@ function toPlayerRow(player) {
     losses: player.losses,
     last_played: player.lastPlayed,
   };
+}
+
+async function readSupabaseJson(response) {
+  try {
+    return await response.json();
+  } catch (error) {
+    throw new Error(`Could not parse Supabase response: ${error.message}`);
+  }
 }
 
 async function throwSupabaseResponseError(action, response) {

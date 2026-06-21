@@ -1,19 +1,13 @@
 import { createServer } from 'node:http';
-import { extname, join, normalize } from 'node:path';
+import { pathToFileURL } from 'node:url';
+import { extname, join, normalize, sep } from 'node:path';
 import { readFile } from 'node:fs/promises';
 
 import { JsonPlayerStore, SupabasePlayerStore } from './playerStore.js';
 import { RankedDuelService } from './rankedDuel.js';
 import { attachWebSocketServer } from './webSocket.js';
 
-const PORT = Number(process.env.PORT ?? 8787);
-const WS_MAX_CONNECTIONS = Number(process.env.WS_MAX_CONNECTIONS ?? 2000);
-const WS_MAX_MESSAGE_BYTES = Number(process.env.WS_MAX_MESSAGE_BYTES ?? 16 * 1024);
-const WS_MAX_BUFFERED_BYTES = Number(process.env.WS_MAX_BUFFERED_BYTES ?? 256 * 1024);
-const WS_HEARTBEAT_MS = Number(process.env.WS_HEARTBEAT_MS ?? 30 * 1000);
-const SUPABASE_URL = process.env.SUPABASE_URL;
-const SUPABASE_SECRET_KEY = process.env.SUPABASE_SECRET_KEY ?? process.env.SUPABASE_SERVICE_ROLE_KEY;
-const ROOT = process.cwd();
+const DEFAULT_ROOT = process.cwd();
 const PUBLIC_TYPES = new Map([
   ['.css', 'text/css; charset=utf-8'],
   ['.html', 'text/html; charset=utf-8'],
@@ -21,97 +15,111 @@ const PUBLIC_TYPES = new Map([
   ['.json', 'application/json; charset=utf-8'],
   ['.webp', 'image/webp'],
   ['.mp3', 'audio/mpeg'],
+  ['.ttf', 'font/ttf'],
 ]);
+const PUBLIC_PREFIXES = Object.freeze(['assets/', 'src/']);
 
-const playerStore = SUPABASE_URL && SUPABASE_SECRET_KEY
-  ? new SupabasePlayerStore({
-    url: SUPABASE_URL,
-    secretKey: SUPABASE_SECRET_KEY,
-  })
-  : new JsonPlayerStore(join(ROOT, '.ranked-players.json'));
-const rankedDuel = new RankedDuelService({
-  playerStore,
-  onError(error) {
-    console.error('Ranked service failed:', getErrorMessage(error));
-  },
-});
-const server = createServer(handleStaticRequest);
+export function createTapTapShootServer({
+  env = process.env,
+  root = DEFAULT_ROOT,
+  playerStore = createPlayerStore({ env, root }),
+  rankedDuel = new RankedDuelService({
+    playerStore,
+    onError(error) {
+      console.error('Ranked service failed:', getErrorMessage(error));
+    },
+  }),
+} = {}) {
+  const server = createServer(createStaticRequestHandler({ root, rankedDuel }));
 
-attachWebSocketServer(server, {
-  path: '/ws',
-  maxConnections: WS_MAX_CONNECTIONS,
-  maxMessageBytes: WS_MAX_MESSAGE_BYTES,
-  maxBufferedBytes: WS_MAX_BUFFERED_BYTES,
-  heartbeatMs: WS_HEARTBEAT_MS,
-  onConnection(connection, request) {
-    const params = new URL(request.url, `http://${request.headers.host}`).searchParams;
-    rankedDuel.connect(connection, params.get('playerId')).then((session) => {
-      connection.onMessage((raw) => {
-        try {
-          const result = rankedDuel.receive(session, JSON.parse(raw));
+  attachWebSocketServer(server, {
+    path: '/ws',
+    maxConnections: Number(env.WS_MAX_CONNECTIONS ?? 2000),
+    maxMessageBytes: Number(env.WS_MAX_MESSAGE_BYTES ?? 16 * 1024),
+    maxBufferedBytes: Number(env.WS_MAX_BUFFERED_BYTES ?? 256 * 1024),
+    heartbeatMs: Number(env.WS_HEARTBEAT_MS ?? 30 * 1000),
+    onConnection(connection, request) {
+      const params = new URL(request.url, `http://${request.headers.host}`).searchParams;
+      rankedDuel.connect(connection, params.get('playerId')).then((session) => {
+        connection.onMessage((raw) => {
+          try {
+            const result = rankedDuel.receive(session, JSON.parse(raw));
 
-          if (result?.catch) {
-            result.catch((error) => {
-              console.error('Ranked message failed:', getErrorMessage(error));
-              connection.send(JSON.stringify({ type: 'error', message: 'server error' }));
-            });
+            if (result?.catch) {
+              result.catch((error) => {
+                console.error('Ranked message failed:', getErrorMessage(error));
+                connection.send(JSON.stringify({ type: 'error', message: 'server error' }));
+              });
+            }
+          } catch (error) {
+            console.error('Bad ranked message:', getErrorMessage(error));
+            connection.send(JSON.stringify({ type: 'error', message: 'bad message' }));
           }
-        } catch (error) {
-          console.error('Bad ranked message:', getErrorMessage(error));
-          connection.send(JSON.stringify({ type: 'error', message: 'bad message' }));
-        }
+        });
+        connection.onClose(() => rankedDuel.disconnect(session));
+      }).catch((error) => {
+        console.error('Ranked connection failed:', getErrorMessage(error));
+        connection.send(JSON.stringify({ type: 'error', message: 'server error' }));
+        connection.close();
       });
-      connection.onClose(() => rankedDuel.disconnect(session));
-    }).catch((error) => {
-      console.error('Ranked connection failed:', getErrorMessage(error));
-      connection.send(JSON.stringify({ type: 'error', message: 'server error' }));
-      connection.close();
-    });
-  },
-});
+    },
+  });
 
-server.listen(PORT, () => {
-  console.log(`Tap Tap Shoot server listening on http://localhost:${PORT}`);
-});
+  return { server, rankedDuel };
+}
 
-async function handleStaticRequest(request, response) {
-  if (request.method !== 'GET' && request.method !== 'HEAD') {
-    response.writeHead(405).end();
-    return;
-  }
+export function createPlayerStore({ env = process.env, root = DEFAULT_ROOT } = {}) {
+  const supabaseUrl = env.SUPABASE_URL;
+  const supabaseSecretKey = env.SUPABASE_SECRET_KEY ?? env.SUPABASE_SERVICE_ROLE_KEY;
 
-  const url = new URL(request.url, `http://${request.headers.host}`);
+  return supabaseUrl && supabaseSecretKey
+    ? new SupabasePlayerStore({
+      url: supabaseUrl,
+      secretKey: supabaseSecretKey,
+    })
+    : new JsonPlayerStore(join(root, '.ranked-players.json'));
+}
 
-  if (url.pathname === '/api/ranked-status') {
-    writeJson(response, {
-      playersOnline: rankedDuel.getOnlinePlayerCount(),
-    });
-    return;
-  }
-
-  const pathname = url.pathname === '/' ? '/index.html' : url.pathname;
-  const filePath = getSafePath(pathname);
-
-  if (!filePath) {
-    response.writeHead(403).end();
-    return;
-  }
-
-  try {
-    const body = await readFile(filePath);
-    response.writeHead(200, {
-      'Content-Type': PUBLIC_TYPES.get(extname(filePath)) ?? 'application/octet-stream',
-      'Cache-Control': 'no-store',
-    });
-
-    if (request.method === 'HEAD') {
-      response.end();
-    } else {
-      response.end(body);
+export function createStaticRequestHandler({ root = DEFAULT_ROOT, rankedDuel } = {}) {
+  return async function handleStaticRequest(request, response) {
+    if (request.method !== 'GET' && request.method !== 'HEAD') {
+      response.writeHead(405).end();
+      return;
     }
-  } catch {
-    response.writeHead(404).end('Not found');
-  }
+
+    const url = new URL(request.url, `http://${request.headers.host}`);
+
+    if (url.pathname === '/api/ranked-status') {
+      writeJson(response, {
+        playersOnline: rankedDuel.getOnlinePlayerCount(),
+      });
+      return;
+    }
+
+    const pathname = url.pathname === '/' ? '/index.html' : url.pathname;
+    const filePath = getSafePublicPath(root, pathname);
+
+    if (!filePath) {
+      response.writeHead(404).end('Not found');
+      return;
+    }
+
+    try {
+      const body = await readFile(filePath);
+      response.writeHead(200, {
+        'Content-Type': PUBLIC_TYPES.get(extname(filePath)) ?? 'application/octet-stream',
+        'Cache-Control': 'no-store',
+      });
+
+      if (request.method === 'HEAD') {
+        response.end();
+      } else {
+        response.end(body);
+      }
+    } catch {
+      response.writeHead(404).end('Not found');
+    }
+  };
 }
 
 function writeJson(response, payload) {
@@ -122,12 +130,33 @@ function writeJson(response, payload) {
   response.end(JSON.stringify(payload));
 }
 
-function getSafePath(pathname) {
-  const decoded = decodeURIComponent(pathname);
-  const normalized = normalize(decoded).replace(/^(\.\.[/\\])+/, '');
-  const filePath = join(ROOT, normalized);
+function getSafePublicPath(root, pathname) {
+  let decoded;
 
-  return filePath.startsWith(ROOT) ? filePath : null;
+  try {
+    decoded = decodeURIComponent(pathname);
+  } catch {
+    return null;
+  }
+
+  const normalized = normalize(decoded).replace(/^(\.\.[/\\])+/, '');
+  const publicPath = normalized.replace(/^[/\\]+/, '').split(sep).join('/');
+
+  if (!isPublicPath(publicPath)) {
+    return null;
+  }
+
+  const filePath = join(root, publicPath);
+  return filePath.startsWith(`${root}${sep}`) ? filePath : null;
+}
+
+function isPublicPath(publicPath) {
+  if (publicPath.split('/').some((part) => part.startsWith('.'))) {
+    return false;
+  }
+
+  return publicPath === 'index.html'
+    || PUBLIC_PREFIXES.some((prefix) => publicPath.startsWith(prefix));
 }
 
 function getErrorMessage(error) {
@@ -136,4 +165,13 @@ function getErrorMessage(error) {
   }
 
   return JSON.stringify(error);
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  const port = Number(process.env.PORT ?? 8787);
+  const { server } = createTapTapShootServer();
+
+  server.listen(port, () => {
+    console.log(`Tap Tap Shoot server listening on http://localhost:${port}`);
+  });
 }
