@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { createRoundState, getPlayerLegalMoves, playTurn } from '../src/engine/gameState.js';
-import { MOVE_IDS, getLegalMoves } from '../src/engine/moves.js';
+import { MOVE_IDS, VARIANT_IDS, getLegalMoves, getVariantMoveIds } from '../src/engine/moves.js';
 import { RIVALS, chooseRivalMove } from '../src/engine/rivalAi.js';
 import { resolveTurn } from '../src/engine/resolveTurn.js';
 
@@ -85,6 +85,46 @@ test('4 AP blocks reload and caps AP gain', () => {
   assert.equal(capped.p1Ap, 4);
 });
 
+test('4 Move variant excludes counterstab and makes stab free', () => {
+  const state = createStateWithAp(0, 1, VARIANT_IDS.fourMove);
+
+  assert.deepEqual(getVariantMoveIds(VARIANT_IDS.fourMove), ['reload', 'shoot', 'stab', 'block']);
+  assert.equal(getLegalMoves(0, 1, VARIANT_IDS.fourMove).includes('stab'), true);
+  assert.equal(getPlayerLegalMoves(state, 'p1').includes('counterstab'), false);
+});
+
+test('4 Move variant stab misses reload', () => {
+  const result = resolveTurn({
+    p1Move: 'stab',
+    p2Move: 'reload',
+    p1Ap: 0,
+    p2Ap: 1,
+    variantId: VARIANT_IDS.fourMove,
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.winner, null);
+  assert.equal(result.isRoundOver, false);
+  assert.equal(result.p1Ap, 0);
+  assert.equal(result.p2Ap, 2);
+});
+
+test('4 Move variant shoot beats stab and reload', () => {
+  for (const p2Move of ['stab', 'reload']) {
+    const result = resolveTurn({
+      p1Move: 'shoot',
+      p2Move,
+      p1Ap: 1,
+      p2Ap: 0,
+      variantId: VARIANT_IDS.fourMove,
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(result.winner, 'p1');
+    assert.equal(result.p1Ap, 0);
+  }
+});
+
 test('round state advances on ties and freezes on round win', () => {
   let state = createRoundState();
   let turn = playTurn(state, 'reload', 'reload');
@@ -147,8 +187,9 @@ test('rival AI only chooses legal moves across AP matchups', () => {
   }
 });
 
-function createStateWithAp(rivalAp, playerAp) {
+function createStateWithAp(rivalAp, playerAp, variantId) {
   return {
+    variantId,
     players: {
       p1: { ap: playerAp },
       p2: { ap: rivalAp },

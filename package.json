@@ -6,6 +6,7 @@
   "scripts": {
     "assets:compress-staged": "scripts/compress-staged-assets.sh",
     "assets:check": "scripts/check-compressed-assets.sh",
+    "itch:pack": "sh scripts/package-itch.sh",
     "test": "node --test",
     "server": "node --env-file-if-exists=.env server/index.js"
   }

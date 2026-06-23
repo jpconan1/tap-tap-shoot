@@ -65,6 +65,12 @@ const INTERACTION_DOODLES = Object.freeze({
   'counterstab|counterstab': 'hiding',
 });
 
+const VARIANT_INTERACTION_DOODLES = Object.freeze({
+  fourMove: Object.freeze({
+    'reload|stab': 'counterstab',
+  }),
+});
+
 const STARBURST_WIPE_STEPS = Object.freeze([
   Object.freeze(['1_w']),
   Object.freeze(['2_w', '1']),
@@ -115,8 +121,8 @@ export async function playStarburstWipeTransition(app, onCovered, playWipeAudio)
   overlay.remove();
 }
 
-export function getDoodlePresentation(p1Move, p2Move) {
-  const name = getDoodleForMoves(p1Move, p2Move);
+export function getDoodlePresentation(p1Move, p2Move, { variantId = 'counterstab' } = {}) {
+  const name = getDoodleForMoves(p1Move, p2Move, variantId);
 
   return {
     kind: 'doodle',
@@ -426,10 +432,10 @@ function drawWipeStep(canvas, layers, now) {
   });
 }
 
-function getDoodleForMoves(p1Move, p2Move) {
+function getDoodleForMoves(p1Move, p2Move, variantId) {
   const sortedMoves = [p1Move, p2Move].sort((a, b) => MOVE_IDS.indexOf(a) - MOVE_IDS.indexOf(b));
   const key = sortedMoves.join('|');
-  return INTERACTION_DOODLES[key] ?? 'hiding';
+  return VARIANT_INTERACTION_DOODLES[variantId]?.[key] ?? INTERACTION_DOODLES[key] ?? 'hiding';
 }
 
 function shouldFlipDoodle(doodle, p1Move, p2Move) {
@@ -446,6 +452,10 @@ function shouldFlipDoodle(doodle, p1Move, p2Move) {
   }
 
   if (doodle === 'counterstab') {
+    if (p1Move !== 'counterstab' && p2Move !== 'counterstab') {
+      return p2Move === 'stab';
+    }
+
     return p1Move === 'counterstab';
   }
 

@@ -1,4 +1,4 @@
-import { MOVES } from './engine/moves.js';
+import { DEFAULT_VARIANT_ID, MOVES, VARIANT_IDS, getVariantMoveIds } from './engine/moves.js';
 import { createRoundState, getPlayerLegalMoves, playTurn } from './engine/gameState.js';
 import { chooseRivalMove as chooseAiMove, DEFAULT_RIVAL_ID, RIVALS } from './engine/rivalAi.js';
 import {
@@ -204,6 +204,19 @@ const MOVE_OUTLINE_RELATIONS = Object.freeze({
     counterstab: 'draws',
   }),
 });
+const VARIANT_MOVE_OUTLINE_RELATIONS = Object.freeze({
+  [VARIANT_IDS.fourMove]: Object.freeze({
+    ...MOVE_OUTLINE_RELATIONS,
+    reload: Object.freeze({
+      ...MOVE_OUTLINE_RELATIONS.reload,
+      stab: 'draws',
+    }),
+    stab: Object.freeze({
+      ...MOVE_OUTLINE_RELATIONS.stab,
+      reload: 'draws',
+    }),
+  }),
+});
 const TUTORIAL_OUTCOMES = Object.freeze({
   '1-1:reload': Object.freeze({
     p2Move: 'stab',
@@ -382,6 +395,7 @@ let rankedReadyWaiting = null;
 let rankedReadyWaitingTimer = null;
 let rankedRoundAudioKey = null;
 let rankedDisplayName = readStoredDisplayName();
+let selectedOnlineVariantId = DEFAULT_VARIANT_ID;
 let onlinePlayerCount = null;
 let onlineStatusTimer = null;
 let findingMatchStep = 0;
@@ -701,6 +715,8 @@ function getGamePreloadDoodles() {
     'nocontest',
     'round_won',
     'round_lost',
+    'counterstab_v_button',
+    '4_move_button',
     'tip1graphic',
     'tip2graphicgraphic',
     'title/LOGO',
@@ -860,6 +876,11 @@ function render() {
 
   if (screen === 'opponent-select') {
     renderOpponentSelectScreen();
+    return;
+  }
+
+  if (screen === 'online-variant') {
+    renderOnlineVariantScreen();
     return;
   }
 
@@ -1216,6 +1237,70 @@ function renderTitleScreen() {
   app.querySelector('[data-action="ranked"]').addEventListener('click', startRankedFromTitle);
   app.querySelector('[data-action="tutorial"]').addEventListener('click', startTutorialFromTitle);
   app.querySelector('[data-action="test"]').addEventListener('click', startTestModeFromTitle);
+  mountSpriteRenderers(app.querySelectorAll('.sprite-canvas'));
+}
+
+function renderOnlineVariantScreen() {
+  stopFindingMatchTicker();
+  stopOnlineStatusPolling();
+  requestMusicTrack('title');
+
+  app.innerHTML = `
+    <section class="title-screen online-variant-screen" aria-label="Choose online rules">
+      <canvas
+        class="sprite-canvas title-logo"
+        data-doodle="title/LOGO"
+        data-frame-width="${TITLE_FRAME_WIDTH}"
+        data-frame-height="${TITLE_FRAME_HEIGHT}"
+        width="${TITLE_FRAME_WIDTH}"
+        height="${TITLE_FRAME_HEIGHT}"
+        aria-label="Tap Tap Shoot"
+      ></canvas>
+
+      <div class="title-actions online-variant-actions">
+        <button class="play-button" data-online-variant="${VARIANT_IDS.counterstab}" aria-label="Counterstab rules">
+          <canvas
+            class="sprite-canvas play-button-art"
+            data-doodle="counterstab_v_button"
+            data-frame-width="${TITLE_BUTTON_FRAME_WIDTH}"
+            data-frame-height="${TITLE_BUTTON_FRAME_HEIGHT}"
+            width="${TITLE_BUTTON_FRAME_WIDTH}"
+            height="${TITLE_BUTTON_FRAME_HEIGHT}"
+            aria-hidden="true"
+          ></canvas>
+        </button>
+
+        <button class="play-button" data-online-variant="${VARIANT_IDS.fourMove}" aria-label="4 Move rules">
+          <canvas
+            class="sprite-canvas play-button-art"
+            data-doodle="4_move_button"
+            data-frame-width="${TITLE_BUTTON_FRAME_WIDTH}"
+            data-frame-height="${TITLE_BUTTON_FRAME_HEIGHT}"
+            width="${TITLE_BUTTON_FRAME_WIDTH}"
+            height="${TITLE_BUTTON_FRAME_HEIGHT}"
+            aria-hidden="true"
+          ></canvas>
+        </button>
+      </div>
+
+      <button class="play-button title-back-button" data-action="back-title" aria-label="Back">
+        <canvas
+          class="sprite-canvas play-button-art"
+          data-doodle="back_button"
+          data-frame-width="${TITLE_BUTTON_FRAME_WIDTH}"
+          data-frame-height="${TITLE_BUTTON_FRAME_HEIGHT}"
+          width="${TITLE_BUTTON_FRAME_WIDTH}"
+          height="${TITLE_BUTTON_FRAME_HEIGHT}"
+          aria-hidden="true"
+        ></canvas>
+      </button>
+    </section>
+  `;
+
+  app.querySelectorAll('[data-online-variant]').forEach((button) => {
+    button.addEventListener('click', () => selectOnlineVariant(button.dataset.onlineVariant));
+  });
+  app.querySelector('[data-action="back-title"]').addEventListener('click', returnToTitleFromOnlineVariant);
   mountSpriteRenderers(app.querySelectorAll('.sprite-canvas'));
 }
 
@@ -1740,7 +1825,7 @@ function renderActionButtons(legalMoves) {
     return isGameOver() ? renderGameOverButtons() : renderContinueButton();
   }
 
-  return Object.values(MOVES).map((move) => renderMoveButton(move, legalMoves.has(move.id))).join('');
+  return getActiveMoveIds().map((moveId) => renderMoveButton(MOVES[moveId], legalMoves.has(moveId))).join('');
 }
 
 function renderContinueButton() {
@@ -1777,8 +1862,9 @@ function renderMoveButton(move, isLegal) {
       ? turnPhase === 'scene'
       : turnPhase === 'go' || turnPhase === 'scene'
   ) && !p1QueuedMove;
+  const outlineRelations = getActiveMoveOutlineRelations();
   const relationAttributes = Object.fromEntries(
-    Object.entries(MOVE_OUTLINE_RELATIONS).map(([hoveredMove, relations]) => [
+    Object.entries(outlineRelations).map(([hoveredMove, relations]) => [
       `data-${hoveredMove}-outline`,
       relations[move.id],
     ]),
@@ -1803,6 +1889,23 @@ function renderMoveButton(move, isLegal) {
       ></canvas>
     </button>
   `;
+}
+
+function getActiveMoveIds() {
+  if (playMode === 'online') {
+    return getVariantMoveIds(getActiveOnlineVariantId());
+  }
+
+  return getVariantMoveIds(DEFAULT_VARIANT_ID);
+}
+
+function getActiveMoveOutlineRelations() {
+  const variantId = playMode === 'online' ? getActiveOnlineVariantId() : DEFAULT_VARIANT_ID;
+  return VARIANT_MOVE_OUTLINE_RELATIONS[variantId] ?? MOVE_OUTLINE_RELATIONS;
+}
+
+function getActiveOnlineVariantId() {
+  return rankedSnapshot?.variantId ?? selectedOnlineVariantId;
 }
 
 function renderTestOpponentControls() {
@@ -2105,7 +2208,7 @@ function getReadySplitPresentation(readyPlayerId) {
   }
 
   if (scene === 'counterstab') {
-    return getRoleSplitPresentation(scene, readyPlayerId, lastMoves[readyPlayerId] === 'counterstab'
+    return getRoleSplitPresentation(scene, readyPlayerId, ['counterstab', 'reload'].includes(lastMoves[readyPlayerId])
       ? { role: 'counterer', basePlayerId: 'p2' }
       : { role: 'stabber', basePlayerId: 'p1' });
   }
@@ -2587,7 +2690,31 @@ function startRankedFromTitle() {
 
   playMode = 'online';
   clearLocalTurnChoice();
+  screen = 'online-variant';
+  p1QueuedMove = null;
+  rankedSnapshot = null;
+  pendingRankedSnapshot = null;
+  rankedReadyWaiting = null;
+  rankedRoundAudioKey = null;
+  render();
+}
+
+function selectOnlineVariant(variantId) {
+  if (isTransitioning) {
+    return;
+  }
+
+  selectedOnlineVariantId = variantId === VARIANT_IDS.fourMove ? VARIANT_IDS.fourMove : DEFAULT_VARIANT_ID;
   screen = 'online-name';
+  render();
+}
+
+function returnToTitleFromOnlineVariant() {
+  if (isTransitioning) {
+    return;
+  }
+
+  screen = 'title';
   p1QueuedMove = null;
   rankedSnapshot = null;
   pendingRankedSnapshot = null;
@@ -2602,7 +2729,7 @@ function returnToTitleFromOnlineName() {
   }
 
   stopOnlineStatusPolling();
-  screen = 'title';
+  screen = 'online-variant';
   p1QueuedMove = null;
   rankedSnapshot = null;
   pendingRankedSnapshot = null;
@@ -2650,7 +2777,7 @@ function beginRankedQueue() {
   rankedReadyWaiting = null;
   rankedRoundAudioKey = null;
   findingMatchStep = 0;
-  rankedClient.connect(rankedDisplayName);
+  rankedClient.connect(rankedDisplayName, selectedOnlineVariantId);
   render();
 }
 
@@ -2796,7 +2923,7 @@ function commitRankedSnapshot(snapshot, previousPhase = rankedSnapshot?.phase) {
     };
   } else if (snapshot.phase === 'revealed') {
     lastMoves = getLocalMovesFromRankedSnapshot(snapshot);
-    stagePresentation = getDoodlePresentation(lastMoves.p1, lastMoves.p2);
+    stagePresentation = getDoodlePresentation(lastMoves.p1, lastMoves.p2, { variantId: snapshot.variantId });
   } else if (snapshot.phase === 'roundOver') {
     stagePresentation = {
       kind: 'doodle',
@@ -2848,7 +2975,7 @@ function maybePlayRankedRoundResultAudio(snapshot) {
 function getRankedIdleChoosingPresentation(snapshot) {
   if (snapshot.round.lastTurn) {
     const moves = getLocalMovesFromRankedSnapshot(snapshot);
-    return getDoodlePresentation(moves.p1, moves.p2);
+    return getDoodlePresentation(moves.p1, moves.p2, { variantId: snapshot.variantId });
   }
 
   return { kind: 'doodle', name: 'reloading', flip: false };
@@ -2859,7 +2986,7 @@ function getRankedChoosingPresentation(snapshot) {
     return { kind: 'doodle', name: 'reloading', flip: false };
   }
 
-  return getDoodlePresentation(lastMoves.p1, lastMoves.p2);
+  return getDoodlePresentation(lastMoves.p1, lastMoves.p2, { variantId: snapshot.variantId });
 }
 
 function getLocalStateFromRankedSnapshot(snapshot) {
@@ -2867,6 +2994,7 @@ function getLocalStateFromRankedSnapshot(snapshot) {
   const playerKey = snapshot.playerKey;
 
   return {
+    variantId: snapshot.variantId ?? DEFAULT_VARIANT_ID,
     turn: snapshot.round.turn,
     status: snapshot.phase === 'gameOver' ? 'finished' : 'playing',
     winner: snapshot.winner === playerKey ? 'p1' : snapshot.winner === opponentKey ? 'p2' : null,

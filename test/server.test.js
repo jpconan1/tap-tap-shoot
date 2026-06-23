@@ -5,6 +5,7 @@ import { DEFAULT_RATING, updateRatings } from '../server/elo.js';
 import { MemoryPlayerStore } from '../server/playerStore.js';
 import { RankedDuelService } from '../server/rankedDuel.js';
 import { createRoundState } from '../src/engine/gameState.js';
+import { VARIANT_IDS } from '../src/engine/moves.js';
 
 test('matchmaking pairs similarly rated players into a ranked room', async () => {
   const service = createTestService();
@@ -19,6 +20,23 @@ test('matchmaking pairs similarly rated players into a ranked room', async () =>
   assert.equal(lastMessage(p1).type, 'matchState');
   assert.equal(lastMessage(p1).phase, 'countdown');
   assert.equal(lastMessage(p2).phase, 'countdown');
+});
+
+test('matchmaking keeps variants in separate queues', async () => {
+  const service = createTestService();
+  const p1 = await connectTestPlayer(service, 'p1');
+  const p2 = await connectTestPlayer(service, 'p2');
+  const p3 = await connectTestPlayer(service, 'p3');
+
+  service.receive(p1.session, { type: 'joinRanked', variantId: VARIANT_IDS.counterstab });
+  service.receive(p2.session, { type: 'joinRanked', variantId: VARIANT_IDS.fourMove });
+  service.receive(p3.session, { type: 'joinRanked', variantId: VARIANT_IDS.fourMove });
+
+  assert.equal(service.rooms.size, 1);
+  assert.equal(service.queue.length, 1);
+  assert.equal(service.queue[0], p1.session);
+  assert.equal(lastMessage(p2).variantId, VARIANT_IDS.fourMove);
+  assert.equal(lastMessage(p3).variantId, VARIANT_IDS.fourMove);
 });
 
 test('online player count tracks connected sessions', async () => {
@@ -106,6 +124,26 @@ test('submitted moves resolve immediately when both players lock in', async () =
   assert.equal(room.roundWins.p1, 1);
   assert.equal(lastMessage(p1).revealedMoves.p1, 'shoot');
   assert.equal(lastMessage(p2).revealedMoves.p2, 'stab');
+});
+
+test('4 Move rejects counterstab and accepts free stab', async () => {
+  const { service, p1, p2 } = await createMatchedService({ variantId: VARIANT_IDS.fourMove });
+  const room = onlyRoom(service);
+
+  room.roundState.players.p1.ap = 0;
+  room.roundState.players.p2.ap = 1;
+  service.beginChoosing(room);
+  service.receive(p1.session, { type: 'submitMove', moveId: 'counterstab' });
+  assert.equal(lastMessage(p1).type, 'error');
+  assert.equal(lastMessage(p1).message, 'illegal move');
+
+  service.receive(p1.session, { type: 'submitMove', moveId: 'stab' });
+  service.receive(p2.session, { type: 'submitMove', moveId: 'reload' });
+
+  assert.equal(room.phase, 'revealed');
+  assert.equal(room.roundWins.p1, 0);
+  assert.equal(room.roundWins.p2, 0);
+  assert.deepEqual(lastMessage(p1).revealedMoves, { p1: 'stab', p2: 'reload' });
 });
 
 test('duplicate submits keep the first move', async () => {
@@ -277,6 +315,27 @@ test('first to five ends match and updates Elo once', async () => {
   assert.equal((await store.getPlayer('p2')).rating, expected.opponent);
 });
 
+test('4 Move first to five does not update rating records', async () => {
+  const { service, p1, p2, store } = await createMatchedService({
+    revealMs: 1,
+    variantId: VARIANT_IDS.fourMove,
+  });
+  const room = onlyRoom(service);
+
+  room.roundWins.p1 = 4;
+  service.beginChoosing(room);
+  service.receive(p1.session, { type: 'submitMove', moveId: 'shoot' });
+  service.receive(p2.session, { type: 'submitMove', moveId: 'stab' });
+  await wait(10);
+
+  assert.equal(room.phase, 'gameOver');
+  assert.equal(room.winner, 'p1');
+  assert.equal((await store.getPlayer('p1')).rating, DEFAULT_RATING);
+  assert.equal((await store.getPlayer('p2')).rating, DEFAULT_RATING);
+  assert.equal((await store.getPlayer('p1')).wins, 0);
+  assert.equal((await store.getPlayer('p2')).losses, 0);
+});
+
 test('disconnect forfeits active match', async () => {
   const { service, p1, p2, store } = await createMatchedService();
   const room = onlyRoom(service);
@@ -350,8 +409,8 @@ async function createMatchedService(options) {
   const p1 = await connectTestPlayer(service, 'p1');
   const p2 = await connectTestPlayer(service, 'p2');
 
-  service.receive(p1.session, { type: 'joinRanked' });
-  service.receive(p2.session, { type: 'joinRanked' });
+  service.receive(p1.session, { type: 'joinRanked', variantId: options?.variantId });
+  service.receive(p2.session, { type: 'joinRanked', variantId: options?.variantId });
 
   return { service, p1, p2, store };
 }
@@ -386,7 +445,7 @@ function wait(ms) {
 
 function createFreshRound(service, room) {
   service.clearRoomTimer(room);
-  room.roundState = createRoundState();
+  room.roundState = createRoundState({ variantId: room.variantId });
   room.phase = 'choosing';
   return room.roundState;
 }

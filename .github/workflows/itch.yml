@@ -1,0 +1,61 @@
+name: Deploy itch.io
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'itch-v*'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: itch
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      ITCH_TARGET: ${{ vars.ITCH_TARGET }}
+      BUTLER_API_KEY: ${{ secrets.BUTLER_API_KEY }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Test
+        run: npm test
+
+      - name: Package itch build
+        run: npm run itch:pack
+
+      - name: Check itch config
+        run: |
+          test -n "$ITCH_TARGET" || (echo "Set repository variable ITCH_TARGET, for example jp/burger-joint:html5" && exit 1)
+          test -n "$BUTLER_API_KEY" || (echo "Set repository secret BUTLER_API_KEY" && exit 1)
+
+      - name: Install butler
+        run: |
+          curl -L -o butler.zip https://broth.itch.zone/butler/linux-amd64/LATEST/archive/default
+          unzip butler.zip -d butler
+          chmod +x butler/butler
+          ./butler/butler version
+
+      - name: Push itch build
+        run: |
+          if [ "$GITHUB_REF_TYPE" = "tag" ]; then
+            user_version="$GITHUB_REF_NAME"
+          else
+            user_version="manual-${GITHUB_SHA::7}"
+          fi
+
+          ./butler/butler push dist/itch "$ITCH_TARGET" --userversion "$user_version"

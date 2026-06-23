@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 
 import { createRoundState, getPlayerLegalMoves, playTurn } from '../src/engine/gameState.js';
+import { DEFAULT_VARIANT_ID, VARIANTS, normalizeVariantId } from '../src/engine/moves.js';
 import { updateRatings } from './elo.js';
 import { MemoryPlayerStore } from './playerStore.js';
 
@@ -53,6 +54,7 @@ export class RankedDuelService {
       id: this.createId(),
       player,
       displayName: DEFAULT_DISPLAY_NAME,
+      variantId: DEFAULT_VARIANT_ID,
       client,
       roomId: null,
       queuedAt: null,
@@ -77,6 +79,7 @@ export class RankedDuelService {
 
     if (message.type === 'joinRanked') {
       session.displayName = sanitizeDisplayName(message.displayName);
+      session.variantId = normalizeVariantId(message.variantId);
       this.joinRanked(session);
       return;
     }
@@ -118,7 +121,11 @@ export class RankedDuelService {
     if (!this.queue.includes(session)) {
       session.queuedAt = this.now();
       this.queue.push(session);
-      this.send(session, 'queue', { status: 'searching', rating: session.player.rating });
+      this.send(session, 'queue', {
+        status: 'searching',
+        rating: session.player.rating,
+        variantId: session.variantId,
+      });
     }
 
     this.tryMatchmaking();
@@ -160,6 +167,10 @@ export class RankedDuelService {
         continue;
       }
 
+      if (candidate.variantId !== session.variantId) {
+        continue;
+      }
+
       const ratingDelta = Math.abs(candidate.player.rating - session.player.rating);
 
       if (ratingDelta <= spread) {
@@ -186,7 +197,7 @@ export class RankedDuelService {
         p1: 0,
         p2: 0,
       },
-      roundState: createRoundState(),
+      roundState: createRoundState({ variantId: p1Session.variantId }),
       pendingMoves: new Map(),
       pendingContinues: new Set(),
       readyPlayerKey: null,
@@ -198,6 +209,7 @@ export class RankedDuelService {
       deadlineAt: this.now() + this.countdownMs,
       winner: null,
       ratings: null,
+      variantId: p1Session.variantId,
     };
 
     p1Session.roomId = room.id;
@@ -297,7 +309,7 @@ export class RankedDuelService {
 
     const p1Move = room.pendingMoves.get('p1') ?? getFallbackMove(room.roundState, 'p1');
     const p2Move = room.pendingMoves.get('p2') ?? getFallbackMove(room.roundState, 'p2');
-    const turn = playTurn(room.roundState, p1Move, p2Move);
+    const turn = playTurn(room.roundState, p1Move, p2Move, room.variantId);
 
     if (!turn.ok) {
       throw new Error(turn.error);
@@ -387,7 +399,7 @@ export class RankedDuelService {
 
   beginNextRound(room) {
     this.clearRoomTimer(room);
-    room.roundState = createRoundState();
+    room.roundState = createRoundState({ variantId: room.variantId });
     this.beginChoosing(room);
   }
 
@@ -466,11 +478,13 @@ export class RankedDuelService {
     room.phase = 'gameOver';
     room.winner = winnerKey;
 
-    try {
-      room.ratings = await this.saveMatchResult(room, winnerKey);
-    } catch (error) {
-      room.ratings = null;
-      this.onError(error);
+    if (VARIANTS[room.variantId]?.isRanked) {
+      try {
+        room.ratings = await this.saveMatchResult(room, winnerKey);
+      } catch (error) {
+        room.ratings = null;
+        this.onError(error);
+      }
     }
 
     this.broadcastRoom(room);
@@ -543,9 +557,11 @@ export class RankedDuelService {
 
   getPublicRoomState(room, playerKey) {
     const opponentKey = playerKey === 'p1' ? 'p2' : 'p1';
+    const isRanked = Boolean(VARIANTS[room.variantId]?.isRanked);
 
     return {
       matchId: room.id,
+      variantId: room.variantId,
       playerKey,
       opponentKey,
       phase: room.phase,
@@ -565,14 +581,14 @@ export class RankedDuelService {
           ap: room.roundState.players.p1.ap,
           legalMoves: room.phase === 'choosing' ? getPlayerLegalMoves(room.roundState, 'p1') : [],
           canContinue: room.phase === 'roundOver' && !room.pendingContinues.has('p1'),
-          rating: room.players.p1.player.rating,
+          rating: isRanked ? room.players.p1.player.rating : null,
         },
         p2: {
           displayName: room.players.p2.displayName,
           ap: room.roundState.players.p2.ap,
           legalMoves: room.phase === 'choosing' ? getPlayerLegalMoves(room.roundState, 'p2') : [],
           canContinue: room.phase === 'roundOver' && !room.pendingContinues.has('p2'),
-          rating: room.players.p2.player.rating,
+          rating: isRanked ? room.players.p2.player.rating : null,
         },
       },
       round: {

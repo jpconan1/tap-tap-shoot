@@ -1,3 +1,10 @@
+export const VARIANT_IDS = Object.freeze({
+  counterstab: 'counterstab',
+  fourMove: 'fourMove',
+});
+
+export const DEFAULT_VARIANT_ID = VARIANT_IDS.counterstab;
+
 export const MOVES = Object.freeze({
   reload: Object.freeze({
     id: 'reload',
@@ -34,21 +41,56 @@ export const MOVES = Object.freeze({
 export const MOVE_IDS = Object.freeze(Object.keys(MOVES));
 export const MAX_AP = 4;
 
-export function getMove(moveId) {
-  return MOVES[moveId] ?? null;
+export const VARIANTS = Object.freeze({
+  [VARIANT_IDS.counterstab]: Object.freeze({
+    id: VARIANT_IDS.counterstab,
+    isRanked: true,
+    moveIds: MOVE_IDS,
+    moves: MOVES,
+  }),
+  [VARIANT_IDS.fourMove]: Object.freeze({
+    id: VARIANT_IDS.fourMove,
+    isRanked: false,
+    moveIds: Object.freeze(['reload', 'shoot', 'stab', 'block']),
+    moves: Object.freeze({
+      ...MOVES,
+      stab: Object.freeze({
+        ...MOVES.stab,
+        cost: 0,
+      }),
+    }),
+  }),
+});
+
+export function normalizeVariantId(variantId) {
+  return VARIANTS[variantId]?.id ?? DEFAULT_VARIANT_ID;
 }
 
-export function canAfford(moveId, ap) {
-  const move = getMove(moveId);
+export function getVariant(variantId = DEFAULT_VARIANT_ID) {
+  return VARIANTS[normalizeVariantId(variantId)];
+}
+
+export function getVariantMoveIds(variantId = DEFAULT_VARIANT_ID) {
+  return getVariant(variantId).moveIds;
+}
+
+export function getMove(moveId, variantId = DEFAULT_VARIANT_ID) {
+  const variant = getVariant(variantId);
+  return variant.moveIds.includes(moveId) ? variant.moves[moveId] ?? null : null;
+}
+
+export function canAfford(moveId, ap, variantId = DEFAULT_VARIANT_ID) {
+  const move = getMove(moveId, variantId);
   return Boolean(move) && ap >= move.cost;
 }
 
-export function getLegalMoves(ap, opponentAp = null) {
+export function getLegalMoves(ap, opponentAp = null, variantId = DEFAULT_VARIANT_ID) {
   if (isForcedReload(ap, opponentAp)) {
     return ['reload'];
   }
 
-  return MOVE_IDS.filter((moveId) => canAfford(moveId, ap) && !isBlockedByApCap(moveId, ap));
+  return getVariantMoveIds(variantId)
+    .filter((moveId) => canAfford(moveId, ap, variantId) && !isBlockedByApCap(moveId, ap));
 }
 
 export function isForcedReload(ap, opponentAp) {

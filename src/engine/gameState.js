@@ -1,8 +1,9 @@
-import { getLegalMoves } from './moves.js';
+import { DEFAULT_VARIANT_ID, getLegalMoves, normalizeVariantId } from './moves.js';
 import { resolveTurn } from './resolveTurn.js';
 
-export function createRoundState() {
+export function createRoundState({ variantId = DEFAULT_VARIANT_ID } = {}) {
   return {
+    variantId: normalizeVariantId(variantId),
     turn: 0,
     status: 'playing',
     players: {
@@ -13,7 +14,7 @@ export function createRoundState() {
   };
 }
 
-export function playTurn(state, p1Move, p2Move) {
+export function playTurn(state, p1Move, p2Move, variantId = state.variantId ?? DEFAULT_VARIANT_ID) {
   if (state.status !== 'playing') {
     return {
       ok: false,
@@ -27,6 +28,7 @@ export function playTurn(state, p1Move, p2Move) {
     p2Move,
     p1Ap: state.players.p1.ap,
     p2Ap: state.players.p2.ap,
+    variantId,
   });
 
   if (!result.ok) {
@@ -80,9 +82,9 @@ export function playTurn(state, p1Move, p2Move) {
   };
 }
 
-export function getPlayerLegalMoves(state, playerId) {
+export function getPlayerLegalMoves(state, playerId, variantId = state.variantId ?? DEFAULT_VARIANT_ID) {
   const opponentId = playerId === 'p1' ? 'p2' : 'p1';
-  return getLegalMoves(state.players[playerId].ap, state.players[opponentId].ap);
+  return getLegalMoves(state.players[playerId].ap, state.players[opponentId].ap, variantId);
 }
 
 function createPlayerState() {
