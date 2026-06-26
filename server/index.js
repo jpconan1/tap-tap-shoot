@@ -156,6 +156,7 @@ function isPublicPath(publicPath) {
   }
 
   return publicPath === 'index.html'
+    || publicPath === 'layout-editor.html'
     || PUBLIC_PREFIXES.some((prefix) => publicPath.startsWith(prefix));
 }
 

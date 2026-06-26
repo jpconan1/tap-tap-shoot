@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Tap Tap Shoot Layout Tool</title>
+    <link rel="stylesheet" href="./src/layout-editor.css" />
+  </head>
+  <body>
+    <header class="toolbar">
+      <strong>Layout Tool</strong>
+      <div class="orientation-switch" role="group" aria-label="Layout orientation">
+        <button class="active" data-orientation="landscape" type="button">Landscape 960×540</button>
+        <button data-orientation="portrait" type="button">Portrait 540×960</button>
+      </div>
+      <button data-action="export" type="button">Export JSON</button>
+      <button data-action="import" type="button">Import JSON</button>
+      <button data-action="clear" class="danger" type="button">Clear layout</button>
+      <input data-import-file type="file" accept="application/json,.json" hidden />
+      <span class="save-status" data-save-status>Saved locally</span>
+    </header>
+
+    <main class="workspace">
+      <aside class="panel asset-panel">
+        <h1>Assets</h1>
+        <div class="asset-list" data-asset-list></div>
+      </aside>
+
+      <section class="stage-area">
+        <div class="stage-scroll">
+          <div class="stage landscape" data-stage tabindex="0" aria-label="Layout canvas"></div>
+        </div>
+        <footer class="help">
+          Drag to move. Arrow keys: 1px. Shift + arrows: 10px. Delete: remove. ⌘/Ctrl+D: duplicate.
+        </footer>
+      </section>
+
+      <aside class="panel inspector-panel">
+        <h1>Selected</h1>
+        <div class="empty-selection" data-empty-selection>Select an element.</div>
+        <form class="inspector" data-inspector hidden>
+          <label>
+            Name
+            <input name="name" autocomplete="off" />
+          </label>
+          <div class="field-grid">
+            <label>X <input name="x" type="number" step="1" /></label>
+            <label>Y <input name="y" type="number" step="1" /></label>
+            <label>Width <input name="width" type="number" min="1" step="1" /></label>
+            <label>Height <input name="height" type="number" min="1" step="1" /></label>
+          </div>
+          <label>
+            Asset
+            <input name="asset" readonly />
+          </label>
+          <div class="button-row">
+            <button data-action="duplicate" type="button">Duplicate</button>
+            <button data-action="delete" class="danger" type="button">Delete</button>
+          </div>
+          <div class="button-row">
+            <button data-action="backward" type="button">Send backward</button>
+            <button data-action="forward" type="button">Bring forward</button>
+          </div>
+        </form>
+
+        <h1 class="layers-title">Layers</h1>
+        <div class="layer-list" data-layer-list></div>
+      </aside>
+    </main>
+
+    <script src="./src/layout-assets.js"></script>
+    <script src="./src/layout-editor.js"></script>
+  </body>
+</html>
