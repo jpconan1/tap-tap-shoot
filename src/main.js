@@ -1,4 +1,4 @@
-import { DEFAULT_VARIANT_ID, MOVES, VARIANT_IDS, getVariantMoveIds } from './engine/moves.js';
+import { DEFAULT_VARIANT_ID, MOVES, getVariantMoveIds } from './engine/moves.js';
 import { createRoundState, getPlayerLegalMoves, playTurn } from './engine/gameState.js';
 import { chooseRivalMove as chooseAiMove, DEFAULT_RIVAL_ID, RIVALS } from './engine/rivalAi.js';
 import {
@@ -42,10 +42,10 @@ const BUTTON_FRAME_WIDTH = 256;
 const BUTTON_FRAME_HEIGHT = 128;
 const TURN_FRAME_WIDTH = 256;
 const TURN_FRAME_HEIGHT = 128;
-const AP_LABEL_FRAME_WIDTH = 234;
-const AP_LABEL_FRAME_HEIGHT = 33;
-const AP_ICON_FRAME_WIDTH = 64;
-const AP_ICON_FRAME_HEIGHT = 64;
+const BULLETS_LABEL_FRAME_WIDTH = 234;
+const BULLETS_LABEL_FRAME_HEIGHT = 33;
+const BULLETS_ICON_FRAME_WIDTH = 64;
+const BULLETS_ICON_FRAME_HEIGHT = 64;
 const WINS_LABEL_FRAME_WIDTH = 128;
 const WINS_LABEL_FRAME_HEIGHT = 64;
 const WIN_MARK_FRAME_WIDTH = 64;
@@ -68,7 +68,7 @@ const CROSSED_FRAME_WIDTH = 384;
 const CROSSED_FRAME_HEIGHT = 192;
 const OUTLINE_FRAME_WIDTH = 384;
 const OUTLINE_FRAME_HEIGHT = 192;
-const AP_SLOT_COUNT = 4;
+const BULLET_SLOT_COUNT = 4;
 const LAST_NUMBERED_TURN = 21;
 const GAME_TARGET_ROUNDS = 5;
 const FRAME_WIDTH = 1100;
@@ -157,85 +157,59 @@ const MOVE_BUTTON_DOODLES = Object.freeze({
   reload: 'reload_button',
   shoot: 'shoot_button',
   stab: 'stab_button',
-  block: 'dodge_button',
-  counterstab: 'counterstab_button',
+  duck: 'dodge_button',
 });
 const MOVE_ICON_DOODLES = Object.freeze({
   reload: 'reload_icon',
   shoot: 'shoot_icon',
   stab: 'stab_icon',
-  block: 'dodge_icon',
-  counterstab: 'counterstab_icon',
+  duck: 'dodge_icon',
 });
 const MOVE_OUTLINE_RELATIONS = Object.freeze({
   reload: Object.freeze({
     reload: 'draws',
     shoot: 'loses',
-    stab: 'loses',
-    block: 'draws',
-    counterstab: 'draws',
+    stab: 'draws',
+    duck: 'draws',
   }),
   shoot: Object.freeze({
     reload: 'beats',
     shoot: 'draws',
     stab: 'beats',
-    block: 'draws',
-    counterstab: 'beats',
+    duck: 'draws',
   }),
   stab: Object.freeze({
-    reload: 'beats',
+    reload: 'draws',
     shoot: 'loses',
     stab: 'draws',
-    block: 'beats',
-    counterstab: 'draws',
+    duck: 'beats',
   }),
-  block: Object.freeze({
+  duck: Object.freeze({
     reload: 'draws',
     shoot: 'draws',
     stab: 'loses',
-    block: 'draws',
-    counterstab: 'draws',
-  }),
-  counterstab: Object.freeze({
-    reload: 'draws',
-    shoot: 'loses',
-    stab: 'draws',
-    block: 'draws',
-    counterstab: 'draws',
-  }),
-});
-const VARIANT_MOVE_OUTLINE_RELATIONS = Object.freeze({
-  [VARIANT_IDS.fourMove]: Object.freeze({
-    ...MOVE_OUTLINE_RELATIONS,
-    reload: Object.freeze({
-      ...MOVE_OUTLINE_RELATIONS.reload,
-      stab: 'draws',
-    }),
-    stab: Object.freeze({
-      ...MOVE_OUTLINE_RELATIONS.stab,
-      reload: 'draws',
-    }),
+    duck: 'draws',
   }),
 });
 const TUTORIAL_OUTCOMES = Object.freeze({
   '1-1:reload': Object.freeze({
     p2Move: 'stab',
     lines: Object.freeze([
-      Object.freeze({ text: 'Reloading while your opponent has an Action Point' }),
+      Object.freeze({ text: 'Reloading while your opponent has a Bullet' }),
       Object.freeze({ text: 'is a bad idea.' }),
       Object.freeze({ text: 'They get a Win.' }),
     ]),
   }),
   '1-1:shoot': Object.freeze({
-    p2Move: 'block',
+    p2Move: 'duck',
     lines: Object.freeze([
       Object.freeze({ text: 'Watch out!', size: 'big' }),
-      Object.freeze({ text: 'They have an Action Point' }),
+      Object.freeze({ text: 'They have a Bullet' }),
       Object.freeze({ text: "and you don't." }),
     ]),
   }),
   '1-1:stab': Object.freeze({
-    p2Move: 'block',
+    p2Move: 'duck',
     lines: Object.freeze([
       Object.freeze({ text: 'Nice.', size: 'big' }),
       Object.freeze({ text: 'They thought you were' }),
@@ -243,7 +217,7 @@ const TUTORIAL_OUTCOMES = Object.freeze({
       Object.freeze({ text: 'You get a Win.' }),
     ]),
   }),
-  '1-1:block': Object.freeze({
+  '1-1:duck': Object.freeze({
     p2Move: 'shoot',
     lines: Object.freeze([
       Object.freeze({ text: 'Nice.', size: 'big' }),
@@ -252,15 +226,8 @@ const TUTORIAL_OUTCOMES = Object.freeze({
       Object.freeze({ text: 'attack next round.' }),
     ]),
   }),
-  '1-1:counterstab': Object.freeze({
-    p2Move: 'shoot',
-    lines: Object.freeze([
-      Object.freeze({ text: 'Guessed wrong.' }),
-      Object.freeze({ text: 'They get a Win.' }),
-    ]),
-  }),
   '1-0:reload': Object.freeze({
-    p2Move: 'block',
+    p2Move: 'duck',
     lines: Object.freeze([
       Object.freeze({ text: 'Cunning.', size: 'big' }),
       Object.freeze({ text: 'Your advantage grew' }),
@@ -268,7 +235,7 @@ const TUTORIAL_OUTCOMES = Object.freeze({
     ]),
   }),
   '1-0:shoot': Object.freeze({
-    p2Move: 'block',
+    p2Move: 'duck',
     lines: Object.freeze([
       Object.freeze({ text: 'Back to even.', size: 'big' }),
       Object.freeze({ text: 'They guessed right.' }),
@@ -276,24 +243,14 @@ const TUTORIAL_OUTCOMES = Object.freeze({
     ]),
   }),
   '1-0:stab': Object.freeze({
-    p2Move: 'counterstab',
+    p2Move: 'duck',
     lines: Object.freeze([
       Object.freeze({ text: 'Back to even.', size: 'big' }),
       Object.freeze({ text: 'They guessed right.' }),
       Object.freeze({ text: 'How mysterious.', size: 'small' }),
     ]),
   }),
-  '1-0:block': Object.freeze({
-    p2Move: 'reload',
-    lines: Object.freeze([
-      Object.freeze({ text: 'Odd choice.', size: 'big' }),
-      Object.freeze({ text: 'You made a defensive move' }),
-      Object.freeze({ text: 'when your opponent' }),
-      Object.freeze({ text: "couldn't attack." }),
-      Object.freeze({ text: 'Back to even.' }),
-    ]),
-  }),
-  '1-0:counterstab': Object.freeze({
+  '1-0:duck': Object.freeze({
     p2Move: 'reload',
     lines: Object.freeze([
       Object.freeze({ text: 'Odd choice.', size: 'big' }),
@@ -311,7 +268,7 @@ const TUTORIAL_OUTCOMES = Object.freeze({
       Object.freeze({ text: 'in this tutorial.' }),
     ]),
   }),
-  '0-1:block': Object.freeze({
+  '0-1:duck': Object.freeze({
     p2Move: 'shoot',
     lines: Object.freeze([
       Object.freeze({ text: 'Whew!', size: 'big' }),
@@ -319,16 +276,8 @@ const TUTORIAL_OUTCOMES = Object.freeze({
       Object.freeze({ text: 'Back to even.' }),
     ]),
   }),
-  '0-1:counterstab': Object.freeze({
-    p2Move: 'stab',
-    lines: Object.freeze([
-      Object.freeze({ text: 'Whew!', size: 'big' }),
-      Object.freeze({ text: 'You avoided the attack!' }),
-      Object.freeze({ text: 'Back to even.' }),
-    ]),
-  }),
   'advantage:reload': Object.freeze({
-    p2Move: 'block',
+    p2Move: 'duck',
     lines: Object.freeze([
       Object.freeze({ text: 'Cunning.', size: 'big' }),
       Object.freeze({ text: 'Your advantage grew' }),
@@ -336,30 +285,21 @@ const TUTORIAL_OUTCOMES = Object.freeze({
     ]),
   }),
   'advantage:shoot': Object.freeze({
-    p2Move: 'block',
+    p2Move: 'duck',
     lines: Object.freeze([
       Object.freeze({ text: 'They guessed right.' }),
       Object.freeze({ text: 'How mysterious.', size: 'small' }),
     ]),
   }),
   'advantage:stab': Object.freeze({
-    p2Move: 'counterstab',
+    p2Move: 'duck',
     lines: Object.freeze([
       Object.freeze({ text: 'They guessed right.' }),
       Object.freeze({ text: 'How mysterious.', size: 'small' }),
     ]),
   }),
-  'advantage:block': Object.freeze({
-    p2Move: 'block',
-    lines: Object.freeze([
-      Object.freeze({ text: 'Odd choice.', size: 'big' }),
-      Object.freeze({ text: 'You made a defensive move' }),
-      Object.freeze({ text: 'when your opponent' }),
-      Object.freeze({ text: "couldn't attack." }),
-    ]),
-  }),
-  'advantage:counterstab': Object.freeze({
-    p2Move: 'block',
+  'advantage:duck': Object.freeze({
+    p2Move: 'duck',
     lines: Object.freeze([
       Object.freeze({ text: 'Odd choice.', size: 'big' }),
       Object.freeze({ text: 'You made a defensive move' }),
@@ -395,7 +335,6 @@ let rankedReadyWaiting = null;
 let rankedReadyWaitingTimer = null;
 let rankedRoundAudioKey = null;
 let rankedDisplayName = readStoredDisplayName();
-let selectedOnlineVariantId = DEFAULT_VARIANT_ID;
 let onlinePlayerCount = null;
 let onlineStatusTimer = null;
 let findingMatchStep = 0;
@@ -693,8 +632,8 @@ function getGamePreloadDoodles() {
   return [
     ...getRendererPreloadDoodles(),
     'READY',
-    'action_points',
-    'ap_icon',
+    'bullets_label',
+    'bullet_icon',
     'back_button',
     'beats_outline',
     'continue_button',
@@ -715,8 +654,6 @@ function getGamePreloadDoodles() {
     'nocontest',
     'round_won',
     'round_lost',
-    'counterstab_v_button',
-    '4_move_button',
     'tip1graphic',
     'tip2graphicgraphic',
     'title/LOGO',
@@ -879,11 +816,6 @@ function render() {
     return;
   }
 
-  if (screen === 'online-variant') {
-    renderOnlineVariantScreen();
-    return;
-  }
-
   if (screen === 'online-name') {
     renderOnlineNameScreen();
     return;
@@ -910,7 +842,7 @@ function render() {
       </figure>
       ${renderTestOpponentControls()}
       ${renderReadyWaitingOverlay()}
-      ${renderApMeters()}
+      ${renderBulletMeters()}
     </section>
 
     <section class="moves" aria-label="Moves">
@@ -1091,7 +1023,7 @@ function getReadyWaitingRoleClass(playerId) {
   }
 
   if (scene === 'scene-counterstab') {
-    return lastMoves[playerId] === 'counterstab' ? 'role-counterer' : 'role-stabber';
+    return lastMoves[playerId] === 'reload' ? 'role-counterer' : 'role-stabber';
   }
 
   return '';
@@ -1240,70 +1172,6 @@ function renderTitleScreen() {
   mountSpriteRenderers(app.querySelectorAll('.sprite-canvas'));
 }
 
-function renderOnlineVariantScreen() {
-  stopFindingMatchTicker();
-  stopOnlineStatusPolling();
-  requestMusicTrack('title');
-
-  app.innerHTML = `
-    <section class="title-screen online-variant-screen" aria-label="Choose online rules">
-      <canvas
-        class="sprite-canvas title-logo"
-        data-doodle="title/LOGO"
-        data-frame-width="${TITLE_FRAME_WIDTH}"
-        data-frame-height="${TITLE_FRAME_HEIGHT}"
-        width="${TITLE_FRAME_WIDTH}"
-        height="${TITLE_FRAME_HEIGHT}"
-        aria-label="Tap Tap Shoot"
-      ></canvas>
-
-      <div class="title-actions online-variant-actions">
-        <button class="play-button" data-online-variant="${VARIANT_IDS.counterstab}" aria-label="Counterstab rules">
-          <canvas
-            class="sprite-canvas play-button-art"
-            data-doodle="counterstab_v_button"
-            data-frame-width="${TITLE_BUTTON_FRAME_WIDTH}"
-            data-frame-height="${TITLE_BUTTON_FRAME_HEIGHT}"
-            width="${TITLE_BUTTON_FRAME_WIDTH}"
-            height="${TITLE_BUTTON_FRAME_HEIGHT}"
-            aria-hidden="true"
-          ></canvas>
-        </button>
-
-        <button class="play-button" data-online-variant="${VARIANT_IDS.fourMove}" aria-label="4 Move rules">
-          <canvas
-            class="sprite-canvas play-button-art"
-            data-doodle="4_move_button"
-            data-frame-width="${TITLE_BUTTON_FRAME_WIDTH}"
-            data-frame-height="${TITLE_BUTTON_FRAME_HEIGHT}"
-            width="${TITLE_BUTTON_FRAME_WIDTH}"
-            height="${TITLE_BUTTON_FRAME_HEIGHT}"
-            aria-hidden="true"
-          ></canvas>
-        </button>
-      </div>
-
-      <button class="play-button title-back-button" data-action="back-title" aria-label="Back">
-        <canvas
-          class="sprite-canvas play-button-art"
-          data-doodle="back_button"
-          data-frame-width="${TITLE_BUTTON_FRAME_WIDTH}"
-          data-frame-height="${TITLE_BUTTON_FRAME_HEIGHT}"
-          width="${TITLE_BUTTON_FRAME_WIDTH}"
-          height="${TITLE_BUTTON_FRAME_HEIGHT}"
-          aria-hidden="true"
-        ></canvas>
-      </button>
-    </section>
-  `;
-
-  app.querySelectorAll('[data-online-variant]').forEach((button) => {
-    button.addEventListener('click', () => selectOnlineVariant(button.dataset.onlineVariant));
-  });
-  app.querySelector('[data-action="back-title"]').addEventListener('click', returnToTitleFromOnlineVariant);
-  mountSpriteRenderers(app.querySelectorAll('.sprite-canvas'));
-}
-
 function renderOnlineNameScreen() {
   stopFindingMatchTicker();
   requestMusicTrack('title');
@@ -1361,7 +1229,7 @@ function renderTutorialScreen() {
       <figure class="doodle-stage tutorial-stage">
         ${renderTutorialStage()}
       </figure>
-      ${renderApMeters()}
+      ${renderBulletMeters()}
     </section>
 
     <section class="moves tutorial-moves" aria-label="Tutorial controls">
@@ -1449,14 +1317,14 @@ function renderTutorialSlide() {
     `,
     `
       <p>You need an</p>
-      <p><strong>Action Point</strong></p>
+      <p><strong>Bullet</strong></p>
       <p>to attack.</p>
       <p>Each player starts with one.</p>
       <p>Defensive moves are free.</p>
     `,
     `
       <p><strong>Reloading</strong></p>
-      <p>stocks an Action Point,</p>
+      <p>stocks a Bullet,</p>
       <p>but leaves you open.</p>
     `,
     `
@@ -1494,7 +1362,7 @@ function renderTutorialTipsSlide() {
       <div class="tutorial-side-copy">
         <p><strong>Tips</strong></p>
         <p>The game is all about</p>
-        <p>relative Action Points.</p>
+        <p>relative Bullets.</p>
         <p>When each player has</p>
         <p>one, the game is like</p>
         <p>Rock Paper Scissors.</p>
@@ -1505,7 +1373,7 @@ function renderTutorialTipsSlide() {
       <div class="tutorial-side-copy">
         <p><strong>Tips</strong></p>
         <p>But when a player has an</p>
-        <p>Action Point advantage,</p>
+        <p>Bullet advantage,</p>
         <p>they can enforce a mixup.</p>
       </div>
     `,
@@ -1716,11 +1584,11 @@ function getPlayerIdentity(playerId) {
   };
 }
 
-function renderApMeters() {
+function renderBulletMeters() {
   return `
-    <div class="ap-super-meters" aria-label="Action points">
-      ${renderApMeter('p1', state.players.p1.ap)}
-      ${renderApMeter('p2', state.players.p2.ap)}
+    <div class="bullets-super-meters" aria-label="Bullets">
+      ${renderBulletMeter('p1', state.players.p1.bullets)}
+      ${renderBulletMeter('p2', state.players.p2.bullets)}
     </div>
   `;
 }
@@ -1760,45 +1628,45 @@ function renderWinMark(count) {
   `;
 }
 
-function renderApMeter(playerId, ap) {
+function renderBulletMeter(playerId, bullets) {
   return `
-    <div class="ap-meter ${playerId}">
+    <div class="bullets-meter ${playerId}">
       <canvas
-        class="sprite-canvas ap-label"
-        data-doodle="action_points"
-        data-frame-width="${AP_LABEL_FRAME_WIDTH}"
-        data-frame-height="${AP_LABEL_FRAME_HEIGHT}"
-        width="${AP_LABEL_FRAME_WIDTH}"
-        height="${AP_LABEL_FRAME_HEIGHT}"
+        class="sprite-canvas bullets-label"
+        data-doodle="bullets_label"
+        data-frame-width="${BULLETS_LABEL_FRAME_WIDTH}"
+        data-frame-height="${BULLETS_LABEL_FRAME_HEIGHT}"
+        width="${BULLETS_LABEL_FRAME_WIDTH}"
+        height="${BULLETS_LABEL_FRAME_HEIGHT}"
         aria-hidden="true"
       ></canvas>
-      <div class="ap-icons" aria-label="${playerId} action points: ${ap}">
-        ${Array.from({ length: AP_SLOT_COUNT }, (_, index) => renderApSlot(playerId, index, ap)).join('')}
+      <div class="bullets-icons" aria-label="${playerId} bullets: ${bullets}">
+        ${Array.from({ length: BULLET_SLOT_COUNT }, (_, index) => renderBulletSlot(playerId, index, bullets)).join('')}
       </div>
     </div>
   `;
 }
 
-function renderApSlot(playerId, index, ap) {
-  const slot = playerId === 'p2' ? AP_SLOT_COUNT - index : index + 1;
-  const isFilled = slot <= ap;
+function renderBulletSlot(playerId, index, bullets) {
+  const slot = playerId === 'p2' ? BULLET_SLOT_COUNT - index : index + 1;
+  const isFilled = slot <= bullets;
 
   return `
-    <span class="ap-slot">
-      ${isFilled ? renderApIcon() : ''}
+    <span class="bullets-slot">
+      ${isFilled ? renderBulletIcon() : ''}
     </span>
   `;
 }
 
-function renderApIcon() {
+function renderBulletIcon() {
   return `
     <canvas
-      class="sprite-canvas ap-icon"
-      data-doodle="ap_icon"
-      data-frame-width="${AP_ICON_FRAME_WIDTH}"
-      data-frame-height="${AP_ICON_FRAME_HEIGHT}"
-      width="${AP_ICON_FRAME_WIDTH}"
-      height="${AP_ICON_FRAME_HEIGHT}"
+      class="sprite-canvas bullets-icon"
+      data-doodle="bullet_icon"
+      data-frame-width="${BULLETS_ICON_FRAME_WIDTH}"
+      data-frame-height="${BULLETS_ICON_FRAME_HEIGHT}"
+      width="${BULLETS_ICON_FRAME_WIDTH}"
+      height="${BULLETS_ICON_FRAME_HEIGHT}"
       aria-hidden="true"
     ></canvas>
   `;
@@ -1892,20 +1760,11 @@ function renderMoveButton(move, isLegal) {
 }
 
 function getActiveMoveIds() {
-  if (playMode === 'online') {
-    return getVariantMoveIds(getActiveOnlineVariantId());
-  }
-
   return getVariantMoveIds(DEFAULT_VARIANT_ID);
 }
 
 function getActiveMoveOutlineRelations() {
-  const variantId = playMode === 'online' ? getActiveOnlineVariantId() : DEFAULT_VARIANT_ID;
-  return VARIANT_MOVE_OUTLINE_RELATIONS[variantId] ?? MOVE_OUTLINE_RELATIONS;
-}
-
-function getActiveOnlineVariantId() {
-  return rankedSnapshot?.variantId ?? selectedOnlineVariantId;
+  return MOVE_OUTLINE_RELATIONS;
 }
 
 function renderTestOpponentControls() {
@@ -2083,8 +1942,8 @@ function getOrCreateLocalTurnChoice() {
 function getLocalTurnChoiceKey() {
   return [
     state.turn,
-    state.players.p1.ap,
-    state.players.p2.ap,
+    state.players.p1.bullets,
+    state.players.p2.bullets,
     roundWins.p1,
     roundWins.p2,
   ].join(':');
@@ -2208,7 +2067,7 @@ function getReadySplitPresentation(readyPlayerId) {
   }
 
   if (scene === 'counterstab') {
-    return getRoleSplitPresentation(scene, readyPlayerId, ['counterstab', 'reload'].includes(lastMoves[readyPlayerId])
+    return getRoleSplitPresentation(scene, readyPlayerId, lastMoves[readyPlayerId] === 'reload'
       ? { role: 'counterer', basePlayerId: 'p2' }
       : { role: 'stabber', basePlayerId: 'p1' });
   }
@@ -2690,31 +2549,7 @@ function startRankedFromTitle() {
 
   playMode = 'online';
   clearLocalTurnChoice();
-  screen = 'online-variant';
-  p1QueuedMove = null;
-  rankedSnapshot = null;
-  pendingRankedSnapshot = null;
-  rankedReadyWaiting = null;
-  rankedRoundAudioKey = null;
-  render();
-}
-
-function selectOnlineVariant(variantId) {
-  if (isTransitioning) {
-    return;
-  }
-
-  selectedOnlineVariantId = variantId === VARIANT_IDS.fourMove ? VARIANT_IDS.fourMove : DEFAULT_VARIANT_ID;
   screen = 'online-name';
-  render();
-}
-
-function returnToTitleFromOnlineVariant() {
-  if (isTransitioning) {
-    return;
-  }
-
-  screen = 'title';
   p1QueuedMove = null;
   rankedSnapshot = null;
   pendingRankedSnapshot = null;
@@ -2729,7 +2564,7 @@ function returnToTitleFromOnlineName() {
   }
 
   stopOnlineStatusPolling();
-  screen = 'online-variant';
+  screen = 'title';
   p1QueuedMove = null;
   rankedSnapshot = null;
   pendingRankedSnapshot = null;
@@ -2777,7 +2612,7 @@ function beginRankedQueue() {
   rankedReadyWaiting = null;
   rankedRoundAudioKey = null;
   findingMatchStep = 0;
-  rankedClient.connect(rankedDisplayName, selectedOnlineVariantId);
+  rankedClient.connect(rankedDisplayName, DEFAULT_VARIANT_ID);
   render();
 }
 
@@ -3000,12 +2835,12 @@ function getLocalStateFromRankedSnapshot(snapshot) {
     winner: snapshot.winner === playerKey ? 'p1' : snapshot.winner === opponentKey ? 'p2' : null,
     players: {
       p1: {
-        ap: snapshot.players[playerKey].ap,
+        bullets: snapshot.players[playerKey].bullets,
         move: null,
         hit: null,
       },
       p2: {
-        ap: snapshot.players[opponentKey].ap,
+        bullets: snapshot.players[opponentKey].bullets,
         move: null,
         hit: null,
       },
@@ -3308,11 +3143,11 @@ function isActiveLoop(token) {
 }
 
 function getTutorialOutcome(p1Move) {
-  const p1Ap = state.players.p1.ap;
-  const p2Ap = state.players.p2.ap;
-  const key = `${p1Ap}-${p2Ap}:${p1Move}`;
+  const p1Bullets = state.players.p1.bullets;
+  const p2Bullets = state.players.p2.bullets;
+  const key = `${p1Bullets}-${p2Bullets}:${p1Move}`;
   const outcome = TUTORIAL_OUTCOMES[key]
-    ?? (p2Ap === 0 && p1Ap >= 2 && p1Ap <= 4 ? TUTORIAL_OUTCOMES[`advantage:${p1Move}`] : null);
+    ?? (p2Bullets === 0 && p1Bullets >= 2 && p1Bullets <= 4 ? TUTORIAL_OUTCOMES[`advantage:${p1Move}`] : null);
 
   if (!outcome) {
     return null;
@@ -3497,11 +3332,11 @@ function setNewTutorialRound() {
     players: {
       p1: {
         ...state.players.p1,
-        ap: 0,
+        bullets: 0,
       },
       p2: {
         ...state.players.p2,
-        ap: 0,
+        bullets: 0,
       },
     },
   };

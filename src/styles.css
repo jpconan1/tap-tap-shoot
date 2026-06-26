@@ -689,7 +689,7 @@ button {
 }
 
 .turn-counter,
-.ap-label,
+.bullets-label,
 .wins-label,
 .win-mark {
   display: block;
@@ -744,58 +744,58 @@ button {
   font-size: 26px;
 }
 
-.ap-meter {
+.bullets-meter {
   display: grid;
   gap: 10px;
   width: 240px;
 }
 
-.ap-meter.p1,
+.bullets-meter.p1,
 .win-meter.p1 {
   justify-self: start;
 }
 
-.ap-meter.p2,
+.bullets-meter.p2,
 .win-meter.p2 {
   justify-self: end;
 }
 
-.ap-label {
+.bullets-label {
   width: 234px;
   height: 33px;
   transform: translateY(-10px);
 }
 
-.ap-meter.p1 .ap-label {
+.bullets-meter.p1 .bullets-label {
   justify-self: start;
 }
 
-.ap-meter.p2 .ap-label {
+.bullets-meter.p2 .bullets-label {
   justify-self: end;
 }
 
-.ap-icons {
+.bullets-icons {
   display: grid;
   grid-template-columns: repeat(4, 54px);
   gap: 4px;
 }
 
-.ap-meter.p1 .ap-icons {
+.bullets-meter.p1 .bullets-icons {
   justify-content: start;
 }
 
-.ap-meter.p2 .ap-icons {
+.bullets-meter.p2 .bullets-icons {
   justify-content: end;
 }
 
-.ap-slot {
+.bullets-slot {
   display: grid;
   place-items: center;
   width: 54px;
   height: 54px;
 }
 
-.ap-icon {
+.bullets-icon {
   display: block;
   width: 48px;
   height: 48px;
@@ -804,7 +804,7 @@ button {
   filter: drop-shadow(1px 2px 0 rgba(29, 27, 24, 0.08));
 }
 
-.ap-super-meters {
+.bullets-super-meters {
   position: absolute;
   right: 30px;
   left: 30px;
@@ -816,30 +816,30 @@ button {
   pointer-events: none;
 }
 
-.ap-super-meters .ap-meter {
+.bullets-super-meters .bullets-meter {
   width: 300px;
 }
 
-.ap-super-meters .ap-meter.p2 {
+.bullets-super-meters .bullets-meter.p2 {
   justify-items: end;
 }
 
-.ap-super-meters .ap-label {
+.bullets-super-meters .bullets-label {
   transform: none;
 }
 
-.ap-super-meters .ap-icons {
+.bullets-super-meters .bullets-icons {
   grid-template-columns: repeat(4, 64px);
   gap: 6px;
   padding: 4px 6px;
 }
 
-.ap-super-meters .ap-slot {
+.bullets-super-meters .bullets-slot {
   width: 64px;
   height: 42px;
 }
 
-.ap-super-meters .ap-icon {
+.bullets-super-meters .bullets-icon {
   width: 42px;
   height: 42px;
 }
@@ -965,26 +965,22 @@ button {
 .moves[data-hover-move="reload"] .move-card[data-reload-outline="beats"] .beats-outline,
 .moves[data-hover-move="shoot"] .move-card[data-shoot-outline="beats"] .beats-outline,
 .moves[data-hover-move="stab"] .move-card[data-stab-outline="beats"] .beats-outline,
-.moves[data-hover-move="block"] .move-card[data-block-outline="beats"] .beats-outline,
-.moves[data-hover-move="counterstab"] .move-card[data-counterstab-outline="beats"] .beats-outline,
+.moves[data-hover-move="duck"] .move-card[data-duck-outline="beats"] .beats-outline,
 .moves[data-hover-move="reload"] .move-card[data-reload-outline="draws"] .draws-outline,
 .moves[data-hover-move="shoot"] .move-card[data-shoot-outline="draws"] .draws-outline,
 .moves[data-hover-move="stab"] .move-card[data-stab-outline="draws"] .draws-outline,
-.moves[data-hover-move="block"] .move-card[data-block-outline="draws"] .draws-outline,
-.moves[data-hover-move="counterstab"] .move-card[data-counterstab-outline="draws"] .draws-outline,
+.moves[data-hover-move="duck"] .move-card[data-duck-outline="draws"] .draws-outline,
 .moves[data-hover-move="reload"] .move-card[data-reload-outline="loses"] .loses-outline,
 .moves[data-hover-move="shoot"] .move-card[data-shoot-outline="loses"] .loses-outline,
 .moves[data-hover-move="stab"] .move-card[data-stab-outline="loses"] .loses-outline,
-.moves[data-hover-move="block"] .move-card[data-block-outline="loses"] .loses-outline,
-.moves[data-hover-move="counterstab"] .move-card[data-counterstab-outline="loses"] .loses-outline {
+.moves[data-hover-move="duck"] .move-card[data-duck-outline="loses"] .loses-outline {
   opacity: 1;
 }
 
 .moves[data-hover-move="reload"] .move-card[data-move="reload"] .move-interaction-outline,
 .moves[data-hover-move="shoot"] .move-card[data-move="shoot"] .move-interaction-outline,
 .moves[data-hover-move="stab"] .move-card[data-move="stab"] .move-interaction-outline,
-.moves[data-hover-move="block"] .move-card[data-move="block"] .move-interaction-outline,
-.moves[data-hover-move="counterstab"] .move-card[data-move="counterstab"] .move-interaction-outline {
+.moves[data-hover-move="duck"] .move-card[data-move="duck"] .move-interaction-outline {
   opacity: 0;
 }
 

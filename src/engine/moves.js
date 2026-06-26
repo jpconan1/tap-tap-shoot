@@ -1,9 +1,8 @@
 export const VARIANT_IDS = Object.freeze({
-  counterstab: 'counterstab',
   fourMove: 'fourMove',
 });
 
-export const DEFAULT_VARIANT_ID = VARIANT_IDS.counterstab;
+export const DEFAULT_VARIANT_ID = VARIANT_IDS.fourMove;
 
 export const MOVES = Object.freeze({
   reload: Object.freeze({
@@ -21,44 +20,26 @@ export const MOVES = Object.freeze({
   stab: Object.freeze({
     id: 'stab',
     label: 'Stab',
-    cost: 1,
-    gain: 0,
-  }),
-  block: Object.freeze({
-    id: 'block',
-    label: 'Dodge',
     cost: 0,
     gain: 0,
   }),
-  counterstab: Object.freeze({
-    id: 'counterstab',
-    label: 'Counterstab',
+  duck: Object.freeze({
+    id: 'duck',
+    label: 'Duck',
     cost: 0,
     gain: 0,
   }),
 });
 
 export const MOVE_IDS = Object.freeze(Object.keys(MOVES));
-export const MAX_AP = 4;
+export const MAX_BULLETS = 4;
 
 export const VARIANTS = Object.freeze({
-  [VARIANT_IDS.counterstab]: Object.freeze({
-    id: VARIANT_IDS.counterstab,
+  [VARIANT_IDS.fourMove]: Object.freeze({
+    id: VARIANT_IDS.fourMove,
     isRanked: true,
     moveIds: MOVE_IDS,
     moves: MOVES,
-  }),
-  [VARIANT_IDS.fourMove]: Object.freeze({
-    id: VARIANT_IDS.fourMove,
-    isRanked: false,
-    moveIds: Object.freeze(['reload', 'shoot', 'stab', 'block']),
-    moves: Object.freeze({
-      ...MOVES,
-      stab: Object.freeze({
-        ...MOVES.stab,
-        cost: 0,
-      }),
-    }),
   }),
 });
 
@@ -79,24 +60,24 @@ export function getMove(moveId, variantId = DEFAULT_VARIANT_ID) {
   return variant.moveIds.includes(moveId) ? variant.moves[moveId] ?? null : null;
 }
 
-export function canAfford(moveId, ap, variantId = DEFAULT_VARIANT_ID) {
+export function canAfford(moveId, bullets, variantId = DEFAULT_VARIANT_ID) {
   const move = getMove(moveId, variantId);
-  return Boolean(move) && ap >= move.cost;
+  return Boolean(move) && bullets >= move.cost;
 }
 
-export function getLegalMoves(ap, opponentAp = null, variantId = DEFAULT_VARIANT_ID) {
-  if (isForcedReload(ap, opponentAp)) {
+export function getLegalMoves(bullets, opponentBullets = null, variantId = DEFAULT_VARIANT_ID) {
+  if (isForcedReload(bullets, opponentBullets)) {
     return ['reload'];
   }
 
   return getVariantMoveIds(variantId)
-    .filter((moveId) => canAfford(moveId, ap, variantId) && !isBlockedByApCap(moveId, ap));
+    .filter((moveId) => canAfford(moveId, bullets, variantId) && !isBlockedByBulletCap(moveId, bullets));
 }
 
-export function isForcedReload(ap, opponentAp) {
-  return ap === 0 && opponentAp === 0;
+export function isForcedReload(bullets, opponentBullets) {
+  return bullets === 0 && opponentBullets === 0;
 }
 
-export function isBlockedByApCap(moveId, ap) {
-  return moveId === 'reload' && ap >= MAX_AP;
+export function isBlockedByBulletCap(moveId, bullets) {
+  return moveId === 'reload' && bullets >= MAX_BULLETS;
 }

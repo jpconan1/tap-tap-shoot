@@ -5,7 +5,7 @@ import { DEFAULT_RATING, updateRatings } from '../server/elo.js';
 import { MemoryPlayerStore } from '../server/playerStore.js';
 import { RankedDuelService } from '../server/rankedDuel.js';
 import { createRoundState } from '../src/engine/gameState.js';
-import { VARIANT_IDS } from '../src/engine/moves.js';
+import { DEFAULT_VARIANT_ID, VARIANT_IDS } from '../src/engine/moves.js';
 
 test('matchmaking pairs similarly rated players into a ranked room', async () => {
   const service = createTestService();
@@ -22,21 +22,21 @@ test('matchmaking pairs similarly rated players into a ranked room', async () =>
   assert.equal(lastMessage(p2).phase, 'countdown');
 });
 
-test('matchmaking keeps variants in separate queues', async () => {
+test('matchmaking normalizes obsolete variants into the current queue', async () => {
   const service = createTestService();
   const p1 = await connectTestPlayer(service, 'p1');
   const p2 = await connectTestPlayer(service, 'p2');
   const p3 = await connectTestPlayer(service, 'p3');
 
-  service.receive(p1.session, { type: 'joinRanked', variantId: VARIANT_IDS.counterstab });
+  service.receive(p1.session, { type: 'joinRanked', variantId: 'counterstab' });
   service.receive(p2.session, { type: 'joinRanked', variantId: VARIANT_IDS.fourMove });
   service.receive(p3.session, { type: 'joinRanked', variantId: VARIANT_IDS.fourMove });
 
   assert.equal(service.rooms.size, 1);
   assert.equal(service.queue.length, 1);
-  assert.equal(service.queue[0], p1.session);
-  assert.equal(lastMessage(p2).variantId, VARIANT_IDS.fourMove);
-  assert.equal(lastMessage(p3).variantId, VARIANT_IDS.fourMove);
+  assert.equal(service.queue[0], p3.session);
+  assert.equal(lastMessage(p1).variantId, DEFAULT_VARIANT_ID);
+  assert.equal(lastMessage(p2).variantId, DEFAULT_VARIANT_ID);
 });
 
 test('online player count tracks connected sessions', async () => {
@@ -130,8 +130,8 @@ test('4 Move rejects counterstab and accepts free stab', async () => {
   const { service, p1, p2 } = await createMatchedService({ variantId: VARIANT_IDS.fourMove });
   const room = onlyRoom(service);
 
-  room.roundState.players.p1.ap = 0;
-  room.roundState.players.p2.ap = 1;
+  room.roundState.players.p1.bullets = 0;
+  room.roundState.players.p2.bullets = 1;
   service.beginChoosing(room);
   service.receive(p1.session, { type: 'submitMove', moveId: 'counterstab' });
   assert.equal(lastMessage(p1).type, 'error');
@@ -157,7 +157,7 @@ test('duplicate submits keep the first move', async () => {
 
   assert.equal(room.phase, 'revealed');
   assert.deepEqual(lastMessage(p1).revealedMoves, { p1: 'reload', p2: 'stab' });
-  assert.equal(room.roundWins.p2, 1);
+  assert.equal(room.roundWins.p2, 0);
 });
 
 test('first submitted move starts server-owned waiting deadline', async () => {
@@ -315,7 +315,7 @@ test('first to five ends match and updates Elo once', async () => {
   assert.equal((await store.getPlayer('p2')).rating, expected.opponent);
 });
 
-test('4 Move first to five does not update rating records', async () => {
+test('current rules first to five updates rating records', async () => {
   const { service, p1, p2, store } = await createMatchedService({
     revealMs: 1,
     variantId: VARIANT_IDS.fourMove,
@@ -330,10 +330,10 @@ test('4 Move first to five does not update rating records', async () => {
 
   assert.equal(room.phase, 'gameOver');
   assert.equal(room.winner, 'p1');
-  assert.equal((await store.getPlayer('p1')).rating, DEFAULT_RATING);
-  assert.equal((await store.getPlayer('p2')).rating, DEFAULT_RATING);
-  assert.equal((await store.getPlayer('p1')).wins, 0);
-  assert.equal((await store.getPlayer('p2')).losses, 0);
+  assert.notEqual((await store.getPlayer('p1')).rating, DEFAULT_RATING);
+  assert.notEqual((await store.getPlayer('p2')).rating, DEFAULT_RATING);
+  assert.equal((await store.getPlayer('p1')).wins, 1);
+  assert.equal((await store.getPlayer('p2')).losses, 1);
 });
 
 test('disconnect forfeits active match', async () => {

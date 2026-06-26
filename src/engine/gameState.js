@@ -26,8 +26,8 @@ export function playTurn(state, p1Move, p2Move, variantId = state.variantId ?? D
   const result = resolveTurn({
     p1Move,
     p2Move,
-    p1Ap: state.players.p1.ap,
-    p2Ap: state.players.p2.ap,
+    p1Bullets: state.players.p1.bullets,
+    p2Bullets: state.players.p2.bullets,
     variantId,
   });
 
@@ -47,13 +47,13 @@ export function playTurn(state, p1Move, p2Move, variantId = state.variantId ?? D
     players: {
       p1: {
         ...state.players.p1,
-        ap: result.p1Ap,
+        bullets: result.p1Bullets,
         move: p1Move,
         hit: result.p2Hit,
       },
       p2: {
         ...state.players.p2,
-        ap: result.p2Ap,
+        bullets: result.p2Bullets,
         move: p2Move,
         hit: result.p1Hit,
       },
@@ -63,10 +63,10 @@ export function playTurn(state, p1Move, p2Move, variantId = state.variantId ?? D
         turn: state.turn,
         p1Move,
         p2Move,
-        p1ApBefore: state.players.p1.ap,
-        p2ApBefore: state.players.p2.ap,
-        p1ApAfter: result.p1Ap,
-        p2ApAfter: result.p2Ap,
+        p1BulletsBefore: state.players.p1.bullets,
+        p2BulletsBefore: state.players.p2.bullets,
+        p1BulletsAfter: result.p1Bullets,
+        p2BulletsAfter: result.p2Bullets,
         winner: result.winner,
         p1Hit: result.p1Hit,
         p2Hit: result.p2Hit,
@@ -84,12 +84,12 @@ export function playTurn(state, p1Move, p2Move, variantId = state.variantId ?? D
 
 export function getPlayerLegalMoves(state, playerId, variantId = state.variantId ?? DEFAULT_VARIANT_ID) {
   const opponentId = playerId === 'p1' ? 'p2' : 'p1';
-  return getLegalMoves(state.players[playerId].ap, state.players[opponentId].ap, variantId);
+  return getLegalMoves(state.players[playerId].bullets, state.players[opponentId].bullets, variantId);
 }
 
 function createPlayerState() {
   return {
-    ap: 1,
+    bullets: 1,
     move: null,
     hit: null,
   };

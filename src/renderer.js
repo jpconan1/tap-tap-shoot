@@ -50,25 +50,14 @@ const SPLIT_READY_DOODLES = Object.freeze([
 const INTERACTION_DOODLES = Object.freeze({
   'reload|reload': 'reloading',
   'reload|shoot': 'shooting',
-  'reload|stab': 'stabbing',
-  'reload|block': 'tricky',
-  'reload|counterstab': 'tricky',
+  'reload|stab': 'counterstab',
+  'reload|duck': 'tricky',
   'shoot|shoot': 'collision',
   'shoot|stab': 'shooting',
-  'shoot|block': 'dodge',
-  'shoot|counterstab': 'shooting',
+  'shoot|duck': 'dodge',
   'stab|stab': 'clash',
-  'stab|block': 'stabbing',
-  'stab|counterstab': 'counterstab',
-  'block|block': 'hiding',
-  'block|counterstab': 'hiding',
-  'counterstab|counterstab': 'hiding',
-});
-
-const VARIANT_INTERACTION_DOODLES = Object.freeze({
-  fourMove: Object.freeze({
-    'reload|stab': 'counterstab',
-  }),
+  'stab|duck': 'stabbing',
+  'duck|duck': 'hiding',
 });
 
 const STARBURST_WIPE_STEPS = Object.freeze([
@@ -83,6 +72,11 @@ const STARBURST_WIPE_STEPS = Object.freeze([
   Object.freeze(['2', '1_w']),
   Object.freeze(['1']),
 ]);
+
+const DOODLE_ASSET_ALIASES = Object.freeze({
+  bullets_label: 'action_points',
+  bullet_icon: 'ap_icon',
+});
 
 const doodleSheets = new Map();
 let doodleRenderers = [];
@@ -121,8 +115,8 @@ export async function playStarburstWipeTransition(app, onCovered, playWipeAudio)
   overlay.remove();
 }
 
-export function getDoodlePresentation(p1Move, p2Move, { variantId = 'counterstab' } = {}) {
-  const name = getDoodleForMoves(p1Move, p2Move, variantId);
+export function getDoodlePresentation(p1Move, p2Move) {
+  const name = getDoodleForMoves(p1Move, p2Move);
 
   return {
     kind: 'doodle',
@@ -432,10 +426,10 @@ function drawWipeStep(canvas, layers, now) {
   });
 }
 
-function getDoodleForMoves(p1Move, p2Move, variantId) {
+function getDoodleForMoves(p1Move, p2Move) {
   const sortedMoves = [p1Move, p2Move].sort((a, b) => MOVE_IDS.indexOf(a) - MOVE_IDS.indexOf(b));
   const key = sortedMoves.join('|');
-  return VARIANT_INTERACTION_DOODLES[variantId]?.[key] ?? INTERACTION_DOODLES[key] ?? 'hiding';
+  return INTERACTION_DOODLES[key] ?? 'hiding';
 }
 
 function shouldFlipDoodle(doodle, p1Move, p2Move) {
@@ -448,15 +442,11 @@ function shouldFlipDoodle(doodle, p1Move, p2Move) {
   }
 
   if (doodle === 'dodge') {
-    return p1Move === 'block';
+    return p1Move === 'duck';
   }
 
   if (doodle === 'counterstab') {
-    if (p1Move !== 'counterstab' && p2Move !== 'counterstab') {
-      return p2Move === 'stab';
-    }
-
-    return p1Move === 'counterstab';
+    return p2Move === 'stab';
   }
 
   if (doodle === 'tricky') {
@@ -478,8 +468,9 @@ function loadDoodleSheet(doodle) {
     return doodleSheets.get(doodle);
   }
 
+  const assetDoodle = DOODLE_ASSET_ALIASES[doodle] ?? doodle;
   const image = new Image();
-  image.src = `./assets/${doodle}_sheet.webp`;
+  image.src = `./assets/${assetDoodle}_sheet.webp`;
   image.onload = () => drawDoodleFrame(performance.now());
   doodleSheets.set(doodle, image);
   return image;

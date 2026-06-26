@@ -9,7 +9,7 @@ export class RankedClient {
     this.playerId = readLocalStorage(RANKED_PLAYER_ID_KEY);
   }
 
-  connect(displayName = '', variantId = 'counterstab') {
+  connect(displayName = '', variantId = 'fourMove') {
     this.close();
     this.displayName = displayName;
     this.variantId = variantId;

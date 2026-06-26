@@ -11,51 +11,51 @@ export function chooseRivalMove(state, rivalId = DEFAULT_RIVAL_ID, rng = Math.ra
   }
 
   const rival = RIVALS[rivalId] ?? RIVALS[DEFAULT_RIVAL_ID];
-  const ownAp = state.players.p2.ap;
-  const enemyAp = state.players.p1.ap;
-  const policyKey = getPolicyKey(ownAp, enemyAp);
-  const fallbackPolicyKey = getFallbackPolicyKey(ownAp, enemyAp);
+  const ownBullets = state.players.p2.bullets;
+  const enemyBullets = state.players.p1.bullets;
+  const policyKey = getPolicyKey(ownBullets, enemyBullets);
+  const fallbackPolicyKey = getFallbackPolicyKey(ownBullets, enemyBullets);
   const policy = rival.matchups[policyKey]
     ?? rival.matchups[fallbackPolicyKey]
     ?? RIVALS[DEFAULT_RIVAL_ID].matchups[fallbackPolicyKey];
 
-  return chooseWeightedLegalMove(ownAp, enemyAp, policy, rng);
+  return chooseWeightedLegalMove(ownBullets, enemyBullets, policy, rng);
 }
 
-function getPolicyKey(ownAp, enemyAp) {
-  if (ownAp === 0 && enemyAp === 0) {
+function getPolicyKey(ownBullets, enemyBullets) {
+  if (ownBullets === 0 && enemyBullets === 0) {
     return '0-0';
   }
 
-  if (ownAp === 2 && enemyAp === 0) {
+  if (ownBullets === 2 && enemyBullets === 0) {
     return '2-0';
   }
 
-  return getFallbackPolicyKey(ownAp, enemyAp);
+  return getFallbackPolicyKey(ownBullets, enemyBullets);
 }
 
-function getFallbackPolicyKey(ownAp, enemyAp) {
-  if (ownAp > 0 && enemyAp === 0) {
+function getFallbackPolicyKey(ownBullets, enemyBullets) {
+  if (ownBullets > 0 && enemyBullets === 0) {
     return '1-0';
   }
 
-  if (ownAp === 0 && enemyAp > 0) {
+  if (ownBullets === 0 && enemyBullets > 0) {
     return '0-1';
   }
 
-  if (ownAp > enemyAp) {
+  if (ownBullets > enemyBullets) {
     return '2-1';
   }
 
-  if (ownAp < enemyAp) {
+  if (ownBullets < enemyBullets) {
     return '1-2';
   }
 
   return '1-1';
 }
 
-function chooseWeightedLegalMove(ownAp, enemyAp, policy, rng) {
-  const legalMoves = getLegalMoves(ownAp, enemyAp);
+function chooseWeightedLegalMove(ownBullets, enemyBullets, policy, rng) {
+  const legalMoves = getLegalMoves(ownBullets, enemyBullets);
   const weightedMoves = Object.entries(policy)
     .filter(([moveId, weight]) => legalMoves.includes(moveId) && weight > 0)
     .map(([moveId, weight]) => ({ moveId, weight }));

@@ -578,14 +578,14 @@ export class RankedDuelService {
       players: {
         p1: {
           displayName: room.players.p1.displayName,
-          ap: room.roundState.players.p1.ap,
+          bullets: room.roundState.players.p1.bullets,
           legalMoves: room.phase === 'choosing' ? getPlayerLegalMoves(room.roundState, 'p1') : [],
           canContinue: room.phase === 'roundOver' && !room.pendingContinues.has('p1'),
           rating: isRanked ? room.players.p1.player.rating : null,
         },
         p2: {
           displayName: room.players.p2.displayName,
-          ap: room.roundState.players.p2.ap,
+          bullets: room.roundState.players.p2.bullets,
           legalMoves: room.phase === 'choosing' ? getPlayerLegalMoves(room.roundState, 'p2') : [],
           canContinue: room.phase === 'roundOver' && !room.pendingContinues.has('p2'),
           rating: isRanked ? room.players.p2.player.rating : null,

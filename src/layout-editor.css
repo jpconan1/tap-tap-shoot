@@ -150,6 +150,8 @@ input:focus {
 }
 
 .asset-thumb {
+  display: grid;
+  place-items: center;
   width: 44px;
   height: 36px;
   background-position: top left;
@@ -213,6 +215,29 @@ input:focus {
   background-repeat: no-repeat;
   cursor: move;
   touch-action: none;
+  user-select: none;
+}
+
+.text-preview {
+  display: grid;
+  place-items: center;
+  padding: 4px;
+  overflow: hidden;
+  border: 1px dashed rgba(243, 240, 232, 0.5);
+  background: rgba(21, 22, 26, 0.62);
+  color: var(--text);
+  font-weight: 800;
+  line-height: 1;
+  text-align: center;
+  white-space: pre-line;
+}
+
+.asset-thumb.text-preview {
+  font-size: 8px;
+}
+
+.layout-element.text-preview {
+  font-size: 24px;
 }
 
 .layout-element:hover {
@@ -237,6 +262,41 @@ input:focus {
   font-size: 11px;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.resize-handle {
+  position: absolute;
+  z-index: 2;
+  width: 12px;
+  height: 12px;
+  border: 2px solid #171717;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+
+.resize-handle.nw {
+  top: -7px;
+  left: -7px;
+  cursor: nwse-resize;
+}
+
+.resize-handle.ne {
+  top: -7px;
+  right: -7px;
+  cursor: nesw-resize;
+}
+
+.resize-handle.sw {
+  bottom: -7px;
+  left: -7px;
+  cursor: nesw-resize;
+}
+
+.resize-handle.se {
+  right: -7px;
+  bottom: -7px;
+  cursor: nwse-resize;
 }
 
 .help {
@@ -269,6 +329,10 @@ input:focus {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 6px;
+}
+
+.button-row > button:only-child {
+  grid-column: 1 / -1;
 }
 
 .layers-title {
