@@ -198,6 +198,91 @@ input:focus {
   box-shadow: 0 12px 45px rgba(0, 0, 0, 0.45);
 }
 
+.stage::before {
+  position: absolute;
+  inset: 0;
+  z-index: 10000;
+  pointer-events: none;
+  content: "";
+  background:
+    linear-gradient(
+      to right,
+      transparent calc(100% / 9),
+      rgba(242, 194, 75, 0.28) calc(100% / 9),
+      rgba(242, 194, 75, 0.28) calc(100% / 9 + 1px),
+      transparent calc(100% / 9 + 1px),
+      transparent calc(200% / 9),
+      rgba(242, 194, 75, 0.28) calc(200% / 9),
+      rgba(242, 194, 75, 0.28) calc(200% / 9 + 1px),
+      transparent calc(200% / 9 + 1px),
+      transparent calc(400% / 9),
+      rgba(242, 194, 75, 0.28) calc(400% / 9),
+      rgba(242, 194, 75, 0.28) calc(400% / 9 + 1px),
+      transparent calc(400% / 9 + 1px),
+      transparent calc(500% / 9),
+      rgba(242, 194, 75, 0.28) calc(500% / 9),
+      rgba(242, 194, 75, 0.28) calc(500% / 9 + 1px),
+      transparent calc(500% / 9 + 1px),
+      transparent calc(700% / 9),
+      rgba(242, 194, 75, 0.28) calc(700% / 9),
+      rgba(242, 194, 75, 0.28) calc(700% / 9 + 1px),
+      transparent calc(700% / 9 + 1px),
+      transparent calc(800% / 9),
+      rgba(242, 194, 75, 0.28) calc(800% / 9),
+      rgba(242, 194, 75, 0.28) calc(800% / 9 + 1px),
+      transparent calc(800% / 9 + 1px)
+    ),
+    linear-gradient(
+      to bottom,
+      transparent calc(100% / 9),
+      rgba(242, 194, 75, 0.28) calc(100% / 9),
+      rgba(242, 194, 75, 0.28) calc(100% / 9 + 1px),
+      transparent calc(100% / 9 + 1px),
+      transparent calc(200% / 9),
+      rgba(242, 194, 75, 0.28) calc(200% / 9),
+      rgba(242, 194, 75, 0.28) calc(200% / 9 + 1px),
+      transparent calc(200% / 9 + 1px),
+      transparent calc(400% / 9),
+      rgba(242, 194, 75, 0.28) calc(400% / 9),
+      rgba(242, 194, 75, 0.28) calc(400% / 9 + 1px),
+      transparent calc(400% / 9 + 1px),
+      transparent calc(500% / 9),
+      rgba(242, 194, 75, 0.28) calc(500% / 9),
+      rgba(242, 194, 75, 0.28) calc(500% / 9 + 1px),
+      transparent calc(500% / 9 + 1px),
+      transparent calc(700% / 9),
+      rgba(242, 194, 75, 0.28) calc(700% / 9),
+      rgba(242, 194, 75, 0.28) calc(700% / 9 + 1px),
+      transparent calc(700% / 9 + 1px),
+      transparent calc(800% / 9),
+      rgba(242, 194, 75, 0.28) calc(800% / 9),
+      rgba(242, 194, 75, 0.28) calc(800% / 9 + 1px),
+      transparent calc(800% / 9 + 1px)
+    ),
+    linear-gradient(
+      to right,
+      transparent calc(100% / 3),
+      rgba(242, 194, 75, 0.65) calc(100% / 3),
+      rgba(242, 194, 75, 0.65) calc(100% / 3 + 1px),
+      transparent calc(100% / 3 + 1px),
+      transparent calc(200% / 3),
+      rgba(242, 194, 75, 0.65) calc(200% / 3),
+      rgba(242, 194, 75, 0.65) calc(200% / 3 + 1px),
+      transparent calc(200% / 3 + 1px)
+    ),
+    linear-gradient(
+      to bottom,
+      transparent calc(100% / 3),
+      rgba(242, 194, 75, 0.65) calc(100% / 3),
+      rgba(242, 194, 75, 0.65) calc(100% / 3 + 1px),
+      transparent calc(100% / 3 + 1px),
+      transparent calc(200% / 3),
+      rgba(242, 194, 75, 0.65) calc(200% / 3),
+      rgba(242, 194, 75, 0.65) calc(200% / 3 + 1px),
+      transparent calc(200% / 3 + 1px)
+    );
+}
+
 .stage.landscape {
   width: 960px;
   height: 540px;
@@ -333,6 +418,12 @@ input:focus {
 
 .button-row > button:only-child {
   grid-column: 1 / -1;
+}
+
+.scale-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
 }
 
 .layers-title {

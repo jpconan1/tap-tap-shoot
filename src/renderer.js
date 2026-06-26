@@ -73,11 +73,6 @@ const STARBURST_WIPE_STEPS = Object.freeze([
   Object.freeze(['1']),
 ]);
 
-const DOODLE_ASSET_ALIASES = Object.freeze({
-  bullets_label: 'action_points',
-  bullet_icon: 'ap_icon',
-});
-
 const doodleSheets = new Map();
 let doodleRenderers = [];
 
@@ -468,9 +463,8 @@ function loadDoodleSheet(doodle) {
     return doodleSheets.get(doodle);
   }
 
-  const assetDoodle = DOODLE_ASSET_ALIASES[doodle] ?? doodle;
   const image = new Image();
-  image.src = `./assets/${assetDoodle}_sheet.webp`;
+  image.src = `./assets/${doodle}_sheet.webp`;
   image.onload = () => drawDoodleFrame(performance.now());
   doodleSheets.set(doodle, image);
   return image;

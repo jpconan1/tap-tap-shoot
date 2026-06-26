@@ -4,6 +4,7 @@ const FRAME_SIZES = Object.freeze({
 });
 const STORAGE_KEY = 'tapTapShoot.layoutTool.v1';
 const DEFAULT_FRAME_COUNT = 3;
+const DEFAULT_ELEMENT_SCALE = 0.5;
 
 const stage = document.querySelector('[data-stage]');
 const assetList = document.querySelector('[data-asset-list]');
@@ -41,6 +42,9 @@ async function boot() {
   document.querySelector('[data-action="delete"]').addEventListener('click', deleteSelected);
   document.querySelector('[data-action="backward"]').addEventListener('click', () => moveLayer(-1));
   document.querySelector('[data-action="forward"]').addEventListener('click', () => moveLayer(1));
+  document.querySelectorAll('[data-scale]').forEach((button) => {
+    button.addEventListener('click', () => scaleSelected(Number(button.dataset.scale)));
+  });
 
   importFile.addEventListener('change', importLayouts);
   inspector.addEventListener('input', updateSelectedFromInspector);
@@ -64,6 +68,11 @@ function getElementCatalog() {
 }
 
 function createPendingCatalogItem(definition) {
+  const size = getDefaultDisplaySize(
+    definition.width ?? 256,
+    definition.height ?? 128,
+  );
+
   return {
     kind: definition.kind ?? 'image',
     key: definition.key,
@@ -72,8 +81,8 @@ function createPendingCatalogItem(definition) {
     asset: definition.asset ?? '',
     frame: definition.frame ?? 0,
     frameCount: 1,
-    width: definition.width ?? 256,
-    height: definition.height ?? 128,
+    width: size.width,
+    height: size.height,
     sourceWidth: definition.width ?? 256,
     sourceHeight: definition.height ?? 128,
     frameIndex: 0,
@@ -90,16 +99,19 @@ function loadElementMetadata(definition) {
     image.addEventListener('load', () => {
       const frameCount = getFrameCount(definition.asset);
       const frameHeight = Math.round(image.naturalHeight / frameCount);
+      const sourceWidth = definition.width ?? image.naturalWidth;
+      const sourceHeight = definition.height ?? frameHeight;
+      const size = getDefaultDisplaySize(sourceWidth, sourceHeight);
       const frameIndex = definition.frame === 'last'
         ? frameCount - 1
         : clampInteger(definition.frame, 0, frameCount - 1);
       resolve({
         ...createPendingCatalogItem(definition),
         frameCount,
-        width: definition.width ?? image.naturalWidth,
-        height: definition.height ?? frameHeight,
-        sourceWidth: image.naturalWidth,
-        sourceHeight: frameHeight,
+        width: size.width,
+        height: size.height,
+        sourceWidth,
+        sourceHeight,
         frameIndex,
       });
     }, { once: true });
@@ -481,6 +493,22 @@ function moveLayer(direction) {
   commit();
 }
 
+function scaleSelected(scale) {
+  const selected = getSelected();
+
+  if (!selected || !Number.isFinite(scale) || scale <= 0) {
+    return;
+  }
+
+  const centerX = selected.x + selected.width / 2;
+  const centerY = selected.y + selected.height / 2;
+  selected.width = Math.max(1, Math.round(getSourceWidth(selected) * scale));
+  selected.height = Math.max(1, Math.round(getSourceHeight(selected) * scale));
+  selected.x = Math.round(centerX - selected.width / 2);
+  selected.y = Math.round(centerY - selected.height / 2);
+  commit();
+}
+
 function setOrientation(nextOrientation) {
   if (!FRAME_SIZES[nextOrientation] || nextOrientation === orientation) {
     return;
@@ -557,26 +585,47 @@ function normalizeLayouts(value) {
     if (Array.isArray(elements)) {
       normalized[key].elements = elements
         .filter((element) => element && (typeof element.asset === 'string' || element.kind === 'text'))
-        .map((element) => ({
-          id: typeof element.id === 'string' ? element.id : crypto.randomUUID(),
-          key: typeof element.key === 'string' ? element.key : getAssetName(element.asset),
-          kind: element.kind === 'text' ? 'text' : 'image',
-          name: String(element.name || getAssetName(element.asset)),
-          text: typeof element.text === 'string' ? element.text : '',
-          asset: typeof element.asset === 'string' ? element.asset : '',
-          frameIndex: Math.max(0, finiteInteger(element.frameIndex, 0)),
-          sourceWidth: Math.max(1, finiteInteger(element.sourceWidth, element.width ?? 256)),
-          sourceHeight: Math.max(1, finiteInteger(element.sourceHeight, element.height ?? 128)),
-          x: finiteInteger(element.x, 0),
-          y: finiteInteger(element.y, 0),
-          width: Math.max(1, finiteInteger(element.width, 256)),
-          height: Math.max(1, finiteInteger(element.height, 128)),
-        }));
+        .map(normalizeElement);
     }
   }
 
   return normalized;
 }
+
+function normalizeElement(element) {
+  const asset = migrateAssetPath(typeof element.asset === 'string' ? element.asset : '');
+  const sourceSize = NEW_ASSET_SOURCE_SIZES[asset] ?? {};
+
+  return {
+    id: typeof element.id === 'string' ? element.id : crypto.randomUUID(),
+    key: typeof element.key === 'string' ? element.key : getAssetName(asset),
+    kind: element.kind === 'text' ? 'text' : 'image',
+    name: String(element.name || getAssetName(asset)),
+    text: typeof element.text === 'string' ? element.text : '',
+    asset,
+    frameIndex: Math.max(0, finiteInteger(element.frameIndex, 0)),
+    sourceWidth: Math.max(1, finiteInteger(sourceSize.width ?? element.sourceWidth, element.width ?? 256)),
+    sourceHeight: Math.max(1, finiteInteger(sourceSize.height ?? element.sourceHeight, element.height ?? 128)),
+    x: finiteInteger(element.x, 0),
+    y: finiteInteger(element.y, 0),
+    width: Math.max(1, finiteInteger(element.width, 256)),
+    height: Math.max(1, finiteInteger(element.height, 128)),
+  };
+}
+
+function migrateAssetPath(path) {
+  return {
+    'assets/action_points_sheet.webp': 'assets/bullets_label_sheet.webp',
+    'assets/ap_icon_sheet.webp': 'assets/bullet_icon_sheet.webp',
+    'assets/dodge_button_sheet.webp': 'assets/duck_button_sheet.webp',
+  }[path] ?? path;
+}
+
+const NEW_ASSET_SOURCE_SIZES = Object.freeze({
+  'assets/bullets_label_sheet.webp': Object.freeze({ width: 256, height: 80 }),
+  'assets/bullet_icon_sheet.webp': Object.freeze({ width: 64, height: 64 }),
+  'assets/duck_button_sheet.webp': Object.freeze({ width: 256, height: 128 }),
+});
 
 function createEmptyLayouts() {
   return {
@@ -674,6 +723,13 @@ function clampInteger(value, min, max) {
   return Math.min(max, Math.max(min, finiteInteger(value, min)));
 }
 
+function getDefaultDisplaySize(width, height) {
+  return {
+    width: Math.max(1, Math.round(width * DEFAULT_ELEMENT_SCALE)),
+    height: Math.max(1, Math.round(height * DEFAULT_ELEMENT_SCALE)),
+  };
+}
+
 function applyAspectSize(element, changedField, rawValue, aspectRatio = getAspectRatio(element)) {
   const value = Math.max(1, Math.round(Number(rawValue)));
 
@@ -691,7 +747,13 @@ function applyAspectSize(element, changedField, rawValue, aspectRatio = getAspec
 }
 
 function getAspectRatio(element) {
-  const sourceWidth = Math.max(1, finiteInteger(element.sourceWidth, element.width));
-  const sourceHeight = Math.max(1, finiteInteger(element.sourceHeight, element.height));
-  return sourceWidth / sourceHeight;
+  return getSourceWidth(element) / getSourceHeight(element);
+}
+
+function getSourceWidth(element) {
+  return Math.max(1, finiteInteger(element.sourceWidth, element.width));
+}
+
+function getSourceHeight(element) {
+  return Math.max(1, finiteInteger(element.sourceHeight, element.height));
 }

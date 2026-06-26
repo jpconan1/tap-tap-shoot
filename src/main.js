@@ -157,7 +157,7 @@ const MOVE_BUTTON_DOODLES = Object.freeze({
   reload: 'reload_button',
   shoot: 'shoot_button',
   stab: 'stab_button',
-  duck: 'dodge_button',
+  duck: 'duck_button',
 });
 const MOVE_ICON_DOODLES = Object.freeze({
   reload: 'reload_icon',
