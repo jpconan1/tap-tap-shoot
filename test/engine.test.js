@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { createRoundState, getPlayerLegalMoves, playTurn } from '../src/engine/gameState.js';
-import { MOVE_IDS, VARIANT_IDS, getLegalMoves, getVariantMoveIds } from '../src/engine/moves.js';
+import { MAX_BULLETS, MOVE_IDS, VARIANT_IDS, getLegalMoves, getVariantMoveIds } from '../src/engine/moves.js';
 import { RIVALS, chooseRivalMove } from '../src/engine/rivalAi.js';
 import { resolveTurn } from '../src/engine/resolveTurn.js';
 
@@ -71,30 +71,132 @@ test('moves with bullet costs are illegal without bullets', () => {
   assert.deepEqual(result.errors, ['p1 cannot afford shoot']);
 });
 
-test('4 bullets blocks reload and caps bullet gain', () => {
-  const state = createStateWithBullets(1, 4);
-  assert.equal(getLegalMoves(4, 1).includes('reload'), false);
+test('max bullets blocks reload and caps bullet gain', () => {
+  const state = createStateWithBullets(1, MAX_BULLETS);
+  assert.equal(getLegalMoves(MAX_BULLETS, 1).includes('reload'), false);
   assert.equal(getPlayerLegalMoves(state, 'p1').includes('reload'), false);
 
-  const blocked = resolveTurn({ p1Move: 'reload', p2Move: 'duck', p1Bullets: 4, p2Bullets: 1 });
+  const blocked = resolveTurn({ p1Move: 'reload', p2Move: 'duck', p1Bullets: MAX_BULLETS, p2Bullets: 1 });
   assert.equal(blocked.ok, false);
-  assert.deepEqual(blocked.errors, ['p1 cannot reload at 4']);
+  assert.deepEqual(blocked.errors, [`p1 cannot reload at ${MAX_BULLETS}`]);
 
-  const capped = resolveTurn({ p1Move: 'reload', p2Move: 'duck', p1Bullets: 3, p2Bullets: 1 });
+  const capped = resolveTurn({ p1Move: 'reload', p2Move: 'duck', p1Bullets: MAX_BULLETS - 1, p2Bullets: 1 });
   assert.equal(capped.ok, true);
-  assert.equal(capped.p1Bullets, 4);
+  assert.equal(capped.p1Bullets, MAX_BULLETS);
 });
 
-test('only four button moves are legal', () => {
-  const state = createStateWithBullets(0, 1, VARIANT_IDS.fourMove);
+test('shoot stab duck uses four button moves', () => {
+  const state = createStateWithBullets(0, 1, VARIANT_IDS.shootStabDuck);
 
-  assert.deepEqual(getVariantMoveIds(VARIANT_IDS.fourMove), ['reload', 'shoot', 'stab', 'duck']);
-  assert.equal(getLegalMoves(0, 1, VARIANT_IDS.fourMove).includes('stab'), true);
+  assert.deepEqual(getVariantMoveIds(VARIANT_IDS.shootStabDuck), ['reload', 'shoot', 'stab', 'duck']);
+  assert.equal(getLegalMoves(0, 1, VARIANT_IDS.shootStabDuck).includes('stab'), true);
   assert.equal(getPlayerLegalMoves(state, 'p1').includes('counterstab'), false);
 
-  const result = resolveTurn({ p1Move: 'counterstab', p2Move: 'reload', p1Bullets: 1, p2Bullets: 1 });
+  const result = resolveTurn({
+    p1Move: 'counterstab',
+    p2Move: 'reload',
+    p1Bullets: 1,
+    p2Bullets: 1,
+    variantId: VARIANT_IDS.shootStabDuck,
+  });
   assert.equal(result.ok, false);
   assert.deepEqual(result.errors, ['p1 picked unknown move: counterstab']);
+});
+
+test('rock paper scissors has no resource and resolves classic wins', () => {
+  const state = createRoundState({ variantId: VARIANT_IDS.rps });
+  assert.equal(state.players.p1.bullets, 0);
+  assert.deepEqual(getVariantMoveIds(VARIANT_IDS.rps), ['rock', 'paper', 'scissors']);
+  assert.deepEqual(getPlayerLegalMoves(state, 'p1'), ['rock', 'paper', 'scissors']);
+
+  const win = resolveTurn({ p1Move: 'rock', p2Move: 'scissors', p1Bullets: 0, p2Bullets: 0, variantId: VARIANT_IDS.rps });
+  assert.equal(win.ok, true);
+  assert.equal(win.winner, 'p1');
+
+  const tie = resolveTurn({ p1Move: 'paper', p2Move: 'paper', p1Bullets: 0, p2Bullets: 0, variantId: VARIANT_IDS.rps });
+  assert.equal(tie.ok, true);
+  assert.equal(tie.winner, null);
+});
+
+test('charge block fireball forces charge at 0-0 and fireball beats charge', () => {
+  assert.deepEqual(getLegalMoves(0, 0, VARIANT_IDS.chargeBlockFireball), ['charge']);
+
+  const illegal = resolveTurn({
+    p1Move: 'block',
+    p2Move: 'charge',
+    p1Bullets: 0,
+    p2Bullets: 0,
+    variantId: VARIANT_IDS.chargeBlockFireball,
+  });
+  assert.equal(illegal.ok, false);
+  assert.deepEqual(illegal.errors, ['p1 must charge at 0-0']);
+
+  const charge = resolveTurn({
+    p1Move: 'charge',
+    p2Move: 'block',
+    p1Bullets: 0,
+    p2Bullets: 1,
+    variantId: VARIANT_IDS.chargeBlockFireball,
+  });
+  assert.equal(charge.ok, true);
+  assert.equal(charge.p1Bullets, 1);
+  assert.equal(charge.winner, null);
+
+  const fireball = resolveTurn({
+    p1Move: 'fireball',
+    p2Move: 'charge',
+    p1Bullets: 1,
+    p2Bullets: 0,
+    variantId: VARIANT_IDS.chargeBlockFireball,
+  });
+  assert.equal(fireball.ok, true);
+  assert.equal(fireball.winner, 'p1');
+});
+
+test('tap tap shoot adds counterstab to the four move rules', () => {
+  assert.deepEqual(getVariantMoveIds(VARIANT_IDS.tapTapShoot), ['reload', 'shoot', 'stab', 'duck', 'counterstab']);
+
+  const result = resolveTurn({
+    p1Move: 'counterstab',
+    p2Move: 'stab',
+    p1Bullets: 0,
+    p2Bullets: 1,
+    variantId: VARIANT_IDS.tapTapShoot,
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.winner, 'p1');
+});
+
+test('double tap costs two and beats duck or reload but loses to shoot', () => {
+  const illegal = resolveTurn({
+    p1Move: 'doubletap',
+    p2Move: 'duck',
+    p1Bullets: 1,
+    p2Bullets: 1,
+    variantId: VARIANT_IDS.doubleTap,
+  });
+  assert.equal(illegal.ok, false);
+  assert.deepEqual(illegal.errors, ['p1 cannot afford doubletap']);
+
+  const win = resolveTurn({
+    p1Move: 'doubletap',
+    p2Move: 'duck',
+    p1Bullets: 2,
+    p2Bullets: 1,
+    variantId: VARIANT_IDS.doubleTap,
+  });
+  assert.equal(win.ok, true);
+  assert.equal(win.winner, 'p1');
+
+  const lose = resolveTurn({
+    p1Move: 'doubletap',
+    p2Move: 'shoot',
+    p1Bullets: 2,
+    p2Bullets: 1,
+    variantId: VARIANT_IDS.doubleTap,
+  });
+  assert.equal(lose.ok, true);
+  assert.equal(lose.winner, 'p2');
 });
 
 test('round state advances on ties and freezes on round win', () => {
@@ -143,8 +245,8 @@ test('rival AI only chooses legal moves across bullet matchups', () => {
   const rolls = [0, 0.25, 0.5, 0.75, 0.999];
 
   for (const rival of Object.values(RIVALS)) {
-    for (let rivalBullets = 0; rivalBullets <= 4; rivalBullets += 1) {
-      for (let playerBullets = 0; playerBullets <= 4; playerBullets += 1) {
+    for (let rivalBullets = 0; rivalBullets <= MAX_BULLETS; rivalBullets += 1) {
+      for (let playerBullets = 0; playerBullets <= MAX_BULLETS; playerBullets += 1) {
         const legalMoves = getLegalMoves(rivalBullets, playerBullets);
 
         for (const roll of rolls) {

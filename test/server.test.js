@@ -22,21 +22,47 @@ test('matchmaking pairs similarly rated players into a ranked room', async () =>
   assert.equal(lastMessage(p2).phase, 'countdown');
 });
 
-test('matchmaking normalizes obsolete variants into the current queue', async () => {
+test('matchmaking uses one pool across requested variants', async () => {
   const service = createTestService();
   const p1 = await connectTestPlayer(service, 'p1');
   const p2 = await connectTestPlayer(service, 'p2');
   const p3 = await connectTestPlayer(service, 'p3');
 
   service.receive(p1.session, { type: 'joinRanked', variantId: 'counterstab' });
-  service.receive(p2.session, { type: 'joinRanked', variantId: VARIANT_IDS.fourMove });
-  service.receive(p3.session, { type: 'joinRanked', variantId: VARIANT_IDS.fourMove });
+  service.receive(p2.session, { type: 'joinRanked', variantId: VARIANT_IDS.shootStabDuck });
+  service.receive(p3.session, { type: 'joinRanked', variantId: VARIANT_IDS.rps });
 
   assert.equal(service.rooms.size, 1);
   assert.equal(service.queue.length, 1);
   assert.equal(service.queue[0], p3.session);
   assert.equal(lastMessage(p1).variantId, DEFAULT_VARIANT_ID);
   assert.equal(lastMessage(p2).variantId, DEFAULT_VARIANT_ID);
+});
+
+test('bans are realtime unique and leave three variants in canonical order', async () => {
+  const { service, p1, p2 } = await createMatchedService();
+  const room = onlyRoom(service);
+
+  service.beginBanning(room);
+  service.receive(p1.session, { type: 'submitBan', variantId: VARIANT_IDS.rps });
+  assert.equal(lastMessage(p2).bans.p1, VARIANT_IDS.rps);
+
+  service.receive(p2.session, { type: 'submitBan', variantId: VARIANT_IDS.rps });
+  assert.equal(lastMessage(p2).type, 'error');
+  assert.equal(lastMessage(p2).message, 'illegal ban');
+
+  service.receive(p2.session, { type: 'submitBan', variantId: VARIANT_IDS.chargeBlockFireball });
+  assert.equal(room.phase, 'choosing');
+  assert.deepEqual(room.remainingVariants, [
+    VARIANT_IDS.shootStabDuck,
+    VARIANT_IDS.tapTapShoot,
+    VARIANT_IDS.doubleTap,
+  ]);
+  assert.equal(lastMessage(p1).currentVariantId, VARIANT_IDS.shootStabDuck);
+  assert.deepEqual(lastMessage(p1).bans, {
+    p1: VARIANT_IDS.rps,
+    p2: VARIANT_IDS.chargeBlockFireball,
+  });
 });
 
 test('online player count tracks connected sessions', async () => {
@@ -126,8 +152,8 @@ test('submitted moves resolve immediately when both players lock in', async () =
   assert.equal(lastMessage(p2).revealedMoves.p2, 'stab');
 });
 
-test('4 Move rejects counterstab and accepts free stab', async () => {
-  const { service, p1, p2 } = await createMatchedService({ variantId: VARIANT_IDS.fourMove });
+test('shoot stab duck rejects counterstab and accepts free stab', async () => {
+  const { service, p1, p2 } = await createMatchedService({ variantId: VARIANT_IDS.shootStabDuck });
   const room = onlyRoom(service);
 
   room.roundState.players.p1.bullets = 0;
@@ -318,7 +344,7 @@ test('first to five ends match and updates Elo once', async () => {
 test('current rules first to five updates rating records', async () => {
   const { service, p1, p2, store } = await createMatchedService({
     revealMs: 1,
-    variantId: VARIANT_IDS.fourMove,
+    variantId: VARIANT_IDS.shootStabDuck,
   });
   const room = onlyRoom(service);
 
@@ -332,6 +358,42 @@ test('current rules first to five updates rating records', async () => {
   assert.equal(room.winner, 'p1');
   assert.notEqual((await store.getPlayer('p1')).rating, DEFAULT_RATING);
   assert.notEqual((await store.getPlayer('p2')).rating, DEFAULT_RATING);
+  assert.equal((await store.getPlayer('p1')).wins, 1);
+  assert.equal((await store.getPlayer('p2')).losses, 1);
+});
+
+test('best of three variant games advances variants and updates Elo once', async () => {
+  const { service, p1, p2, store } = await createMatchedService({ revealMs: 1 });
+  const room = onlyRoom(service);
+
+  service.beginBanning(room);
+  service.receive(p1.session, { type: 'submitBan', variantId: VARIANT_IDS.rps });
+  service.receive(p2.session, { type: 'submitBan', variantId: VARIANT_IDS.chargeBlockFireball });
+  assert.equal(room.variantId, VARIANT_IDS.shootStabDuck);
+
+  room.roundWins.p1 = 4;
+  service.receive(p1.session, { type: 'submitMove', moveId: 'shoot' });
+  service.receive(p2.session, { type: 'submitMove', moveId: 'stab' });
+  await wait(10);
+
+  assert.equal(room.phase, 'roundOver');
+  assert.equal(room.gameWins.p1, 1);
+  assert.equal(room.pendingNextVariant, true);
+
+  service.receive(p1.session, { type: 'submitContinue' });
+  service.receive(p2.session, { type: 'submitContinue' });
+  assert.equal(room.phase, 'choosing');
+  assert.equal(room.variantId, VARIANT_IDS.tapTapShoot);
+  assert.deepEqual(room.roundWins, { p1: 0, p2: 0 });
+
+  room.roundWins.p1 = 4;
+  service.receive(p1.session, { type: 'submitMove', moveId: 'shoot' });
+  service.receive(p2.session, { type: 'submitMove', moveId: 'stab' });
+  await wait(10);
+
+  assert.equal(room.phase, 'gameOver');
+  assert.equal(room.winner, 'p1');
+  assert.equal(room.gameWins.p1, 2);
   assert.equal((await store.getPlayer('p1')).wins, 1);
   assert.equal((await store.getPlayer('p2')).losses, 1);
 });

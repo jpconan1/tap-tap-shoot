@@ -1,14 +1,16 @@
-import { DEFAULT_VARIANT_ID, getLegalMoves, normalizeVariantId } from './moves.js';
+import { DEFAULT_VARIANT_ID, getLegalMoves, getVariantStartResource, normalizeVariantId } from './moves.js';
 import { resolveTurn } from './resolveTurn.js';
 
 export function createRoundState({ variantId = DEFAULT_VARIANT_ID } = {}) {
+  const normalizedVariantId = normalizeVariantId(variantId);
+
   return {
-    variantId: normalizeVariantId(variantId),
+    variantId: normalizedVariantId,
     turn: 0,
     status: 'playing',
     players: {
-      p1: createPlayerState(),
-      p2: createPlayerState(),
+      p1: createPlayerState(normalizedVariantId),
+      p2: createPlayerState(normalizedVariantId),
     },
     history: [],
   };
@@ -87,9 +89,9 @@ export function getPlayerLegalMoves(state, playerId, variantId = state.variantId
   return getLegalMoves(state.players[playerId].bullets, state.players[opponentId].bullets, variantId);
 }
 
-function createPlayerState() {
+function createPlayerState(variantId) {
   return {
-    bullets: 1,
+    bullets: getVariantStartResource(variantId),
     move: null,
     hit: null,
   };

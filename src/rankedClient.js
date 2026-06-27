@@ -9,7 +9,7 @@ export class RankedClient {
     this.playerId = readLocalStorage(RANKED_PLAYER_ID_KEY);
   }
 
-  connect(displayName = '', variantId = 'fourMove') {
+  connect(displayName = '', variantId = 'shootStabDuck') {
     this.close();
     this.displayName = displayName;
     this.variantId = variantId;
@@ -49,6 +49,27 @@ export class RankedClient {
     });
     return true;
   }
+
+  submitBan(snapshot, variantId) {
+    if (
+      !this.socket ||
+      this.socket.readyState !== WebSocket.OPEN ||
+      !snapshot ||
+      snapshot.phase !== 'banning' ||
+      snapshot.bans?.[snapshot.playerKey] ||
+      snapshot.bans && Object.values(snapshot.bans).includes(variantId)
+    ) {
+      return false;
+    }
+
+    this.send({
+      type: 'submitBan',
+      matchId: snapshot.matchId,
+      variantId,
+    });
+    return true;
+  }
+
 
   submitContinue(snapshot) {
     if (

@@ -90,10 +90,10 @@ button {
   left: 50%;
   display: grid;
   grid-template-rows: minmax(0, 1fr) auto auto;
-  width: 1100px;
-  height: 825px;
+  width: 960px;
+  height: 540px;
   margin: 0;
-  padding: 34px 42px 12px;
+  padding: 0;
   overflow: hidden;
   transform: translateX(-50%) scale(var(--ui-scale, 1));
   transform-origin: top center;
@@ -104,8 +104,8 @@ button {
   inset: 0;
   z-index: 20;
   display: block;
-  width: 1100px;
-  height: 825px;
+  width: 960px;
+  height: 540px;
   pointer-events: all;
 }
 
@@ -163,6 +163,93 @@ button {
 .arena {
   position: relative;
   min-height: 0;
+}
+
+.layout-arena {
+  width: 100%;
+  height: 100%;
+}
+
+.layout-stage {
+  position: relative;
+  overflow: hidden;
+}
+
+.layout-slot {
+  position: absolute;
+  display: grid;
+  place-items: center;
+}
+
+.layout-slot canvas,
+.layout-slot img {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  object-fit: contain;
+}
+
+.layout-slot .doodle-canvas,
+.layout-slot .cue-canvas,
+.layout-slot .turn-counter,
+.layout-slot .bullets-label,
+.layout-slot .wins-label,
+.layout-slot .win-mark,
+.layout-slot .pick-label,
+.layout-slot .move-icon,
+.layout-slot .bullets-icon,
+.layout-slot .move-arrow {
+  transform: none;
+}
+
+.layout-slot .player-identity {
+  width: 100%;
+  height: 100%;
+  padding: 0;
+}
+
+.layout-slot .player-name {
+  max-width: 100%;
+  font-size: 30px;
+}
+
+.layout-slot .player-rating {
+  margin-top: 4px;
+  font-size: 18px;
+}
+
+.layout-moves {
+  display: contents;
+}
+
+.layout-stage .move-card,
+.layout-stage .sheet-button {
+  width: 100%;
+  height: 100%;
+}
+
+.layout-stage .move-button-art,
+.layout-stage .sheet-button-art {
+  width: 100%;
+  height: 100%;
+}
+
+.layout-stage .bullet-slot {
+  pointer-events: none;
+}
+
+.layout-stage .empty-bullet-slot {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.layout-controls {
+  position: absolute;
+  right: 8px;
+  bottom: 6px;
+  z-index: 30;
+  margin: 0;
 }
 
 .title-screen {
@@ -264,6 +351,23 @@ button {
 
 .online-name-actions .ghost {
   font-size: 30px;
+}
+
+.variant-ban-list {
+  display: grid;
+  gap: 14px;
+  width: min(760px, 82vw);
+  margin: 18px auto 8px;
+}
+
+.variant-ban-button {
+  width: 100%;
+  min-height: 58px;
+  font-size: 30px;
+}
+
+.variant-ban-button.selected {
+  opacity: 0.55;
 }
 
 .opponent-actions {
@@ -388,8 +492,8 @@ button {
 
 .ready-waiting-overlay {
   position: absolute;
-  top: calc((100% + 104px - 256px) / 2);
-  left: 50%;
+  top: var(--ready-y, 88px);
+  left: var(--ready-x, 219px);
   z-index: 4;
   display: block;
   width: 300px;
@@ -397,24 +501,24 @@ button {
   min-height: 0;
   image-rendering: auto;
   pointer-events: none;
-  transform: translateX(calc(-50% + var(--ready-x, 0px))) translateY(var(--ready-y, 0px)) rotate(0.35deg);
+  transform: rotate(0.35deg);
   transform-origin: center;
 }
 
 .ready-waiting-overlay.p1 {
-  --ready-x: -132px;
-  --ready-y: -40px;
+  --ready-x: 219px;
+  --ready-y: 88px;
 }
 
 .ready-waiting-overlay.p2 {
-  --ready-x: 132px;
-  --ready-y: -40px;
+  --ready-x: 441px;
+  --ready-y: 88px;
 }
 
 .countdown-overlay {
   position: absolute;
-  top: calc((100% + 104px - 256px) / 2);
-  left: 50%;
+  top: var(--countdown-y, 88px);
+  left: var(--countdown-x, 219px);
   z-index: 5;
   display: block;
   width: 300px;
@@ -422,22 +526,24 @@ button {
   min-height: 0;
   image-rendering: auto;
   pointer-events: none;
-  transform: translateX(calc(-50% + var(--countdown-x, 0px))) translateY(var(--countdown-y, -40px)) rotate(0.35deg);
+  transform: rotate(0.35deg);
   transform-origin: center;
 }
 
 .countdown-overlay.p1 {
-  --countdown-x: -132px;
+  --countdown-x: 219px;
+  --countdown-y: 88px;
 }
 
 .countdown-overlay.p2 {
-  --countdown-x: 132px;
+  --countdown-x: 441px;
+  --countdown-y: 88px;
 }
 
 .waiting-dots-overlay {
   position: absolute;
-  top: calc((100% + 104px - 256px) / 2);
-  left: 50%;
+  top: var(--waiting-y, 96px);
+  left: var(--waiting-x, 365px);
   z-index: 5;
   display: block;
   width: 135px;
@@ -445,64 +551,18 @@ button {
   min-height: 0;
   image-rendering: auto;
   pointer-events: none;
-  transform: translateX(calc(-50% + var(--waiting-x, 0px))) translateY(var(--waiting-y, -38px)) rotate(0.35deg);
-  transform-origin: center;
+  transform: rotate(0.35deg) scale(0.5);
+  transform-origin: top left;
 }
 
 .waiting-dots-overlay.p1 {
-  --waiting-x: -150px;
+  --waiting-x: 365px;
+  --waiting-y: 96px;
 }
 
 .waiting-dots-overlay.p2 {
-  --waiting-x: 150px;
-}
-
-.waiting-dots-overlay.scene-reloading.p1 {
-  --waiting-x: -147px;
-}
-
-.waiting-dots-overlay.scene-collision.p1,
-.waiting-dots-overlay.scene-collision.p2 {
-  --waiting-y: -33px;
-}
-
-.waiting-dots-overlay.scene-clash.p1 {
-  --waiting-x: -135px;
-  --waiting-y: -6px;
-}
-
-.waiting-dots-overlay.scene-clash.p2 {
-  --waiting-y: -18px;
-}
-
-.waiting-dots-overlay.scene-dodge {
-  --waiting-y: -8px;
-}
-
-.waiting-dots-overlay.scene-dodge.role-dodger {
-  --waiting-y: 27px;
-}
-
-.waiting-dots-overlay.scene-dodge.role-dodger.p1 {
-  --waiting-x: -140px;
-}
-
-.waiting-dots-overlay.scene-dodge.role-dodger.p2 {
-  --waiting-x: 140px;
-}
-
-.waiting-dots-overlay.scene-counterstab.role-counterer {
-  --waiting-y: -8px;
-}
-
-.waiting-dots-overlay.scene-counterstab.role-stabber.p1 {
-  --waiting-x: -120px;
-  --waiting-y: -33px;
-}
-
-.waiting-dots-overlay.scene-counterstab.role-stabber.p2 {
-  --waiting-x: 130px;
-  --waiting-y: -35px;
+  --waiting-x: 569px;
+  --waiting-y: 111px;
 }
 
 .tutorial-stage {
@@ -681,7 +741,7 @@ button {
   left: 10px;
   z-index: 2;
   display: grid;
-  grid-template-columns: 240px 128px 256px 128px 240px;
+  grid-template-columns: 256px 128px 256px 128px 256px;
   gap: 8px;
   align-items: start;
   justify-content: center;
@@ -747,7 +807,7 @@ button {
 .bullets-meter {
   display: grid;
   gap: 10px;
-  width: 240px;
+  width: 256px;
 }
 
 .bullets-meter.p1,
@@ -761,8 +821,8 @@ button {
 }
 
 .bullets-label {
-  width: 234px;
-  height: 33px;
+  width: 256px;
+  height: 80px;
   transform: translateY(-10px);
 }
 
@@ -776,7 +836,7 @@ button {
 
 .bullets-icons {
   display: grid;
-  grid-template-columns: repeat(4, 54px);
+  grid-template-columns: repeat(3, 54px);
   gap: 4px;
 }
 
@@ -829,7 +889,7 @@ button {
 }
 
 .bullets-super-meters .bullets-icons {
-  grid-template-columns: repeat(4, 64px);
+  grid-template-columns: repeat(3, 64px);
   gap: 6px;
   padding: 4px 6px;
 }
@@ -945,43 +1005,6 @@ button {
 
 .move-card.selected .move-button-art {
   transform: translateY(-4px) rotate(0deg);
-}
-
-.move-interaction-outline {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  z-index: 0;
-  display: block;
-  width: 384px;
-  height: 192px;
-  min-height: 0;
-  object-fit: contain;
-  opacity: 0;
-  pointer-events: none;
-  transform: translate(-50%, -50%);
-}
-
-.moves[data-hover-move="reload"] .move-card[data-reload-outline="beats"] .beats-outline,
-.moves[data-hover-move="shoot"] .move-card[data-shoot-outline="beats"] .beats-outline,
-.moves[data-hover-move="stab"] .move-card[data-stab-outline="beats"] .beats-outline,
-.moves[data-hover-move="duck"] .move-card[data-duck-outline="beats"] .beats-outline,
-.moves[data-hover-move="reload"] .move-card[data-reload-outline="draws"] .draws-outline,
-.moves[data-hover-move="shoot"] .move-card[data-shoot-outline="draws"] .draws-outline,
-.moves[data-hover-move="stab"] .move-card[data-stab-outline="draws"] .draws-outline,
-.moves[data-hover-move="duck"] .move-card[data-duck-outline="draws"] .draws-outline,
-.moves[data-hover-move="reload"] .move-card[data-reload-outline="loses"] .loses-outline,
-.moves[data-hover-move="shoot"] .move-card[data-shoot-outline="loses"] .loses-outline,
-.moves[data-hover-move="stab"] .move-card[data-stab-outline="loses"] .loses-outline,
-.moves[data-hover-move="duck"] .move-card[data-duck-outline="loses"] .loses-outline {
-  opacity: 1;
-}
-
-.moves[data-hover-move="reload"] .move-card[data-move="reload"] .move-interaction-outline,
-.moves[data-hover-move="shoot"] .move-card[data-move="shoot"] .move-interaction-outline,
-.moves[data-hover-move="stab"] .move-card[data-move="stab"] .move-interaction-outline,
-.moves[data-hover-move="duck"] .move-card[data-move="duck"] .move-interaction-outline {
-  opacity: 0;
 }
 
 .move-button-art {

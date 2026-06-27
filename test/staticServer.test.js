@@ -14,6 +14,7 @@ test('static server only serves public game files', async () => {
     await mkdir(join(root, 'assets'));
     await mkdir(join(root, 'server'));
     await writeFile(join(root, 'index.html'), '<main>game</main>');
+    await writeFile(join(root, 'new_layout.json'), '{"version":1}');
     await writeFile(join(root, 'src', 'main.js'), 'console.log("game");');
     await writeFile(join(root, 'assets', 'sprite.webp'), 'sprite');
     await writeFile(join(root, '.env'), 'SUPABASE_SECRET_KEY=secret');
@@ -26,6 +27,7 @@ test('static server only serves public game files', async () => {
     });
 
     assert.equal((await request(handler, '/')).statusCode, 200);
+    assert.equal((await request(handler, '/new_layout.json')).statusCode, 200);
     assert.equal((await request(handler, '/src/main.js')).statusCode, 200);
     assert.equal((await request(handler, '/assets/sprite.webp')).statusCode, 200);
     assert.deepEqual(JSON.parse((await request(handler, '/api/ranked-status')).body), {

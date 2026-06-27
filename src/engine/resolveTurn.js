@@ -1,14 +1,12 @@
-import { DEFAULT_VARIANT_ID, MAX_BULLETS, getMove, isBlockedByBulletCap, isForcedReload, normalizeVariantId } from './moves.js';
-
-const HIT_TABLE = Object.freeze({
-  shoot: Object.freeze({
-    stab: 'shot',
-    reload: 'shot',
-  }),
-  stab: Object.freeze({
-    duck: 'stabbed',
-  }),
-});
+import {
+  DEFAULT_VARIANT_ID,
+  getForcedMove,
+  getMove,
+  getVariantHitTable,
+  getVariantResourceMax,
+  isBlockedByBulletCap,
+  normalizeVariantId,
+} from './moves.js';
 
 export function resolveTurn({ p1Move, p2Move, p1Bullets, p2Bullets, variantId = DEFAULT_VARIANT_ID }) {
   const variant = normalizeVariantId(variantId);
@@ -22,8 +20,9 @@ export function resolveTurn({ p1Move, p2Move, p1Bullets, p2Bullets, variantId = 
     };
   }
 
-  const p1Hit = HIT_TABLE[p1Move]?.[p2Move] ?? null;
-  const p2Hit = HIT_TABLE[p2Move]?.[p1Move] ?? null;
+  const hitTable = getVariantHitTable(variant);
+  const p1Hit = hitTable[p1Move]?.[p2Move] ?? null;
+  const p2Hit = hitTable[p2Move]?.[p1Move] ?? null;
   const winner = p1Hit && !p2Hit ? 'p1' : p2Hit && !p1Hit ? 'p2' : null;
 
   return {
@@ -47,12 +46,14 @@ function validateChoice(player, moveId, bullets, opponentBullets, variantId) {
     return { ok: false, error: `${player} picked unknown move: ${moveId}` };
   }
 
-  if (isForcedReload(bullets, opponentBullets) && moveId !== 'reload') {
-    return { ok: false, error: `${player} must reload at 0-0` };
+  const forcedMove = getForcedMove(bullets, opponentBullets, variantId);
+
+  if (forcedMove && moveId !== forcedMove) {
+    return { ok: false, error: `${player} must ${forcedMove} at 0-0` };
   }
 
-  if (isBlockedByBulletCap(moveId, bullets)) {
-    return { ok: false, error: `${player} cannot reload at ${MAX_BULLETS}` };
+  if (isBlockedByBulletCap(moveId, bullets, variantId)) {
+    return { ok: false, error: `${player} cannot ${moveId} at ${getVariantResourceMax(variantId)}` };
   }
 
   if (bullets < move.cost) {
@@ -64,5 +65,5 @@ function validateChoice(player, moveId, bullets, opponentBullets, variantId) {
 
 function spendAndGain(bullets, moveId, variantId) {
   const move = getMove(moveId, variantId);
-  return Math.min(MAX_BULLETS, bullets - move.cost + move.gain);
+  return Math.min(getVariantResourceMax(variantId), bullets - move.cost + move.gain);
 }

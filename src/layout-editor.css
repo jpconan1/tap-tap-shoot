@@ -28,7 +28,8 @@ body {
 }
 
 button,
-input {
+input,
+select {
   font: inherit;
 }
 
@@ -56,7 +57,8 @@ button.danger {
   color: #ff9385;
 }
 
-input {
+input,
+select {
   width: 100%;
   min-width: 0;
   height: 32px;
@@ -69,6 +71,10 @@ input {
 }
 
 input:focus {
+  border-color: var(--accent);
+}
+
+select:focus {
   border-color: var(--accent);
 }
 
@@ -85,6 +91,14 @@ input:focus {
 .toolbar strong {
   margin-right: 8px;
   font-size: 17px;
+}
+
+.toolbar-field {
+  display: grid;
+  gap: 2px;
+  min-width: 190px;
+  color: var(--muted);
+  font-size: 11px;
 }
 
 .orientation-switch {

@@ -2,11 +2,20 @@ const FRAME_SIZES = Object.freeze({
   landscape: Object.freeze({ width: 960, height: 540 }),
   portrait: Object.freeze({ width: 540, height: 960 }),
 });
-const STORAGE_KEY = 'tapTapShoot.layoutTool.v1';
+const STORAGE_KEY = 'tapTapShoot.layoutTool.v2';
+const VARIANT_NAME = 'Shoot Stab Duck';
+const DEFAULT_LAYOUT_STATE_ID = 'playing.default';
+const LAYOUT_STATES = Object.freeze([
+  Object.freeze({ id: 'playing.default', name: 'Playing' }),
+  Object.freeze({ id: 'playing.disadvantaged', name: 'Disadvantaged' }),
+  Object.freeze({ id: 'round.between', name: 'Between rounds' }),
+  Object.freeze({ id: 'round.game-over', name: 'Game over' }),
+]);
 const DEFAULT_FRAME_COUNT = 3;
 const DEFAULT_ELEMENT_SCALE = 0.5;
 
 const stage = document.querySelector('[data-stage]');
+const layoutStateSelect = document.querySelector('[data-layout-state]');
 const assetList = document.querySelector('[data-asset-list]');
 const inspector = document.querySelector('[data-inspector]');
 const emptySelection = document.querySelector('[data-empty-selection]');
@@ -15,6 +24,7 @@ const saveStatus = document.querySelector('[data-save-status]');
 const importFile = document.querySelector('[data-import-file]');
 
 let orientation = 'landscape';
+let layoutStateId = DEFAULT_LAYOUT_STATE_ID;
 let selectedId = null;
 let catalog = [];
 let drag = null;
@@ -24,6 +34,7 @@ boot();
 
 async function boot() {
   catalog = getElementCatalog().map(createPendingCatalogItem);
+  renderLayoutStateOptions();
   renderElementList();
   render();
   Promise.all(getElementCatalog().map(loadElementMetadata)).then((loadedCatalog) => {
@@ -34,6 +45,7 @@ async function boot() {
   document.querySelectorAll('[data-orientation]').forEach((button) => {
     button.addEventListener('click', () => setOrientation(button.dataset.orientation));
   });
+  layoutStateSelect.addEventListener('change', () => setLayoutState(layoutStateSelect.value));
   document.querySelector('[data-action="export"]').addEventListener('click', exportLayouts);
   document.querySelector('[data-action="import"]').addEventListener('click', () => importFile.click());
   document.querySelector('[data-action="clear"]').addEventListener('click', clearLayout);
@@ -180,6 +192,16 @@ function render() {
   renderInspector();
   renderLayers();
   updateOrientationButtons();
+  updateLayoutStateSelect();
+}
+
+function renderLayoutStateOptions() {
+  layoutStateSelect.replaceChildren(...LAYOUT_STATES.map((state) => {
+    const option = document.createElement('option');
+    option.value = state.id;
+    option.textContent = state.name;
+    return option;
+  }));
 }
 
 function createStageElement(element, index) {
@@ -519,32 +541,47 @@ function setOrientation(nextOrientation) {
   render();
 }
 
-function clearLayout() {
-  if (!currentElements().length || !window.confirm(`Clear the ${orientation} layout?`)) {
+function setLayoutState(nextStateId) {
+  if (!LAYOUT_STATES.some((state) => state.id === nextStateId) || nextStateId === layoutStateId) {
     return;
   }
 
-  layouts[orientation].elements = [];
+  layoutStateId = nextStateId;
+  selectedId = null;
+  render();
+}
+
+function clearLayout() {
+  const stateName = LAYOUT_STATES.find((state) => state.id === layoutStateId)?.name ?? layoutStateId;
+
+  if (!currentElements().length || !window.confirm(`Clear the ${stateName} ${orientation} layout?`)) {
+    return;
+  }
+
+  currentLayout().elements = [];
   selectedId = null;
   commit();
 }
 
 function exportLayouts() {
   const payload = {
-    version: 1,
-    landscape: {
-      frame: FRAME_SIZES.landscape,
-      elements: layouts.landscape.elements,
-    },
-    portrait: {
-      frame: FRAME_SIZES.portrait,
-      elements: layouts.portrait.elements,
-    },
+    version: 2,
+    variant: layouts.variant || VARIANT_NAME,
+    frame: FRAME_SIZES.landscape,
+    portraitFrame: FRAME_SIZES.portrait,
+    states: Object.fromEntries(LAYOUT_STATES.map((state) => [
+      state.id,
+      {
+        name: state.name,
+        elements: layouts.states[state.id].landscape.elements,
+        portraitElements: layouts.states[state.id].portrait.elements,
+      },
+    ])),
   };
   const blob = new Blob([`${JSON.stringify(payload, null, 2)}\n`], { type: 'application/json' });
   const link = document.createElement('a');
   link.href = URL.createObjectURL(blob);
-  link.download = 'tap-tap-shoot-layout.json';
+  link.download = 'shoot-stab-duck-layout.json';
   link.click();
   URL.revokeObjectURL(link.href);
 }
@@ -579,15 +616,43 @@ function loadLayouts() {
 function normalizeLayouts(value) {
   const normalized = createEmptyLayouts();
 
+  if (value?.version >= 2 && value.states && typeof value.states === 'object') {
+    normalized.variant = String(value.variant || VARIANT_NAME);
+
+    for (const state of LAYOUT_STATES) {
+      const stateValue = value.states[state.id];
+
+      if (!stateValue) {
+        continue;
+      }
+
+      if (Array.isArray(stateValue.elements)) {
+        normalized.states[state.id].landscape.elements = stateValue.elements
+          .filter((element) => element && (typeof element.asset === 'string' || element.kind === 'text'))
+          .map(normalizeElement);
+      }
+
+      if (Array.isArray(stateValue.portraitElements)) {
+        normalized.states[state.id].portrait.elements = stateValue.portraitElements
+          .filter((element) => element && (typeof element.asset === 'string' || element.kind === 'text'))
+          .map(normalizeElement);
+      }
+    }
+
+    return normalized;
+  }
+
   for (const key of Object.keys(FRAME_SIZES)) {
     const elements = value?.[key]?.elements;
 
     if (Array.isArray(elements)) {
-      normalized[key].elements = elements
+      normalized.states[DEFAULT_LAYOUT_STATE_ID][key].elements = elements
         .filter((element) => element && (typeof element.asset === 'string' || element.kind === 'text'))
         .map(normalizeElement);
     }
   }
+
+  cloneDefaultLayoutToEmptyStates(normalized);
 
   return normalized;
 }
@@ -629,9 +694,38 @@ const NEW_ASSET_SOURCE_SIZES = Object.freeze({
 
 function createEmptyLayouts() {
   return {
-    landscape: { frame: FRAME_SIZES.landscape, elements: [] },
-    portrait: { frame: FRAME_SIZES.portrait, elements: [] },
+    variant: VARIANT_NAME,
+    states: Object.fromEntries(LAYOUT_STATES.map((state) => [
+      state.id,
+      {
+        landscape: { frame: FRAME_SIZES.landscape, elements: [] },
+        portrait: { frame: FRAME_SIZES.portrait, elements: [] },
+      },
+    ])),
   };
+}
+
+function cloneDefaultLayoutToEmptyStates(layoutsValue) {
+  for (const state of LAYOUT_STATES) {
+    if (state.id === DEFAULT_LAYOUT_STATE_ID) {
+      continue;
+    }
+
+    for (const key of Object.keys(FRAME_SIZES)) {
+      if (!layoutsValue.states[state.id][key].elements.length) {
+        layoutsValue.states[state.id][key].elements = cloneElements(
+          layoutsValue.states[DEFAULT_LAYOUT_STATE_ID][key].elements,
+        );
+      }
+    }
+  }
+}
+
+function cloneElements(elements) {
+  return elements.map((element) => ({
+    ...element,
+    id: crypto.randomUUID(),
+  }));
 }
 
 function commit() {
@@ -667,8 +761,16 @@ function updateOrientationButtons() {
   });
 }
 
+function updateLayoutStateSelect() {
+  layoutStateSelect.value = layoutStateId;
+}
+
 function currentElements() {
-  return layouts[orientation].elements;
+  return currentLayout().elements;
+}
+
+function currentLayout() {
+  return layouts.states[layoutStateId][orientation];
 }
 
 function getSelected() {
