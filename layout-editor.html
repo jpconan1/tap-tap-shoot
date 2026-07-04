@@ -10,6 +10,10 @@
     <header class="toolbar">
       <strong>Layout Tool</strong>
       <label class="toolbar-field">
+        Variant
+        <select data-variant></select>
+      </label>
+      <label class="toolbar-field">
         State
         <select data-layout-state></select>
       </label>
@@ -57,6 +61,15 @@
             Asset
             <input name="asset" readonly />
           </label>
+          <fieldset class="anchor-fields">
+            <legend>Scene head anchors</legend>
+            <div class="field-grid">
+              <label>P1 X <input name="p1HeadX" type="number" step="1" /></label>
+              <label>P1 Y <input name="p1HeadY" type="number" step="1" /></label>
+              <label>P2 X <input name="p2HeadX" type="number" step="1" /></label>
+              <label>P2 Y <input name="p2HeadY" type="number" step="1" /></label>
+            </div>
+          </fieldset>
           <div class="scale-row" aria-label="Scale selected element">
             <button data-scale="0.5" type="button">50%</button>
             <button data-scale="0.75" type="button">75%</button>

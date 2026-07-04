@@ -3,6 +3,7 @@ const FRAME_SIZES = Object.freeze({
   portrait: Object.freeze({ width: 540, height: 960 }),
 });
 const STORAGE_KEY = 'tapTapShoot.layoutTool.v2';
+const DEFAULT_VARIANT_ID = 'shoot-stab-duck';
 const VARIANT_NAME = 'Shoot Stab Duck';
 const DEFAULT_LAYOUT_STATE_ID = 'playing.default';
 const LAYOUT_STATES = Object.freeze([
@@ -15,6 +16,7 @@ const DEFAULT_FRAME_COUNT = 3;
 const DEFAULT_ELEMENT_SCALE = 0.5;
 
 const stage = document.querySelector('[data-stage]');
+const variantSelect = document.querySelector('[data-variant]');
 const layoutStateSelect = document.querySelector('[data-layout-state]');
 const assetList = document.querySelector('[data-asset-list]');
 const inspector = document.querySelector('[data-inspector]');
@@ -25,6 +27,7 @@ const importFile = document.querySelector('[data-import-file]');
 
 let orientation = 'landscape';
 let layoutStateId = DEFAULT_LAYOUT_STATE_ID;
+let variantId = getInitialVariantId();
 let selectedId = null;
 let catalog = [];
 let drag = null;
@@ -34,17 +37,16 @@ boot();
 
 async function boot() {
   catalog = getElementCatalog().map(createPendingCatalogItem);
+  renderVariantOptions();
   renderLayoutStateOptions();
   renderElementList();
   render();
-  Promise.all(getElementCatalog().map(loadElementMetadata)).then((loadedCatalog) => {
-    catalog = loadedCatalog;
-    renderElementList();
-  });
+  refreshCatalog();
 
   document.querySelectorAll('[data-orientation]').forEach((button) => {
     button.addEventListener('click', () => setOrientation(button.dataset.orientation));
   });
+  variantSelect.addEventListener('change', () => setVariant(variantSelect.value));
   layoutStateSelect.addEventListener('change', () => setLayoutState(layoutStateSelect.value));
   document.querySelector('[data-action="export"]').addEventListener('click', exportLayouts);
   document.querySelector('[data-action="import"]').addEventListener('click', () => importFile.click());
@@ -68,6 +70,10 @@ async function boot() {
 }
 
 function getElementCatalog() {
+  if (typeof window.getLayoutElementsForVariant === 'function') {
+    return window.getLayoutElementsForVariant(variantId);
+  }
+
   if (Array.isArray(window.LAYOUT_ELEMENTS)) {
     return window.LAYOUT_ELEMENTS;
   }
@@ -132,6 +138,20 @@ function loadElementMetadata(definition) {
   });
 }
 
+function refreshCatalog() {
+  const catalogVariantId = variantId;
+  catalog = getElementCatalog().map(createPendingCatalogItem);
+  renderElementList();
+  Promise.all(getElementCatalog().map(loadElementMetadata)).then((loadedCatalog) => {
+    if (variantId !== catalogVariantId) {
+      return;
+    }
+
+    catalog = loadedCatalog;
+    renderElementList();
+  });
+}
+
 function getFrameCount(path) {
   if (path.endsWith('loading_animation_boil_sheet.webp')) {
     return 10;
@@ -171,6 +191,8 @@ function addElement(item) {
     text: item.text,
     asset: item.asset,
     frameIndex: item.frameIndex,
+    scene: Boolean(item.scene),
+    anchors: createDefaultAnchors(item),
     sourceWidth: item.sourceWidth,
     sourceHeight: item.sourceHeight,
     x: Math.round((frame.width - item.width) / 2),
@@ -191,8 +213,18 @@ function render() {
   stage.replaceChildren(...currentElements().map(createStageElement));
   renderInspector();
   renderLayers();
+  updateVariantSelect();
   updateOrientationButtons();
   updateLayoutStateSelect();
+}
+
+function renderVariantOptions() {
+  variantSelect.replaceChildren(...getLayoutVariants().map((variant) => {
+    const option = document.createElement('option');
+    option.value = variant.id;
+    option.textContent = variant.name;
+    return option;
+  }));
 }
 
 function renderLayoutStateOptions() {
@@ -254,6 +286,25 @@ function renderResizeHandles(node, element) {
     resizeHandle.setAttribute('aria-hidden', 'true');
     node.append(resizeHandle);
   }
+
+  renderAnchorMarkers(node, element);
+}
+
+function renderAnchorMarkers(node, element) {
+  for (const [key, label] of [['p1Head', 'P1'], ['p2Head', 'P2']]) {
+    const anchor = element.anchors?.[key];
+
+    if (!anchor || !Number.isFinite(anchor.x) || !Number.isFinite(anchor.y)) {
+      continue;
+    }
+
+    const marker = document.createElement('span');
+    marker.className = `anchor-marker ${key}`;
+    marker.textContent = label;
+    marker.style.left = `${anchor.x}px`;
+    marker.style.top = `${anchor.y}px`;
+    node.append(marker);
+  }
 }
 
 function renderInspector() {
@@ -268,6 +319,11 @@ function renderInspector() {
   for (const field of ['name', 'x', 'y', 'width', 'height', 'asset']) {
     inspector.elements[field].value = selected[field] ?? '';
   }
+
+  inspector.elements.p1HeadX.value = selected.anchors?.p1Head?.x ?? '';
+  inspector.elements.p1HeadY.value = selected.anchors?.p1Head?.y ?? '';
+  inspector.elements.p2HeadX.value = selected.anchors?.p2Head?.x ?? '';
+  inspector.elements.p2HeadY.value = selected.anchors?.p2Head?.y ?? '';
 
   document.querySelector('[data-action="mirror"]').disabled = !canMirrorToP2(selected);
 }
@@ -435,11 +491,25 @@ function updateSelectedFromInspector(event) {
     } else {
       selected[event.target.name] = value;
     }
+  } else if (['p1HeadX', 'p1HeadY', 'p2HeadX', 'p2HeadY'].includes(event.target.name)) {
+    updateSelectedAnchor(selected, event.target.name, event.target.value);
   }
 
   updateSelectedNode();
   renderLayers();
   saveLayouts();
+}
+
+function updateSelectedAnchor(selected, fieldName, rawValue) {
+  const match = /^(p[12]Head)(X|Y)$/.exec(fieldName);
+
+  if (!match) {
+    return;
+  }
+
+  selected.anchors = selected.anchors ?? {};
+  selected.anchors[match[1]] = selected.anchors[match[1]] ?? {};
+  selected.anchors[match[1]][match[2].toLowerCase()] = finiteInteger(rawValue, 0);
 }
 
 function duplicateSelected() {
@@ -551,6 +621,20 @@ function setLayoutState(nextStateId) {
   render();
 }
 
+function setVariant(nextVariantId) {
+  if (!getLayoutVariants().some((variant) => variant.id === nextVariantId) || nextVariantId === variantId) {
+    return;
+  }
+
+  saveLayouts();
+  variantId = nextVariantId;
+  localStorage.setItem(`${STORAGE_KEY}.activeVariant`, variantId);
+  layouts = loadLayouts();
+  selectedId = null;
+  refreshCatalog();
+  render();
+}
+
 function clearLayout() {
   const stateName = LAYOUT_STATES.find((state) => state.id === layoutStateId)?.name ?? layoutStateId;
 
@@ -564,11 +648,15 @@ function clearLayout() {
 }
 
 function exportLayouts() {
+  const variant = getLayoutVariant();
   const payload = {
-    version: 2,
-    variant: layouts.variant || VARIANT_NAME,
+    version: 3,
+    variantId,
+    variant: variant.name,
+    variantFolder: variant.folder,
     frame: FRAME_SIZES.landscape,
     portraitFrame: FRAME_SIZES.portrait,
+    sceneAnchors: collectSceneAnchors(),
     states: Object.fromEntries(LAYOUT_STATES.map((state) => [
       state.id,
       {
@@ -581,7 +669,7 @@ function exportLayouts() {
   const blob = new Blob([`${JSON.stringify(payload, null, 2)}\n`], { type: 'application/json' });
   const link = document.createElement('a');
   link.href = URL.createObjectURL(blob);
-  link.download = 'shoot-stab-duck-layout.json';
+  link.download = `${variantId}-layout.json`;
   link.click();
   URL.revokeObjectURL(link.href);
 }
@@ -595,6 +683,14 @@ async function importLayouts() {
 
   try {
     const parsed = JSON.parse(await file.text());
+    const importedVariantId = getKnownVariantId(parsed.variantId, variantId);
+
+    if (importedVariantId !== variantId) {
+      variantId = importedVariantId;
+      localStorage.setItem(`${STORAGE_KEY}.activeVariant`, variantId);
+      refreshCatalog();
+    }
+
     layouts = normalizeLayouts(parsed);
     selectedId = null;
     commit();
@@ -607,7 +703,10 @@ async function importLayouts() {
 
 function loadLayouts() {
   try {
-    return normalizeLayouts(JSON.parse(localStorage.getItem(STORAGE_KEY)));
+    const stored = localStorage.getItem(getStorageKey(variantId))
+      ?? (variantId === DEFAULT_VARIANT_ID ? localStorage.getItem(STORAGE_KEY) : null);
+
+    return normalizeLayouts(JSON.parse(stored));
   } catch {
     return createEmptyLayouts();
   }
@@ -617,7 +716,8 @@ function normalizeLayouts(value) {
   const normalized = createEmptyLayouts();
 
   if (value?.version >= 2 && value.states && typeof value.states === 'object') {
-    normalized.variant = String(value.variant || VARIANT_NAME);
+    normalized.variantId = getKnownVariantId(value.variantId, variantId);
+    normalized.variant = String(value.variant || getLayoutVariant(normalized.variantId).name);
 
     for (const state of LAYOUT_STATES) {
       const stateValue = value.states[state.id];
@@ -660,6 +760,7 @@ function normalizeLayouts(value) {
 function normalizeElement(element) {
   const asset = migrateAssetPath(typeof element.asset === 'string' ? element.asset : '');
   const sourceSize = NEW_ASSET_SOURCE_SIZES[asset] ?? {};
+  const anchors = normalizeAnchors(element.anchors);
 
   return {
     id: typeof element.id === 'string' ? element.id : crypto.randomUUID(),
@@ -669,6 +770,8 @@ function normalizeElement(element) {
     text: typeof element.text === 'string' ? element.text : '',
     asset,
     frameIndex: Math.max(0, finiteInteger(element.frameIndex, 0)),
+    scene: Boolean(element.scene || element.key === 'scene' || String(element.key).startsWith('scene:')),
+    anchors,
     sourceWidth: Math.max(1, finiteInteger(sourceSize.width ?? element.sourceWidth, element.width ?? 256)),
     sourceHeight: Math.max(1, finiteInteger(sourceSize.height ?? element.sourceHeight, element.height ?? 128)),
     x: finiteInteger(element.x, 0),
@@ -693,8 +796,11 @@ const NEW_ASSET_SOURCE_SIZES = Object.freeze({
 });
 
 function createEmptyLayouts() {
+  const variant = getLayoutVariant();
+
   return {
-    variant: VARIANT_NAME,
+    variantId: variant.id,
+    variant: variant.name,
     states: Object.fromEntries(LAYOUT_STATES.map((state) => [
       state.id,
       {
@@ -728,13 +834,98 @@ function cloneElements(elements) {
   }));
 }
 
+function collectSceneAnchors() {
+  const entries = [];
+
+  for (const state of LAYOUT_STATES) {
+    for (const key of Object.keys(FRAME_SIZES)) {
+      for (const element of layouts.states[state.id][key].elements) {
+        if (!element.scene || !element.asset || !element.anchors) {
+          continue;
+        }
+
+        entries.push([element.asset, element.anchors]);
+      }
+    }
+  }
+
+  return Object.fromEntries(entries);
+}
+
+function createDefaultAnchors(item) {
+  if (!item.scene) {
+    return null;
+  }
+
+  return {
+    p1Head: { x: Math.round(item.width * 0.32), y: Math.round(item.height * 0.28) },
+    p2Head: { x: Math.round(item.width * 0.68), y: Math.round(item.height * 0.28) },
+  };
+}
+
+function normalizeAnchors(value) {
+  if (!value || typeof value !== 'object') {
+    return null;
+  }
+
+  return {
+    p1Head: normalizeAnchor(value.p1Head),
+    p2Head: normalizeAnchor(value.p2Head),
+  };
+}
+
+function normalizeAnchor(value) {
+  if (!value || typeof value !== 'object') {
+    return null;
+  }
+
+  return {
+    x: finiteInteger(value.x, 0),
+    y: finiteInteger(value.y, 0),
+  };
+}
+
+function getInitialVariantId() {
+  try {
+    return getKnownVariantId(localStorage.getItem(`${STORAGE_KEY}.activeVariant`), DEFAULT_VARIANT_ID);
+  } catch {
+    return DEFAULT_VARIANT_ID;
+  }
+}
+
+function getStorageKey(id) {
+  return `${STORAGE_KEY}.${getKnownVariantId(id, DEFAULT_VARIANT_ID)}`;
+}
+
+function getKnownVariantId(id, fallback = DEFAULT_VARIANT_ID) {
+  const variants = getLayoutVariants();
+  const candidate = String(id || '');
+
+  return variants.some((variant) => variant.id === candidate)
+    ? candidate
+    : fallback;
+}
+
+function getLayoutVariant(id = variantId) {
+  return getLayoutVariants().find((variant) => variant.id === id) ?? getLayoutVariants()[0];
+}
+
+function getLayoutVariants() {
+  return Array.isArray(window.LAYOUT_VARIANTS) && window.LAYOUT_VARIANTS.length
+    ? window.LAYOUT_VARIANTS
+    : [{ id: DEFAULT_VARIANT_ID, name: VARIANT_NAME, folder: 'assets/shoot-stab-duck' }];
+}
+
 function commit() {
   render();
   saveLayouts();
 }
 
 function saveLayouts() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(layouts));
+  layouts.variantId = variantId;
+  layouts.variant = getLayoutVariant().name;
+  localStorage.setItem(`${STORAGE_KEY}.activeVariant`, variantId);
+  localStorage.setItem(getStorageKey(variantId), JSON.stringify(layouts));
   saveStatus.textContent = 'Saved locally';
 }
 
@@ -763,6 +954,10 @@ function updateOrientationButtons() {
 
 function updateLayoutStateSelect() {
   layoutStateSelect.value = layoutStateId;
+}
+
+function updateVariantSelect() {
+  variantSelect.value = variantId;
 }
 
 function currentElements() {

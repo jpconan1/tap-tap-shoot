@@ -1,5 +1,81 @@
-window.LAYOUT_ELEMENTS = [
-  { key: "scene", name: "Scene", asset: "assets/reloading_sheet.webp", frame: "last" },
+const SYSTEM_SCENES = [
+  "game_lost",
+  "game_point",
+  "game_won",
+  "match_point",
+  "no_contest",
+  "round-game-match",
+  "round_lost",
+  "round_won",
+];
+
+const VARIANT_SCENES = {
+  "rock-paper-scissors": [
+    "paper-draw",
+    "paper-rock",
+    "rock-draw",
+    "rock-scissors",
+    "rps-standoff",
+    "scissors-paper",
+    "scissors-tie",
+  ],
+  "charge-block-fireball": [
+    "block-charge",
+    "block-draw",
+    "block-fireball",
+    "both-charge",
+    "cbf-standoff",
+    "charge-fireball",
+    "fireball-draw",
+    "super-blasting",
+    "super-final-frame1",
+    "super-final-frame2",
+    "super-final-frame3",
+    "super-final-frame4",
+  ],
+  "punch-stab-shoot": [
+    "punch-draw",
+    "punch-shoot-damage",
+    "punch-shoot-kill",
+    "shoot-draw",
+    "shoot-stab",
+    "stab-draw",
+    "stab-punch-damage",
+    "stab-punch-kill",
+  ],
+  "shoot-stab-duck": [
+    "duck-draw",
+    "reload-draw",
+    "reload-duck",
+    "shoot-draw",
+    "shoot-kill",
+    "stab-draw",
+    "stab-kill",
+    "stab-reload",
+    "standoff-ssd",
+  ],
+  "tap-tap-shoot": [
+    "defense-draw",
+    "reload-draw",
+    "reload-duck",
+    "shoot-draw",
+    "shoot-kill",
+    "stab-counterstab",
+    "stab-draw",
+    "stab-kill",
+    "standoff-tts",
+  ],
+};
+
+window.LAYOUT_VARIANTS = [
+  { id: "rock-paper-scissors", name: "Rock Paper Scissors", folder: "assets/rock-paper-scissors" },
+  { id: "charge-block-fireball", name: "Charge Block Fireball", folder: "assets/charge-block-fireball" },
+  { id: "punch-stab-shoot", name: "Punch Stab Shoot", folder: "assets/punch-stab-shoot" },
+  { id: "shoot-stab-duck", name: "Shoot Stab Duck", folder: "assets/shoot-stab-duck" },
+  { id: "tap-tap-shoot", name: "Tap Tap Shoot", folder: "assets/tap-tap-shoot" },
+];
+
+window.LAYOUT_SHARED_ELEMENTS = [
   { key: "p1-info", name: "P1 name & info", kind: "text", text: "P1\nINFO", width: 220, height: 72 },
   { key: "p2-info", name: "P2 name & info", kind: "text", text: "P2\nINFO", width: 220, height: 72 },
   { key: "p1-win-label", name: "P1 win label", asset: "assets/wins_label_sheet.webp" },
@@ -36,3 +112,31 @@ window.LAYOUT_ELEMENTS = [
   { key: "continue-button", name: "Continue button", asset: "assets/continue_button_sheet.webp" },
   { key: "quit-button", name: "Quit button", asset: "assets/quit_button_sheet.webp" },
 ];
+
+window.getLayoutElementsForVariant = function getLayoutElementsForVariant(variantId) {
+  const variant = window.LAYOUT_VARIANTS.find((item) => item.id === variantId) ?? window.LAYOUT_VARIANTS[0];
+  const systemScenes = SYSTEM_SCENES.map((name) => sceneElement({
+    key: `system-scene:${name}`,
+    name: `System scene: ${name}`,
+    asset: `assets/system_scenes/${name}_sheet.webp`,
+  }));
+  const variantScenes = (VARIANT_SCENES[variant.id] ?? []).map((name) => sceneElement({
+    key: `scene:${name}`,
+    name: `Scene: ${name}`,
+    asset: `${variant.folder}/${name}_sheet.webp`,
+  }));
+
+  return [
+    ...variantScenes,
+    ...systemScenes,
+    ...window.LAYOUT_SHARED_ELEMENTS,
+  ];
+};
+
+function sceneElement(definition) {
+  return {
+    ...definition,
+    scene: true,
+    frame: "last",
+  };
+}
