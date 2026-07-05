@@ -16,6 +16,7 @@ const DEFAULT_FRAME_COUNT = 3;
 const DEFAULT_ELEMENT_SCALE = 0.5;
 
 const stage = document.querySelector('[data-stage]');
+const layoutTargetSelect = document.querySelector('[data-layout-target]');
 const variantSelect = document.querySelector('[data-variant]');
 const layoutStateSelect = document.querySelector('[data-layout-state]');
 const assetList = document.querySelector('[data-asset-list]');
@@ -27,6 +28,7 @@ const importFile = document.querySelector('[data-import-file]');
 
 let orientation = 'landscape';
 let layoutStateId = DEFAULT_LAYOUT_STATE_ID;
+let layoutTarget = getInitialLayoutTarget();
 let variantId = getInitialVariantId();
 let selectedId = null;
 let catalog = [];
@@ -42,10 +44,12 @@ async function boot() {
   renderElementList();
   render();
   refreshCatalog();
+  loadBundledLayoutIfEmpty();
 
   document.querySelectorAll('[data-orientation]').forEach((button) => {
     button.addEventListener('click', () => setOrientation(button.dataset.orientation));
   });
+  layoutTargetSelect.addEventListener('change', () => setLayoutTarget(layoutTargetSelect.value));
   variantSelect.addEventListener('change', () => setVariant(variantSelect.value));
   layoutStateSelect.addEventListener('change', () => setLayoutState(layoutStateSelect.value));
   document.querySelector('[data-action="export"]').addEventListener('click', exportLayouts);
@@ -70,6 +74,10 @@ async function boot() {
 }
 
 function getElementCatalog() {
+  if (typeof window.getLayoutElementsForTarget === 'function') {
+    return window.getLayoutElementsForTarget({ target: layoutTarget, variantId });
+  }
+
   if (typeof window.getLayoutElementsForVariant === 'function') {
     return window.getLayoutElementsForVariant(variantId);
   }
@@ -213,6 +221,7 @@ function render() {
   stage.replaceChildren(...currentElements().map(createStageElement));
   renderInspector();
   renderLayers();
+  updateLayoutTargetSelect();
   updateVariantSelect();
   updateOrientationButtons();
   updateLayoutStateSelect();
@@ -633,6 +642,22 @@ function setVariant(nextVariantId) {
   selectedId = null;
   refreshCatalog();
   render();
+  loadBundledLayoutIfEmpty();
+}
+
+function setLayoutTarget(nextTarget) {
+  if (!['parent', 'variant'].includes(nextTarget) || nextTarget === layoutTarget) {
+    return;
+  }
+
+  saveLayouts();
+  layoutTarget = nextTarget;
+  localStorage.setItem(`${STORAGE_KEY}.activeTarget`, layoutTarget);
+  layouts = loadLayouts();
+  selectedId = null;
+  refreshCatalog();
+  render();
+  loadBundledLayoutIfEmpty();
 }
 
 function clearLayout() {
@@ -649,11 +674,13 @@ function clearLayout() {
 
 function exportLayouts() {
   const variant = getLayoutVariant();
+  const isParent = layoutTarget === 'parent';
   const payload = {
     version: 3,
-    variantId,
-    variant: variant.name,
-    variantFolder: variant.folder,
+    layoutTarget,
+    variantId: isParent ? 'parent' : variantId,
+    variant: isParent ? 'Parent' : variant.name,
+    variantFolder: isParent ? 'assets' : variant.folder,
     frame: FRAME_SIZES.landscape,
     portraitFrame: FRAME_SIZES.portrait,
     sceneAnchors: collectSceneAnchors(),
@@ -669,7 +696,7 @@ function exportLayouts() {
   const blob = new Blob([`${JSON.stringify(payload, null, 2)}\n`], { type: 'application/json' });
   const link = document.createElement('a');
   link.href = URL.createObjectURL(blob);
-  link.download = `${variantId}-layout.json`;
+  link.download = isParent ? 'parent-layout.json' : `${variantId}-layout.json`;
   link.click();
   URL.revokeObjectURL(link.href);
 }
@@ -683,14 +710,21 @@ async function importLayouts() {
 
   try {
     const parsed = JSON.parse(await file.text());
-    const importedVariantId = getKnownVariantId(parsed.variantId, variantId);
+    const importedTarget = parsed.layoutTarget === 'parent' || parsed.variantId === 'parent' ? 'parent' : 'variant';
 
-    if (importedVariantId !== variantId) {
-      variantId = importedVariantId;
-      localStorage.setItem(`${STORAGE_KEY}.activeVariant`, variantId);
-      refreshCatalog();
+    if (importedTarget !== layoutTarget) {
+      layoutTarget = importedTarget;
+      localStorage.setItem(`${STORAGE_KEY}.activeTarget`, layoutTarget);
     }
 
+    const importedVariantId = getKnownVariantId(parsed.variantId, variantId);
+
+    if (layoutTarget === 'variant' && importedVariantId !== variantId) {
+      variantId = importedVariantId;
+      localStorage.setItem(`${STORAGE_KEY}.activeVariant`, variantId);
+    }
+
+    refreshCatalog();
     layouts = normalizeLayouts(parsed);
     selectedId = null;
     commit();
@@ -704,7 +738,7 @@ async function importLayouts() {
 function loadLayouts() {
   try {
     const stored = localStorage.getItem(getStorageKey(variantId))
-      ?? (variantId === DEFAULT_VARIANT_ID ? localStorage.getItem(STORAGE_KEY) : null);
+      ?? (layoutTarget === 'variant' && variantId === DEFAULT_VARIANT_ID ? localStorage.getItem(STORAGE_KEY) : null);
 
     return normalizeLayouts(JSON.parse(stored));
   } catch {
@@ -712,12 +746,48 @@ function loadLayouts() {
   }
 }
 
+async function loadBundledLayoutIfEmpty() {
+  if (hasStoredLayouts() || !isLayoutEmpty(layouts)) {
+    return;
+  }
+
+  const requestedTarget = layoutTarget;
+  const requestedVariantId = variantId;
+
+  try {
+    const response = await fetch(getBundledLayoutUrl(), { cache: 'no-store' });
+
+    if (!response.ok) {
+      return;
+    }
+
+    const bundled = normalizeLayouts(await response.json());
+
+    if (layoutTarget !== requestedTarget || variantId !== requestedVariantId) {
+      return;
+    }
+
+    if (!isLayoutEmpty(layouts)) {
+      return;
+    }
+
+    layouts = bundled;
+    selectedId = null;
+    commit();
+  } catch {
+    // Empty editor still works when opened from file:// or before starter layouts exist.
+  }
+}
+
 function normalizeLayouts(value) {
   const normalized = createEmptyLayouts();
 
   if (value?.version >= 2 && value.states && typeof value.states === 'object') {
-    normalized.variantId = getKnownVariantId(value.variantId, variantId);
-    normalized.variant = String(value.variant || getLayoutVariant(normalized.variantId).name);
+    normalized.layoutTarget = value.layoutTarget === 'parent' || value.variantId === 'parent' ? 'parent' : layoutTarget;
+    normalized.variantId = normalized.layoutTarget === 'parent' ? 'parent' : getKnownVariantId(value.variantId, variantId);
+    normalized.variant = String(value.variant || (
+      normalized.layoutTarget === 'parent' ? 'Parent' : getLayoutVariant(normalized.variantId).name
+    ));
 
     for (const state of LAYOUT_STATES) {
       const stateValue = value.states[state.id];
@@ -799,8 +869,9 @@ function createEmptyLayouts() {
   const variant = getLayoutVariant();
 
   return {
-    variantId: variant.id,
-    variant: variant.name,
+    layoutTarget,
+    variantId: layoutTarget === 'parent' ? 'parent' : variant.id,
+    variant: layoutTarget === 'parent' ? 'Parent' : variant.name,
     states: Object.fromEntries(LAYOUT_STATES.map((state) => [
       state.id,
       {
@@ -832,6 +903,26 @@ function cloneElements(elements) {
     ...element,
     id: crypto.randomUUID(),
   }));
+}
+
+function isLayoutEmpty(value) {
+  return LAYOUT_STATES.every((state) => Object.keys(FRAME_SIZES).every((key) => (
+    !value.states[state.id][key].elements.length
+  )));
+}
+
+function hasStoredLayouts() {
+  try {
+    return Boolean(localStorage.getItem(getStorageKey(variantId)));
+  } catch {
+    return false;
+  }
+}
+
+function getBundledLayoutUrl() {
+  return layoutTarget === 'parent'
+    ? './assets/parent-layout.json'
+    : `./assets/${variantId}/layout.json`;
 }
 
 function collectSceneAnchors() {
@@ -893,8 +984,19 @@ function getInitialVariantId() {
   }
 }
 
+function getInitialLayoutTarget() {
+  try {
+    const target = localStorage.getItem(`${STORAGE_KEY}.activeTarget`);
+    return ['parent', 'variant'].includes(target) ? target : 'parent';
+  } catch {
+    return 'parent';
+  }
+}
+
 function getStorageKey(id) {
-  return `${STORAGE_KEY}.${getKnownVariantId(id, DEFAULT_VARIANT_ID)}`;
+  return layoutTarget === 'parent'
+    ? `${STORAGE_KEY}.parent`
+    : `${STORAGE_KEY}.${getKnownVariantId(id, DEFAULT_VARIANT_ID)}`;
 }
 
 function getKnownVariantId(id, fallback = DEFAULT_VARIANT_ID) {
@@ -922,8 +1024,10 @@ function commit() {
 }
 
 function saveLayouts() {
-  layouts.variantId = variantId;
-  layouts.variant = getLayoutVariant().name;
+  layouts.layoutTarget = layoutTarget;
+  layouts.variantId = layoutTarget === 'parent' ? 'parent' : variantId;
+  layouts.variant = layoutTarget === 'parent' ? 'Parent' : getLayoutVariant().name;
+  localStorage.setItem(`${STORAGE_KEY}.activeTarget`, layoutTarget);
   localStorage.setItem(`${STORAGE_KEY}.activeVariant`, variantId);
   localStorage.setItem(getStorageKey(variantId), JSON.stringify(layouts));
   saveStatus.textContent = 'Saved locally';
@@ -954,6 +1058,11 @@ function updateOrientationButtons() {
 
 function updateLayoutStateSelect() {
   layoutStateSelect.value = layoutStateId;
+}
+
+function updateLayoutTargetSelect() {
+  layoutTargetSelect.value = layoutTarget;
+  variantSelect.disabled = layoutTarget === 'parent';
 }
 
 function updateVariantSelect() {

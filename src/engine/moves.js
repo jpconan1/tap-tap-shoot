@@ -11,6 +11,11 @@ export const DEFAULT_VARIANT_ID = VARIANT_IDS.shootStabDuck;
 export const LEGACY_VARIANT_IDS = Object.freeze({
   fourMove: DEFAULT_VARIANT_ID,
   counterstab: VARIANT_IDS.tapTapShoot,
+  'rock-paper-scissors': VARIANT_IDS.rps,
+  'charge-block-fireball': VARIANT_IDS.chargeBlockFireball,
+  'shoot-stab-duck': VARIANT_IDS.shootStabDuck,
+  'punch-stab-shoot': VARIANT_IDS.punchStabShoot,
+  'tap-tap-shoot': VARIANT_IDS.tapTapShoot,
 });
 
 export const MOVES = Object.freeze({

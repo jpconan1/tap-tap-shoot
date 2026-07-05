@@ -1,4 +1,11 @@
-import { DEFAULT_VARIANT_ID, MAX_BULLETS, MOVES, VARIANT_IDS, getVariantMoveIds } from './engine/moves.js';
+import {
+  DEFAULT_VARIANT_ID,
+  MAX_BULLETS,
+  MOVES,
+  VARIANT_IDS,
+  getVariantMoveIds,
+  getVariantResourceMax,
+} from './engine/moves.js';
 import { createRoundState, getPlayerLegalMoves, playTurn } from './engine/gameState.js';
 import { chooseRivalMove as chooseAiMove, DEFAULT_RIVAL_ID } from './engine/rivalAi.js';
 import {
@@ -74,6 +81,10 @@ const GAME_TARGET_ROUNDS = 5;
 const FRAME_WIDTH = 960;
 const FRAME_HEIGHT = 540;
 const GAME_LAYOUT_URL = './new_layout.json';
+const VARIANT_LAYOUT_URLS = Object.freeze({
+  [VARIANT_IDS.shootStabDuck]: GAME_LAYOUT_URL,
+  [VARIANT_IDS.rps]: './assets/rock-paper-scissors/rps-layout.json',
+});
 const DEFAULT_LAYOUT_STATE_ID = 'playing.default';
 const DISADVANTAGED_LAYOUT_STATE_ID = 'playing.disadvantaged';
 const BETWEEN_ROUND_LAYOUT_STATE_ID = 'round.between';
@@ -159,9 +170,9 @@ const NAME_SUFFIXES = Object.freeze([
   '####',
 ]);
 const MOVE_BUTTON_DOODLES = Object.freeze({
-  rock: 'stab_button',
-  paper: 'duck_button',
-  scissors: 'shoot_button',
+  rock: 'rock-paper-scissors/rock_button',
+  paper: 'rock-paper-scissors/paper_button',
+  scissors: 'rock-paper-scissors/scissors_button',
   charge: 'reload_button',
   block: 'duck_button',
   fireball: 'shoot_button',
@@ -174,9 +185,9 @@ const MOVE_BUTTON_DOODLES = Object.freeze({
   doubletap: 'shoot_button',
 });
 const MOVE_ICON_DOODLES = Object.freeze({
-  rock: 'stab_icon',
-  paper: 'dodge_icon',
-  scissors: 'shoot_icon',
+  rock: 'rock-paper-scissors/rock_button',
+  paper: 'rock-paper-scissors/paper_button',
+  scissors: 'rock-paper-scissors/scissors_button',
   charge: 'reload_icon',
   block: 'dodge_icon',
   fireball: 'shoot_icon',
@@ -369,6 +380,7 @@ let tutorialStageMode = 'slide';
 let tutorialFeedbackMarkup = '';
 let tutorialPendingFeedbackMarkup = '';
 let stagePresentation = { kind: 'doodle', name: 'reloading', flip: false };
+let gameLayouts = new Map();
 let gameLayout = null;
 let activeLayoutStateId = DEFAULT_LAYOUT_STATE_ID;
 let lastMoves = {
@@ -395,9 +407,9 @@ boot();
 async function boot() {
   const loadingScreen = renderLoadingScreen();
   let loadingImages = null;
-  const gameLayoutPromise = loadGameLayout()
-    .then((layout) => {
-      gameLayout = layout;
+  const gameLayoutPromise = preloadGameLayouts()
+    .then(() => {
+      gameLayout = getCachedGameLayoutForVariant(DEFAULT_VARIANT_ID);
       updateFrameScale();
     })
     .catch((error) => {
@@ -755,14 +767,47 @@ function preloadGameFont() {
   return document.fonts.load('16px Pangolin').then(() => undefined, () => undefined);
 }
 
-async function loadGameLayout() {
-  const response = await fetch(GAME_LAYOUT_URL, { cache: 'no-store' });
+async function loadGameLayoutForVariant(variantId) {
+  const layoutUrl = getLayoutUrlForVariant(variantId);
+
+  if (gameLayouts.has(layoutUrl)) {
+    return gameLayouts.get(layoutUrl);
+  }
+
+  const response = await fetch(layoutUrl, { cache: 'no-store' });
 
   if (!response.ok) {
     throw new Error(`Layout request failed: ${response.status}`);
   }
 
-  return normalizeGameLayout(await response.json());
+  const layout = normalizeGameLayout(await response.json());
+  gameLayouts.set(layoutUrl, layout);
+  return layout;
+}
+
+function preloadGameLayouts() {
+  return Promise.all(
+    [...new Set([DEFAULT_VARIANT_ID, ...Object.keys(VARIANT_LAYOUT_URLS)])]
+      .map((variantId) => loadGameLayoutForVariant(variantId)),
+  );
+}
+
+function getLayoutUrlForVariant(variantId) {
+  return VARIANT_LAYOUT_URLS[variantId] ?? GAME_LAYOUT_URL;
+}
+
+function getCachedGameLayoutForVariant(variantId) {
+  return gameLayouts.get(getLayoutUrlForVariant(variantId)) ?? gameLayouts.get(GAME_LAYOUT_URL) ?? gameLayout;
+}
+
+async function setActiveGameLayoutForVariant(variantId) {
+  gameLayout = await loadGameLayoutForVariant(variantId);
+  updateFrameScale();
+}
+
+function setCachedActiveGameLayoutForVariant(variantId) {
+  gameLayout = getCachedGameLayoutForVariant(variantId);
+  updateFrameScale();
 }
 
 function normalizeGameLayout(payload) {
@@ -1218,6 +1263,10 @@ function renderWinCounter(playerId) {
 }
 
 function renderLayoutBulletSlots(playerId) {
+  if (getVariantResourceMax(getCurrentVariantId()) <= 0) {
+    return '';
+  }
+
   return `
     ${renderLayoutSlot(`${playerId}-bullets-label`, renderStaticDoodle('bullets_label', BULLETS_LABEL_FRAME_WIDTH, BULLETS_LABEL_FRAME_HEIGHT, 'bullets-label'), 'hud-art-slot')}
     ${Array.from({ length: BULLET_SLOT_COUNT }, (_, index) => {
@@ -2670,6 +2719,7 @@ async function startTestModeFromTitle() {
 
   selectedOpponentId = DEFAULT_OPPONENT_ID;
   selectedVariantId = DEFAULT_VARIANT_ID;
+  await setActiveGameLayoutForVariant(selectedVariantId);
   playMode = 'test';
   clearLocalTurnChoice();
   requestMusicTrack('game');
@@ -2689,6 +2739,7 @@ async function startLocalGame(variantId) {
 
   selectedOpponentId = DEFAULT_OPPONENT_ID;
   selectedVariantId = COMPUTER_VARIANT_IDS.includes(variantId) ? variantId : DEFAULT_VARIANT_ID;
+  await setActiveGameLayoutForVariant(selectedVariantId);
   playMode = 'local';
   clearLocalTurnChoice();
   requestMusicTrack('game');
@@ -2945,8 +2996,8 @@ function setNewRound() {
   p1QueuedMove = null;
   resetStageAudioKey();
   lastMoves = {
-    p1: 'reload',
-    p2: 'reload',
+    p1: getActiveMoveIds()[0] ?? 'reload',
+    p2: getActiveMoveIds()[0] ?? 'reload',
   };
   stagePresentation = { kind: 'cue', name: 'READY' };
   render();
@@ -2955,8 +3006,16 @@ function setNewRound() {
 function setNewRoundAtReloadScene() {
   setNewRound();
   turnPhase = 'scene';
-  stagePresentation = { kind: 'doodle', name: 'reloading', flip: false };
+  stagePresentation = getIdleStagePresentation();
   render();
+}
+
+function getIdleStagePresentation(variantId = getCurrentVariantId()) {
+  return {
+    kind: 'doodle',
+    name: variantId === VARIANT_IDS.rps ? 'rock-paper-scissors/rps-standoff' : 'reloading',
+    flip: false,
+  };
 }
 
 function getCurrentLegalMoves() {
@@ -2973,6 +3032,8 @@ function startRankedFromTitle() {
   }
 
   playMode = 'online';
+  selectedVariantId = DEFAULT_VARIANT_ID;
+  setCachedActiveGameLayoutForVariant(DEFAULT_VARIANT_ID);
   clearLocalTurnChoice();
   screen = 'online-name';
   p1QueuedMove = null;
@@ -3028,6 +3089,8 @@ function beginRankedQueue() {
   stopOnlineStatusPolling();
   unlockSceneAudio();
   playMode = 'online';
+  selectedVariantId = DEFAULT_VARIANT_ID;
+  setCachedActiveGameLayoutForVariant(DEFAULT_VARIANT_ID);
   clearLocalTurnChoice();
   clearRankedReadyWaitingTimer();
   screen = 'queue';
@@ -3165,6 +3228,7 @@ function commitRankedSnapshot(snapshot, previousPhase = rankedSnapshot?.phase) {
   rankedSnapshot = snapshot;
   rankedReadyWaiting = getRankedReadyWaitingFromSnapshot(snapshot);
   screen = 'playing';
+  setCachedActiveGameLayoutForVariant(snapshot.currentVariantId ?? snapshot.variantId ?? DEFAULT_VARIANT_ID);
   state = getLocalStateFromRankedSnapshot(snapshot);
   roundWins = getLocalRoundWinsFromRankedSnapshot(snapshot);
   syncMusicTopper();
@@ -3243,12 +3307,12 @@ function getRankedIdleChoosingPresentation(snapshot) {
     return getDoodlePresentation(moves.p1, moves.p2, { variantId: snapshot.currentVariantId ?? snapshot.variantId });
   }
 
-  return { kind: 'doodle', name: 'reloading', flip: false };
+  return getIdleStagePresentation(snapshot.currentVariantId ?? snapshot.variantId);
 }
 
 function getRankedChoosingPresentation(snapshot) {
   if ((snapshot.round?.turn ?? 0) === 0 && !snapshot.round?.lastTurn) {
-    return { kind: 'doodle', name: 'reloading', flip: false };
+    return getIdleStagePresentation(snapshot.currentVariantId ?? snapshot.variantId);
   }
 
   return getDoodlePresentation(lastMoves.p1, lastMoves.p2, { variantId: snapshot.currentVariantId ?? snapshot.variantId });
@@ -3421,6 +3485,8 @@ function leaveRanked() {
   stopFindingMatchTicker();
   clearRankedReadyWaitingTimer();
   playMode = 'local';
+  selectedVariantId = DEFAULT_VARIANT_ID;
+  setCachedActiveGameLayoutForVariant(DEFAULT_VARIANT_ID);
   clearLocalTurnChoice();
   rankedSnapshot = null;
   pendingRankedSnapshot = null;
@@ -3537,7 +3603,7 @@ async function runOpeningCues(token) {
   }
 
   turnPhase = 'scene';
-  stagePresentation = { kind: 'doodle', name: 'reloading', flip: false };
+  stagePresentation = getIdleStagePresentation();
   render();
 }
 
@@ -3637,7 +3703,7 @@ function resolveQueuedTurn() {
       p1: p1Move,
       p2: p2Move,
     };
-    stagePresentation = getDoodlePresentation(p1Move, p2Move);
+    stagePresentation = getDoodlePresentation(p1Move, p2Move, { variantId: getCurrentVariantId() });
 
     if (screen === 'tutorial' && state.status === 'finished' && state.winner) {
       roundWins[state.winner] += 1;

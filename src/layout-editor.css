@@ -101,6 +101,10 @@ select:focus {
   font-size: 11px;
 }
 
+.toolbar-field.compact {
+  min-width: 110px;
+}
+
 .orientation-switch {
   display: flex;
   gap: 4px;

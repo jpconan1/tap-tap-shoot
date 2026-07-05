@@ -110,13 +110,13 @@ export async function playStarburstWipeTransition(app, onCovered, playWipeAudio)
   overlay.remove();
 }
 
-export function getDoodlePresentation(p1Move, p2Move) {
-  const name = getDoodleForMoves(p1Move, p2Move);
+export function getDoodlePresentation(p1Move, p2Move, { variantId = '' } = {}) {
+  const name = getDoodleForMoves(p1Move, p2Move, variantId);
 
   return {
     kind: 'doodle',
     name,
-    flip: shouldFlipDoodle(name, p1Move, p2Move),
+    flip: shouldFlipDoodle(name, p1Move, p2Move, variantId),
   };
 }
 
@@ -421,13 +421,43 @@ function drawWipeStep(canvas, layers, now) {
   });
 }
 
-function getDoodleForMoves(p1Move, p2Move) {
+function getDoodleForMoves(p1Move, p2Move, variantId = '') {
+  if (variantId === 'rps') {
+    return getRpsDoodleForMoves(p1Move, p2Move);
+  }
+
   const sortedMoves = [p1Move, p2Move].sort((a, b) => MOVE_IDS.indexOf(a) - MOVE_IDS.indexOf(b));
   const key = sortedMoves.join('|');
   return INTERACTION_DOODLES[key] ?? 'hiding';
 }
 
-function shouldFlipDoodle(doodle, p1Move, p2Move) {
+function getRpsDoodleForMoves(p1Move, p2Move) {
+  if (p1Move === p2Move) {
+    return `rock-paper-scissors/${p1Move === 'scissors' ? 'scissors-tie' : `${p1Move}-draw`}`;
+  }
+
+  if ((p1Move === 'rock' && p2Move === 'scissors') || (p1Move === 'scissors' && p2Move === 'rock')) {
+    return 'rock-paper-scissors/rock-scissors';
+  }
+
+  if ((p1Move === 'paper' && p2Move === 'rock') || (p1Move === 'rock' && p2Move === 'paper')) {
+    return 'rock-paper-scissors/paper-rock';
+  }
+
+  if ((p1Move === 'scissors' && p2Move === 'paper') || (p1Move === 'paper' && p2Move === 'scissors')) {
+    return 'rock-paper-scissors/scissors-paper';
+  }
+
+  return 'rock-paper-scissors/rps-standoff';
+}
+
+function shouldFlipDoodle(doodle, p1Move, p2Move, variantId = '') {
+  if (variantId === 'rps') {
+    return (doodle === 'rock-paper-scissors/rock-scissors' && p2Move === 'rock')
+      || (doodle === 'rock-paper-scissors/paper-rock' && p2Move === 'paper')
+      || (doodle === 'rock-paper-scissors/scissors-paper' && p2Move === 'scissors');
+  }
+
   if (doodle === 'shooting') {
     return p2Move === 'shoot';
   }
