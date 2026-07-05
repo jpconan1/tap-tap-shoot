@@ -8,6 +8,10 @@ export const DOODLE_FRAME_RATE = 8;
 const WIPE_FRAME_WIDTH = 1100;
 const WIPE_FRAME_HEIGHT = 825;
 const WIPE_STEP_DURATION = 58;
+const CURTAIN_FRAME_WIDTH = 960;
+const CURTAIN_FRAME_HEIGHT = 540;
+const CURTAIN_STEP_DURATION = 84;
+const CURTAIN_CLOSED_BEAT_MS = 420;
 const READY_WAITING_FRAME_WIDTH = 300;
 const READY_WAITING_FRAME_HEIGHT = 256;
 const READY_WAITING_STEP_DURATION = 58;
@@ -134,9 +138,19 @@ const STARBURST_WIPE_STEPS = Object.freeze([
   Object.freeze(['2', '1_w']),
   Object.freeze(['1']),
 ]);
+const CURTAIN_WIPE_STEPS = Object.freeze([
+  'curtains-open',
+  'curtains-frame1',
+  'curtains-frame2',
+  'curtains-frame3',
+  'curtains-closed',
+]);
 
 const doodleSheets = new Map();
 let doodleRenderers = [];
+const curtainBoilStops = new WeakMap();
+let rendererPauseStartedAt = null;
+let rendererPausedDuration = 0;
 
 export function preloadDoodleSheets(doodles) {
   return Promise.all([...new Set(doodles)].map((doodle) => ensureImageLoaded(loadDoodleSheet(doodle))));
@@ -154,6 +168,7 @@ export function getRendererPreloadDoodles() {
     ...PUNCH_STAB_SHOOT_SPLIT_DOODLES,
     ...SPLIT_READY_DOODLES,
     ...STARBURST_WIPE_STEPS.flat().map((name) => `starburst_wipe/${name}`),
+    ...CURTAIN_WIPE_STEPS.map((name) => `curtains/${name}`),
     ...READY_WAITING_READY_STEPS.map((name) => `ready_waiting/${name}`),
     'ready_waiting/rdy',
     ...COUNTDOWN_NUMBERS.map((number) => `ready_waiting/countdown${number}`),
@@ -161,6 +176,23 @@ export function getRendererPreloadDoodles() {
     'ready_waiting/waiting2',
     'ready_waiting/waiting3',
   ];
+}
+
+export function pauseRendererClock() {
+  if (rendererPauseStartedAt !== null) {
+    return;
+  }
+
+  rendererPauseStartedAt = performance.now();
+}
+
+export function resumeRendererClock() {
+  if (rendererPauseStartedAt === null) {
+    return;
+  }
+
+  rendererPausedDuration += performance.now() - rendererPauseStartedAt;
+  rendererPauseStartedAt = null;
 }
 
 export async function playStarburstWipeTransition(app, onCovered, playWipeAudio) {
@@ -176,6 +208,48 @@ export async function playStarburstWipeTransition(app, onCovered, playWipeAudio)
   overlay = createWipeOverlay(app);
   drawWipeStep(overlay, STARBURST_WIPE_STEPS[coveredStep], performance.now());
   await animateWipeSteps(overlay, coveredStep + 1, STARBURST_WIPE_STEPS.length - 1);
+  overlay.remove();
+}
+
+// Generic full-screen curtain transition. Put screen/state changes in onCovered.
+export async function playCurtainWipeTransition(app, onCovered) {
+  await preloadCurtainWipe();
+
+  let overlay = createCurtainOverlay(app);
+  const closedStep = CURTAIN_WIPE_STEPS.length - 1;
+
+  await animateCurtainSteps(overlay, 0, closedStep);
+  await holdCurtainStep(overlay, CURTAIN_WIPE_STEPS[closedStep], CURTAIN_CLOSED_BEAT_MS);
+
+  onCovered();
+
+  overlay = createCurtainOverlay(app);
+  drawCurtainStep(overlay, CURTAIN_WIPE_STEPS[closedStep], performance.now());
+  await animateCurtainSteps(overlay, closedStep - 1, 0);
+  overlay.remove();
+}
+
+export async function closeCurtainWipe(app) {
+  await preloadCurtainWipe();
+
+  const overlay = createCurtainOverlay(app);
+  const closedStep = CURTAIN_WIPE_STEPS.length - 1;
+
+  await animateCurtainSteps(overlay, 0, closedStep);
+  startCurtainBoil(overlay, CURTAIN_WIPE_STEPS[closedStep]);
+
+  return overlay;
+}
+
+export async function openCurtainWipe(overlay) {
+  if (!overlay?.isConnected) {
+    return;
+  }
+
+  stopCurtainBoil(overlay);
+  const closedStep = CURTAIN_WIPE_STEPS.length - 1;
+  drawCurtainStep(overlay, CURTAIN_WIPE_STEPS[closedStep], performance.now());
+  await animateCurtainSteps(overlay, closedStep - 1, 0);
   overlay.remove();
 }
 
@@ -289,7 +363,7 @@ export function mountSpriteRenderers(canvases) {
   doodleRenderers.forEach(({ canvas, image }) => {
     installSpriteFallback(canvas, image);
   });
-  drawDoodleFrame(performance.now());
+  drawDoodleFrame(getRendererNow(performance.now()));
   ensureDoodleLoop();
 }
 
@@ -321,9 +395,23 @@ function createWipeOverlay(app) {
   return canvas;
 }
 
+function createCurtainOverlay(app) {
+  const canvas = document.createElement('canvas');
+  canvas.className = 'wipe-overlay curtain-wipe-overlay';
+  canvas.width = CURTAIN_FRAME_WIDTH;
+  canvas.height = CURTAIN_FRAME_HEIGHT;
+  canvas.setAttribute('aria-hidden', 'true');
+  app.append(canvas);
+  return canvas;
+}
+
 function preloadStarburstWipe() {
   const images = new Set(STARBURST_WIPE_STEPS.flat());
   return preloadDoodleSheets([...images].map((name) => `starburst_wipe/${name}`));
+}
+
+function preloadCurtainWipe() {
+  return preloadDoodleSheets(CURTAIN_WIPE_STEPS.map((name) => `curtains/${name}`));
 }
 
 function preloadReadyWaiting() {
@@ -335,6 +423,17 @@ function preloadReadyWaiting() {
     'ready_waiting/waiting2',
     'ready_waiting/waiting3',
   ]);
+}
+
+function waitMs(duration) {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, duration);
+  });
+}
+
+function getRendererNow(now) {
+  const frozenNow = rendererPauseStartedAt ?? now;
+  return frozenNow - rendererPausedDuration;
 }
 
 function ensureImageLoaded(image) {
@@ -352,7 +451,7 @@ async function startReadyWaitingLoop(canvas) {
   const context = canvas.getContext('2d');
   await preloadReadyWaiting();
 
-  const startedAt = performance.now();
+  const startedAt = getRendererNow(performance.now());
   const holdReady = canvas.dataset.readyPhase === 'countdown';
   let didRequestSplit = false;
 
@@ -361,7 +460,8 @@ async function startReadyWaitingLoop(canvas) {
       return;
     }
 
-    const elapsed = now - startedAt;
+    const renderNow = getRendererNow(now);
+    const elapsed = renderNow - startedAt;
     const stepIndex = getReadyWaitingStepIndex(elapsed);
     const layers = holdReady ? ['rdy'] : getReadyWaitingLayersForStep(stepIndex);
 
@@ -370,7 +470,7 @@ async function startReadyWaitingLoop(canvas) {
       canvas.dispatchEvent(new CustomEvent('ready-waiting-split', { bubbles: true }));
     }
 
-    drawReadyWaitingStep(canvas, context, layers, now);
+    drawReadyWaitingStep(canvas, context, layers, renderNow);
     requestAnimationFrame(tick);
   }
 
@@ -424,7 +524,7 @@ async function startWaitingDotsLoop(canvas) {
   const context = canvas.getContext('2d');
   await preloadReadyWaiting();
 
-  const startedAt = performance.now();
+  const startedAt = getRendererNow(performance.now());
   const elapsedOffset = canvas.dataset.immediate === 'true' ? WAITING_DOTS_START_DELAY : 0;
 
   function tick(now) {
@@ -432,11 +532,12 @@ async function startWaitingDotsLoop(canvas) {
       return;
     }
 
-    const elapsed = now - startedAt + elapsedOffset;
+    const renderNow = getRendererNow(now);
+    const elapsed = renderNow - startedAt + elapsedOffset;
     context.clearRect(0, 0, canvas.width, canvas.height);
 
     if (elapsed >= WAITING_DOTS_START_DELAY) {
-      drawWaitingDotsStep(canvas, context, elapsed - WAITING_DOTS_START_DELAY, now);
+      drawWaitingDotsStep(canvas, context, elapsed - WAITING_DOTS_START_DELAY, renderNow);
     }
 
     requestAnimationFrame(tick);
@@ -472,14 +573,15 @@ async function startCountdownLoop(canvas) {
   const context = canvas.getContext('2d');
   await preloadReadyWaiting();
 
-  const startedAt = performance.now();
+  const startedAt = getRendererNow(performance.now());
 
   function tick(now) {
     if (!canvas.isConnected) {
       return;
     }
 
-    drawCountdownStep(canvas, context, now - startedAt, now);
+    const renderNow = getRendererNow(now);
+    drawCountdownStep(canvas, context, renderNow - startedAt, renderNow);
     requestAnimationFrame(tick);
   }
 
@@ -546,6 +648,88 @@ function animateWipeSteps(canvas, firstStep, lastStep) {
   });
 }
 
+function animateCurtainSteps(canvas, firstStep, lastStep) {
+  return new Promise((resolve) => {
+    const direction = firstStep <= lastStep ? 1 : -1;
+    const stepCount = Math.abs(lastStep - firstStep) + 1;
+
+    if (stepCount <= 0) {
+      resolve();
+      return;
+    }
+
+    const startedAt = performance.now();
+
+    function tick(now) {
+      const elapsed = now - startedAt;
+      const stepOffset = Math.min(stepCount - 1, Math.floor(elapsed / CURTAIN_STEP_DURATION));
+      const stepIndex = firstStep + (stepOffset * direction);
+
+      drawCurtainStep(canvas, CURTAIN_WIPE_STEPS[stepIndex], now);
+
+      if (stepOffset >= stepCount - 1 && elapsed >= stepCount * CURTAIN_STEP_DURATION) {
+        resolve();
+        return;
+      }
+
+      requestAnimationFrame(tick);
+    }
+
+    requestAnimationFrame(tick);
+  });
+}
+
+function holdCurtainStep(canvas, step, duration) {
+  return new Promise((resolve) => {
+    const startedAt = performance.now();
+
+    function tick(now) {
+      drawCurtainStep(canvas, step, now);
+
+      if (now - startedAt >= duration) {
+        resolve();
+        return;
+      }
+
+      requestAnimationFrame(tick);
+    }
+
+    requestAnimationFrame(tick);
+  });
+}
+
+function startCurtainBoil(canvas, step) {
+  stopCurtainBoil(canvas);
+
+  let isRunning = true;
+  curtainBoilStops.set(canvas, () => {
+    isRunning = false;
+  });
+
+  function tick(now) {
+    if (!isRunning || !canvas.isConnected) {
+      curtainBoilStops.delete(canvas);
+      return;
+    }
+
+    drawCurtainStep(canvas, step, now);
+    requestAnimationFrame(tick);
+  }
+
+  requestAnimationFrame(tick);
+}
+
+function stopCurtainBoil(canvas) {
+  const stop = curtainBoilStops.get(canvas);
+
+  if (!stop) {
+    return;
+  }
+
+  stop();
+  curtainBoilStops.delete(canvas);
+}
+
 function drawWipeStep(canvas, layers, now) {
   if (!layers) {
     return;
@@ -575,6 +759,30 @@ function drawWipeStep(canvas, layers, now) {
       canvas.height,
     );
   });
+}
+
+function drawCurtainStep(canvas, step, now) {
+  const context = canvas.getContext('2d');
+  const image = loadDoodleSheet(`curtains/${step}`);
+  const frame = Math.floor((now / 1000) * DOODLE_FRAME_RATE) % DOODLE_FRAME_COUNT;
+
+  context.clearRect(0, 0, canvas.width, canvas.height);
+
+  if (!image.complete || !image.naturalWidth) {
+    return;
+  }
+
+  context.drawImage(
+    image,
+    0,
+    frame * CURTAIN_FRAME_HEIGHT,
+    CURTAIN_FRAME_WIDTH,
+    CURTAIN_FRAME_HEIGHT,
+    0,
+    0,
+    canvas.width,
+    canvas.height,
+  );
 }
 
 function getDoodleForMoves(p1Move, p2Move, variantId = '') {
@@ -719,7 +927,7 @@ function loadSpriteSheetByKey(key, src) {
 
   const image = new Image();
   image.src = src;
-  image.onload = () => drawDoodleFrame(performance.now());
+  image.onload = () => drawDoodleFrame(getRendererNow(performance.now()));
   doodleSheets.set(key, image);
   return image;
 }
@@ -732,7 +940,7 @@ function ensureDoodleLoop() {
   ensureDoodleLoop.isRunning = true;
 
   function tick(now) {
-    drawDoodleFrame(now);
+    drawDoodleFrame(getRendererNow(now));
     requestAnimationFrame(tick);
   }
 

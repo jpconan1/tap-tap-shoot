@@ -41,9 +41,14 @@ import {
   mountReadyWaitingOverlays,
   mountWaitingDotsOverlays,
   mountSpriteRenderers,
+  closeCurtainWipe,
+  openCurtainWipe,
+  pauseRendererClock,
+  playCurtainWipeTransition,
   playStarburstWipeTransition,
   preloadDoodleSheets,
   READY_WAITING_SAFE_PHASE_MS,
+  resumeRendererClock,
 } from './renderer.js';
 
 const BEAT_MS = 750;
@@ -363,6 +368,9 @@ let playMode = 'local';
 let selectedOpponentId = DEFAULT_OPPONENT_ID;
 let selectedVariantId = DEFAULT_VARIANT_ID;
 let isTransitioning = false;
+let pauseMenu = null;
+let pauseStartedAt = null;
+const pausableTimers = new Set();
 let loopToken = 0;
 let turnPhase = 'idle';
 let p1QueuedMove = null;
@@ -406,6 +414,7 @@ configureAudio({ getMusicTopperFile });
 
 updateFrameScale();
 window.addEventListener('resize', updateFrameScale);
+window.addEventListener('keydown', handleGlobalKeydown);
 installAudioUnlockListeners();
 boot();
 
@@ -1042,6 +1051,201 @@ function escapeHtml(value) {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
+}
+
+function handleGlobalKeydown(event) {
+  if (event.key !== 'Escape') {
+    return;
+  }
+
+  if (pauseMenu) {
+    event.preventDefault();
+    closePauseMenu();
+    return;
+  }
+
+  if (!canOpenPauseMenu()) {
+    return;
+  }
+
+  event.preventDefault();
+  openPauseMenu();
+}
+
+function canOpenPauseMenu() {
+  return screen === 'playing'
+    && (playMode === 'local' || playMode === 'test')
+    && !isTransitioning
+    && !pauseMenu;
+}
+
+async function openPauseMenu() {
+  if (!canOpenPauseMenu()) {
+    return;
+  }
+
+  pauseGameplayTimers();
+  isTransitioning = true;
+  const curtain = await closeCurtainWipe(app);
+
+  if (screen !== 'playing') {
+    curtain.remove();
+    isTransitioning = false;
+    resumeGameplayTimers();
+    return;
+  }
+
+  const overlay = renderPauseMenu();
+  pauseMenu = { curtain, overlay };
+}
+
+async function closePauseMenu() {
+  const menu = pauseMenu;
+
+  if (!menu) {
+    return;
+  }
+
+  pauseMenu = null;
+  menu.overlay.remove();
+  await openCurtainWipe(menu.curtain);
+  isTransitioning = false;
+  resumeGameplayTimers();
+}
+
+function renderPauseMenu() {
+  const overlay = document.createElement('div');
+  overlay.className = 'pause-menu-overlay';
+  overlay.innerHTML = `
+    <div class="pause-menu" role="dialog" aria-modal="true" aria-label="Pause menu">
+      <button class="pause-menu-button" data-pause-action="resume" type="button">Resume</button>
+      <button class="pause-menu-button danger" data-pause-action="quit" type="button">Quit</button>
+    </div>
+  `;
+  app.append(overlay);
+  overlay.querySelector('[data-pause-action="resume"]').addEventListener('click', closePauseMenu);
+  overlay.querySelector('[data-pause-action="quit"]').addEventListener('click', quitFromPauseMenu);
+  overlay.querySelector('[data-pause-action="resume"]').focus();
+  return overlay;
+}
+
+async function quitFromPauseMenu() {
+  const menu = pauseMenu;
+
+  if (!menu) {
+    return;
+  }
+
+  pauseMenu = null;
+  menu.overlay.remove();
+  quitToVariantMenu();
+  render();
+  app.append(menu.curtain);
+  await openCurtainWipe(menu.curtain);
+  isTransitioning = false;
+  resumeGameplayTimers();
+}
+
+function quitToVariantMenu() {
+  requestMusicTrack('title');
+  unlockSceneAudio();
+  loopToken += 1;
+  clearLocalTurnChoice();
+  clearPausableTimers();
+  resetRoundWins();
+  playMode = 'local';
+  screen = 'opponent-select';
+  turnPhase = 'idle';
+  state = createRoundState();
+  tutorialSlideIndex = 0;
+  tutorialTipsSlideIndex = 0;
+  tutorialStageMode = 'slide';
+  tutorialFeedbackMarkup = '';
+  tutorialPendingFeedbackMarkup = '';
+  p1QueuedMove = null;
+  rankedSnapshot = null;
+  pendingSuperAnimation = null;
+  stagePresentation = { kind: 'doodle', name: 'reloading', flip: false };
+}
+
+function setPausableTimeout(callback, duration) {
+  const timer = {
+    active: true,
+    callback,
+    remaining: Math.max(0, duration),
+    startedAt: 0,
+    timeoutId: null,
+  };
+
+  pausableTimers.add(timer);
+
+  if (pauseStartedAt === null) {
+    schedulePausableTimer(timer);
+  }
+
+  return timer;
+}
+
+function schedulePausableTimer(timer) {
+  timer.startedAt = performance.now();
+  timer.timeoutId = setTimeout(() => {
+    if (!timer.active) {
+      return;
+    }
+
+    timer.active = false;
+    timer.timeoutId = null;
+    pausableTimers.delete(timer);
+    timer.callback();
+  }, timer.remaining);
+}
+
+function clearPausableTimeout(timer) {
+  if (!timer) {
+    return;
+  }
+
+  timer.active = false;
+  if (timer.timeoutId !== null) {
+    clearTimeout(timer.timeoutId);
+  }
+  timer.timeoutId = null;
+  pausableTimers.delete(timer);
+}
+
+function clearPausableTimers() {
+  [...pausableTimers].forEach(clearPausableTimeout);
+  pauseStartedAt = null;
+}
+
+function pausePausableTimers() {
+  if (pauseStartedAt !== null) {
+    return;
+  }
+
+  pauseStartedAt = performance.now();
+  pausableTimers.forEach((timer) => {
+    if (!timer.active || timer.timeoutId === null) {
+      return;
+    }
+
+    clearTimeout(timer.timeoutId);
+    timer.timeoutId = null;
+    timer.remaining = Math.max(0, timer.remaining - (pauseStartedAt - timer.startedAt));
+  });
+}
+
+function resumePausableTimers() {
+  if (pauseStartedAt === null) {
+    return;
+  }
+
+  pauseStartedAt = null;
+  pausableTimers.forEach((timer) => {
+    if (timer.active && !timer.timeoutId) {
+      schedulePausableTimer(timer);
+    }
+  });
 }
 
 function render() {
@@ -1978,6 +2182,8 @@ function renderOpponentSelectScreen() {
 
   app.innerHTML = `
     <section class="title-screen opponent-select-screen" aria-label="Choose variant">
+      ${renderOpenCurtainBorder()}
+
       <canvas
         class="sprite-canvas pick-variant-header"
         data-doodle-file="pick_variant_sheet.webp"
@@ -2000,6 +2206,20 @@ function renderOpponentSelectScreen() {
   });
   app.querySelector('[data-action="back-title"]').addEventListener('click', returnToTitleFromOpponentSelect);
   mountSpriteRenderers(app.querySelectorAll('.sprite-canvas'));
+}
+
+function renderOpenCurtainBorder() {
+  return `
+    <canvas
+      class="sprite-canvas curtain-border"
+      data-doodle="curtains/curtains-open"
+      data-frame-width="${FRAME_WIDTH}"
+      data-frame-height="${FRAME_HEIGHT}"
+      width="${FRAME_WIDTH}"
+      height="${FRAME_HEIGHT}"
+      aria-hidden="true"
+    ></canvas>
+  `;
 }
 
 function renderBackButton() {
@@ -2443,7 +2663,7 @@ function getOrCreateLocalTurnChoice() {
     waitingPlayerId: null,
     splitApplied: false,
     computerTimer: playMode === 'local'
-      ? setTimeout(() => {
+      ? setPausableTimeout(() => {
         queueLocalComputerMove();
       }, COMPUTER_MOVE_DELAY_MS)
       : null,
@@ -2507,7 +2727,7 @@ function beginLocalSafePhase(readyPlayerId) {
   choice.phase = 'safe';
   choice.readyPlayerId = readyPlayerId;
   choice.waitingPlayerId = readyPlayerId === 'p1' ? 'p2' : 'p1';
-  choice.safeTimer = setTimeout(() => {
+  choice.safeTimer = setPausableTimeout(() => {
     beginLocalCountdownPhase();
   }, READY_WAITING_SAFE_PHASE_MS);
   render();
@@ -2522,7 +2742,7 @@ function beginLocalCountdownPhase() {
 
   choice.phase = 'countdown';
 
-  choice.timeoutTimer = setTimeout(() => {
+  choice.timeoutTimer = setPausableTimeout(() => {
     loseLocalRoundOnTimeout(choice.waitingPlayerId);
   }, COUNTDOWN_PHASE_MS);
   render();
@@ -2787,21 +3007,31 @@ function getRoleSplitPresentation(scene, readyPlayerId, { role, basePlayerId }) 
 
 function clearLocalTurnChoice() {
   if (localTurnChoice?.computerTimer) {
-    clearTimeout(localTurnChoice.computerTimer);
+    clearPausableTimeout(localTurnChoice.computerTimer);
   }
 
   clearLocalPhaseTimers();
   localTurnChoice = null;
 }
 
+function pauseGameplayTimers() {
+  pauseRendererClock();
+  pausePausableTimers();
+}
+
+function resumeGameplayTimers() {
+  resumeRendererClock();
+  resumePausableTimers();
+}
+
 function clearLocalPhaseTimers() {
   if (localTurnChoice?.safeTimer) {
-    clearTimeout(localTurnChoice.safeTimer);
+    clearPausableTimeout(localTurnChoice.safeTimer);
     localTurnChoice.safeTimer = null;
   }
 
   if (localTurnChoice?.timeoutTimer) {
-    clearTimeout(localTurnChoice.timeoutTimer);
+    clearPausableTimeout(localTurnChoice.timeoutTimer);
     localTurnChoice.timeoutTimer = null;
   }
 }
@@ -2886,22 +3116,32 @@ async function startGameFromTitle() {
     return;
   }
 
-  playMode = 'local';
-  screen = 'opponent-select';
-  p1QueuedMove = null;
-  rankedSnapshot = null;
+  isTransitioning = true;
+  await playCurtainMenuTransition(() => {
+    playMode = 'local';
+    screen = 'opponent-select';
+    p1QueuedMove = null;
+    rankedSnapshot = null;
+    render();
+  });
+  isTransitioning = false;
   render();
 }
 
-function returnToTitleFromOpponentSelect() {
+async function returnToTitleFromOpponentSelect() {
   if (isTransitioning) {
     return;
   }
 
-  screen = 'title';
-  clearLocalTurnChoice();
-  p1QueuedMove = null;
-  rankedSnapshot = null;
+  isTransitioning = true;
+  await playCurtainMenuTransition(() => {
+    screen = 'title';
+    clearLocalTurnChoice();
+    p1QueuedMove = null;
+    rankedSnapshot = null;
+    render();
+  });
+  isTransitioning = false;
   render();
 }
 
@@ -3880,7 +4120,7 @@ function waitBeats(beats, token) {
 
 function waitMs(duration, token) {
   return new Promise((resolve) => {
-    setTimeout(() => {
+    setPausableTimeout(() => {
       resolve(isActiveLoop(token));
     }, duration);
   });
@@ -4173,4 +4413,8 @@ function getFallbackMove(playerId) {
 
 function playWipeTransition(onCovered) {
   return playStarburstWipeTransition(app, onCovered, () => playOneShotAudio(STARBURST_WIPE_AUDIO));
+}
+
+function playCurtainMenuTransition(onCovered) {
+  return playCurtainWipeTransition(app, onCovered);
 }
