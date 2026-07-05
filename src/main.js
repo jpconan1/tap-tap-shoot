@@ -92,6 +92,8 @@ const BETWEEN_ROUND_LAYOUT_STATE_ID = 'round.between';
 const GAME_OVER_LAYOUT_STATE_ID = 'round.game-over';
 const ROUND_OVER_SCENE_BEATS = 2;
 const READY_BEATS = 3;
+const SUPER_FINAL_FRAME_COUNT = 4;
+const SUPER_FINAL_FRAME_MS = 210;
 const COMPUTER_MOVE_DELAY_MS = 3000;
 const COUNTDOWN_PHASE_MS = 5000;
 const LOADING_FRAME_WIDTH = 512;
@@ -366,6 +368,7 @@ let p1QueuedMove = null;
 let localTurnChoice = null;
 let rankedSnapshot = null;
 let pendingRankedSnapshot = null;
+let pendingSuperAnimation = null;
 let isApplyingRankedSnapshot = false;
 let rankedReadyWaiting = null;
 let rankedReadyWaitingTimer = null;
@@ -2588,6 +2591,15 @@ function getReadySplitPresentation(readyPlayerId) {
     };
   }
 
+  if (scene === 'charge-block-fireball/block-charge') {
+    const isChargerReady = lastMoves[readyPlayerId] === 'charge';
+    return {
+      kind: 'doodle',
+      name: `charge-block-fireball/split_scenes/block-charge_${isChargerReady ? 'charger' : 'blocker'}_is_ready`,
+      flip: lastMoves.p1 === 'charge',
+    };
+  }
+
   if (scene === 'charge-block-fireball/block-fireball') {
     const isFireballerReady = lastMoves[readyPlayerId] === 'fireball';
     return {
@@ -2812,6 +2824,7 @@ async function startTutorialFromTitle() {
     tutorialPendingFeedbackMarkup = '';
     p1QueuedMove = null;
     rankedSnapshot = null;
+    pendingSuperAnimation = null;
     stagePresentation = { kind: 'doodle', name: 'reloading', flip: false };
     render();
   });
@@ -3096,6 +3109,7 @@ function isLocalChoiceMode() {
 
 function setNewRound() {
   clearLocalTurnChoice();
+  pendingSuperAnimation = null;
   state = createRoundState({ variantId: selectedVariantId });
   screen = 'playing';
   rankedSnapshot = null;
@@ -3739,6 +3753,7 @@ async function resolvePlayerSelection() {
     if (screen === 'tutorial') {
       maybeShowTutorialFeedback(token);
     } else {
+      await playPendingSuperAnimation(token);
       maybeShowRoundOverScene(token);
     }
   }
@@ -3818,6 +3833,7 @@ function resolveQueuedTurn() {
       p1: p1Move,
       p2: p2Move,
     };
+    pendingSuperAnimation = getSuperAnimation(turn.result);
     stagePresentation = getTurnStagePresentation(turn.result, p1Move, p2Move);
 
     if (screen === 'tutorial' && state.status === 'finished' && state.winner) {
@@ -3845,20 +3861,67 @@ function resolveQueuedTurn() {
 }
 
 function getTurnStagePresentation(result, p1Move, p2Move) {
+  const superAnimation = getSuperAnimation(result);
+
+  if (superAnimation) {
+    return superAnimation.frames[0];
+  }
+
+  return getDoodlePresentation(p1Move, p2Move, { variantId: getCurrentVariantId() });
+}
+
+function getSuperAnimation(result) {
   if (
     getCurrentVariantId() === VARIANT_IDS.chargeBlockFireball
     && result?.winner
     && result[`${result.winner}Move`] === 'charge'
     && result[`${result.winner}Bullets`] >= getVariantResourceMax(VARIANT_IDS.chargeBlockFireball)
   ) {
+    const flip = result.winner === 'p2';
     return {
-      kind: 'doodle',
-      name: 'charge-block-fireball/super-blasting',
-      flip: result.winner === 'p2',
+      frames: Array.from({ length: SUPER_FINAL_FRAME_COUNT }, (_, index) => ({
+        kind: 'doodle',
+        name: `charge-block-fireball/super-final-frame${index + 1}`,
+        flip,
+      })),
+      finalFrame: {
+        kind: 'doodle',
+        name: 'charge-block-fireball/super-blasting',
+        flip,
+      },
     };
   }
 
-  return getDoodlePresentation(p1Move, p2Move, { variantId: getCurrentVariantId() });
+  return null;
+}
+
+async function playPendingSuperAnimation(token) {
+  const animation = pendingSuperAnimation;
+  pendingSuperAnimation = null;
+
+  if (!animation || !isActiveLoop(token)) {
+    return;
+  }
+
+  for (const frame of animation.frames.slice(1)) {
+    await waitMs(SUPER_FINAL_FRAME_MS, token);
+
+    if (!isActiveLoop(token)) {
+      return;
+    }
+
+    stagePresentation = frame;
+    render();
+  }
+
+  await waitMs(SUPER_FINAL_FRAME_MS, token);
+
+  if (!isActiveLoop(token)) {
+    return;
+  }
+
+  stagePresentation = animation.finalFrame;
+  render();
 }
 
 function settleTutorialScene() {

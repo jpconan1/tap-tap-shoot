@@ -93,6 +93,8 @@ export function getRendererPreloadDoodles() {
   return [
     ...Object.values(INTERACTION_DOODLES),
     ...Object.values(CHARGE_BLOCK_FIREBALL_DOODLES),
+    'charge-block-fireball/super-blasting',
+    ...Array.from({ length: 4 }, (_, index) => `charge-block-fireball/super-final-frame${index + 1}`),
     ...SPLIT_READY_DOODLES,
     ...STARBURST_WIPE_STEPS.flat().map((name) => `starburst_wipe/${name}`),
     ...READY_WAITING_READY_STEPS.map((name) => `ready_waiting/${name}`),
