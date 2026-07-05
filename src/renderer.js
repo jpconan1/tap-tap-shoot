@@ -124,7 +124,7 @@ export function mountSpriteRenderers(canvases) {
   doodleRenderers = [...canvases].map((canvas) => ({
     canvas,
     context: canvas.getContext('2d'),
-    image: loadDoodleSheet(canvas.dataset.doodle),
+    image: loadSpriteSheet(canvas),
     frameWidth: Number(canvas.dataset.frameWidth) || DOODLE_FRAME_WIDTH,
     frameHeight: Number(canvas.dataset.frameHeight) || DOODLE_FRAME_HEIGHT,
     flip: canvas.dataset.flip === 'true',
@@ -459,14 +459,30 @@ function installSpriteFallback(canvas, image) {
 }
 
 function loadDoodleSheet(doodle) {
-  if (doodleSheets.has(doodle)) {
-    return doodleSheets.get(doodle);
+  return loadSpriteSheetByKey(doodle, `./assets/${doodle}_sheet.webp`);
+}
+
+function loadSpriteSheet(canvas) {
+  if (canvas.dataset.doodleFile) {
+    return loadSpriteSheetByKey(canvas.dataset.doodleFile, `./assets/${canvas.dataset.doodleFile}`);
+  }
+
+  return loadDoodleSheet(canvas.dataset.doodle);
+}
+
+function loadSpriteSheetByKey(key, src) {
+  if (!key) {
+    return new Image();
+  }
+
+  if (doodleSheets.has(key)) {
+    return doodleSheets.get(key);
   }
 
   const image = new Image();
-  image.src = `./assets/${doodle}_sheet.webp`;
+  image.src = src;
   image.onload = () => drawDoodleFrame(performance.now());
-  doodleSheets.set(doodle, image);
+  doodleSheets.set(key, image);
   return image;
 }
 

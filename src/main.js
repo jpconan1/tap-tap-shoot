@@ -1,6 +1,6 @@
-import { DEFAULT_VARIANT_ID, MAX_BULLETS, MOVES, getVariantMoveIds } from './engine/moves.js';
+import { DEFAULT_VARIANT_ID, MAX_BULLETS, MOVES, VARIANT_IDS, getVariantMoveIds } from './engine/moves.js';
 import { createRoundState, getPlayerLegalMoves, playTurn } from './engine/gameState.js';
-import { chooseRivalMove as chooseAiMove, DEFAULT_RIVAL_ID, RIVALS } from './engine/rivalAi.js';
+import { chooseRivalMove as chooseAiMove, DEFAULT_RIVAL_ID } from './engine/rivalAi.js';
 import {
   configureAudio,
   finishMusicLoopThenStop,
@@ -55,17 +55,19 @@ const THEY_PICKED_LABEL_FRAME_WIDTH = 150;
 const PICK_LABEL_FRAME_HEIGHT = 64;
 const MOVE_ICON_FRAME_WIDTH = 128;
 const MOVE_ICON_FRAME_HEIGHT = 128;
-const TITLE_FRAME_WIDTH = 512;
-const TITLE_FRAME_HEIGHT = 256;
+const TITLE_LOGO_FRAME_WIDTH = 512;
+const TITLE_LOGO_FRAME_HEIGHT = 368;
 const TITLE_BUTTON_FRAME_WIDTH = 256;
 const TITLE_BUTTON_FRAME_HEIGHT = 128;
+const VARIANT_BUTTON_FRAME_WIDTH = 325;
+const VARIANT_BUTTON_FRAME_HEIGHT = 128;
+const PICK_VARIANT_FRAME_WIDTH = 388;
+const PICK_VARIANT_FRAME_HEIGHT = 233;
 const TUTORIAL_MAIN_SLIDE_COUNT = 6;
 const TUTORIAL_REVEAL_SLIDE_INDEX = 5;
 const TUTORIAL_TIPS_SLIDE_COUNT = 3;
 const REMATCH_BUTTON_FRAME_WIDTH = 256;
 const REMATCH_BUTTON_FRAME_HEIGHT = 128;
-const CROSSED_FRAME_WIDTH = 384;
-const CROSSED_FRAME_HEIGHT = 192;
 const BULLET_SLOT_COUNT = MAX_BULLETS;
 const LAST_NUMBERED_TURN = 21;
 const GAME_TARGET_ROUNDS = 5;
@@ -163,6 +165,7 @@ const MOVE_BUTTON_DOODLES = Object.freeze({
   charge: 'reload_button',
   block: 'duck_button',
   fireball: 'shoot_button',
+  punch: 'punch-stab-shoot/punch_button',
   reload: 'reload_button',
   shoot: 'shoot_button',
   stab: 'stab_button',
@@ -177,6 +180,7 @@ const MOVE_ICON_DOODLES = Object.freeze({
   charge: 'reload_icon',
   block: 'dodge_icon',
   fireball: 'shoot_icon',
+  punch: 'stab_icon',
   reload: 'reload_icon',
   shoot: 'shoot_icon',
   stab: 'stab_icon',
@@ -301,9 +305,35 @@ const TUTORIAL_OUTCOMES = Object.freeze({
     ]),
   }),
 });
-const OPPONENTS = RIVALS;
-const OPPONENT_IDS = Object.freeze(Object.keys(OPPONENTS));
 const DEFAULT_OPPONENT_ID = DEFAULT_RIVAL_ID;
+const COMPUTER_VARIANTS = Object.freeze([
+  Object.freeze({
+    id: VARIANT_IDS.rps,
+    name: 'Rock Paper Scissors',
+    buttonDoodle: 'rock-paper-scissors/rps_button',
+  }),
+  Object.freeze({
+    id: VARIANT_IDS.chargeBlockFireball,
+    name: 'Charge Block Fireball',
+    buttonDoodle: 'charge-block-fireball/cbf_button',
+  }),
+  Object.freeze({
+    id: VARIANT_IDS.shootStabDuck,
+    name: 'Shoot Stab Duck',
+    buttonDoodle: 'shoot-stab-duck/ssd_button',
+  }),
+  Object.freeze({
+    id: VARIANT_IDS.punchStabShoot,
+    name: 'Punch Stab Shoot',
+    buttonDoodle: 'punch-stab-shoot/pss_button',
+  }),
+  Object.freeze({
+    id: VARIANT_IDS.tapTapShoot,
+    name: 'Tap Tap Shoot',
+    buttonDoodle: 'tap-tap-shoot/tap_tap_shoot_button',
+  }),
+]);
+const COMPUTER_VARIANT_IDS = Object.freeze(COMPUTER_VARIANTS.map((variant) => variant.id));
 
 const app = document.querySelector('#app');
 const FINDING_MATCH_DOODLES = Object.freeze([
@@ -316,6 +346,7 @@ let state = createRoundState();
 let screen = 'title';
 let playMode = 'local';
 let selectedOpponentId = DEFAULT_OPPONENT_ID;
+let selectedVariantId = DEFAULT_VARIANT_ID;
 let isTransitioning = false;
 let loopToken = 0;
 let turnPhase = 'idle';
@@ -348,7 +379,6 @@ let roundWins = {
   p1: 0,
   p2: 0,
 };
-const defeatedOpponentIds = new Set();
 const rankedClient = new RankedClient({
   onQueue: handleRankedQueue,
   onSnapshot: applyRankedSnapshot,
@@ -658,16 +688,13 @@ function getGamePreloadDoodles() {
     'tip1graphic',
     'tip2graphicgraphic',
     'title/LOGO',
-    'title/playvcom',
+    'title/playvcom_button',
     'title/playonline',
     'title/tutorial_button',
     ...FINDING_MATCH_DOODLES,
+    ...COMPUTER_VARIANTS.map((variant) => variant.buttonDoodle),
     ...Object.values(MOVE_BUTTON_DOODLES),
     ...Object.values(MOVE_ICON_DOODLES),
-    ...OPPONENT_IDS.flatMap((opponentId) => [
-      OPPONENTS[opponentId].buttonDoodle,
-      OPPONENTS[opponentId].crossedDoodle,
-    ]),
     ...Array.from({ length: LAST_NUMBERED_TURN + 1 }, (_, turn) => `turn${turn}`),
     'turnlostcount',
     ...Array.from({ length: GAME_TARGET_ROUNDS }, (_, index) => `w${index + 1}`),
@@ -1553,18 +1580,18 @@ function renderTitleScreen() {
       <canvas
         class="sprite-canvas title-logo"
         data-doodle="title/LOGO"
-        data-frame-width="${TITLE_FRAME_WIDTH}"
-        data-frame-height="${TITLE_FRAME_HEIGHT}"
-        width="${TITLE_FRAME_WIDTH}"
-        height="${TITLE_FRAME_HEIGHT}"
-        aria-label="Tap Tap Shoot"
+        data-frame-width="${TITLE_LOGO_FRAME_WIDTH}"
+        data-frame-height="${TITLE_LOGO_FRAME_HEIGHT}"
+        width="${TITLE_LOGO_FRAME_WIDTH}"
+        height="${TITLE_LOGO_FRAME_HEIGHT}"
+        aria-label="Super Rock Paper Scissors Online"
       ></canvas>
 
       <div class="title-actions">
         <button class="play-button" data-action="play" aria-label="Play computer">
           <canvas
             class="sprite-canvas play-button-art"
-            data-doodle="title/playvcom"
+            data-doodle="title/playvcom_button"
             data-frame-width="${TITLE_BUTTON_FRAME_WIDTH}"
             data-frame-height="${TITLE_BUTTON_FRAME_HEIGHT}"
             width="${TITLE_BUTTON_FRAME_WIDTH}"
@@ -1618,11 +1645,11 @@ function renderOnlineNameScreen() {
       <canvas
         class="sprite-canvas title-logo"
         data-doodle="title/LOGO"
-        data-frame-width="${TITLE_FRAME_WIDTH}"
-        data-frame-height="${TITLE_FRAME_HEIGHT}"
-        width="${TITLE_FRAME_WIDTH}"
-        height="${TITLE_FRAME_HEIGHT}"
-        aria-label="Tap Tap Shoot"
+        data-frame-width="${TITLE_LOGO_FRAME_WIDTH}"
+        data-frame-height="${TITLE_LOGO_FRAME_HEIGHT}"
+        width="${TITLE_LOGO_FRAME_WIDTH}"
+        height="${TITLE_LOGO_FRAME_HEIGHT}"
+        aria-label="Super Rock Paper Scissors Online"
       ></canvas>
 
       <form class="online-name-form">
@@ -1867,26 +1894,26 @@ function renderOpponentSelectScreen() {
   requestMusicTrack('title');
 
   app.innerHTML = `
-    <section class="title-screen opponent-select-screen" aria-label="Choose computer opponent">
+    <section class="title-screen opponent-select-screen" aria-label="Choose variant">
       <canvas
-        class="sprite-canvas title-logo"
-        data-doodle="title/LOGO"
-        data-frame-width="${TITLE_FRAME_WIDTH}"
-        data-frame-height="${TITLE_FRAME_HEIGHT}"
-        width="${TITLE_FRAME_WIDTH}"
-        height="${TITLE_FRAME_HEIGHT}"
-        aria-label="Tap Tap Shoot"
+        class="sprite-canvas pick-variant-header"
+        data-doodle-file="pick_variant_sheet.png"
+        data-frame-width="${PICK_VARIANT_FRAME_WIDTH}"
+        data-frame-height="${PICK_VARIANT_FRAME_HEIGHT}"
+        width="${PICK_VARIANT_FRAME_WIDTH}"
+        height="${PICK_VARIANT_FRAME_HEIGHT}"
+        aria-label="Pick variant"
       ></canvas>
 
-      <div class="opponent-actions">
-        ${OPPONENT_IDS.map((opponentId) => renderOpponentButton(OPPONENTS[opponentId])).join('')}
+      <div class="variant-actions">
+        ${COMPUTER_VARIANTS.map((variant) => renderVariantButton(variant)).join('')}
         ${renderBackButton()}
       </div>
     </section>
   `;
 
-  app.querySelectorAll('[data-opponent]').forEach((button) => {
-    button.addEventListener('click', () => startLocalGame(button.dataset.opponent));
+  app.querySelectorAll('[data-variant]').forEach((button) => {
+    button.addEventListener('click', () => startLocalGame(button.dataset.variant));
   });
   app.querySelector('[data-action="back-title"]').addEventListener('click', returnToTitleFromOpponentSelect);
   mountSpriteRenderers(app.querySelectorAll('.sprite-canvas'));
@@ -1908,36 +1935,19 @@ function renderBackButton() {
   `;
 }
 
-function renderOpponentButton(opponent) {
-  const isDefeated = defeatedOpponentIds.has(opponent.id);
-
+function renderVariantButton(variant) {
   return `
-    <button class="opponent-button ${isDefeated ? 'defeated' : ''}" data-opponent="${opponent.id}" aria-label="${opponent.name}">
+    <button class="variant-button" data-variant="${variant.id}" aria-label="${variant.name}">
       <canvas
-        class="sprite-canvas opponent-button-art"
-        data-doodle="${opponent.buttonDoodle}"
-        data-frame-width="${TITLE_BUTTON_FRAME_WIDTH}"
-        data-frame-height="${TITLE_BUTTON_FRAME_HEIGHT}"
-        width="${TITLE_BUTTON_FRAME_WIDTH}"
-        height="${TITLE_BUTTON_FRAME_HEIGHT}"
+        class="sprite-canvas variant-button-art"
+        data-doodle="${variant.buttonDoodle}"
+        data-frame-width="${VARIANT_BUTTON_FRAME_WIDTH}"
+        data-frame-height="${VARIANT_BUTTON_FRAME_HEIGHT}"
+        width="${VARIANT_BUTTON_FRAME_WIDTH}"
+        height="${VARIANT_BUTTON_FRAME_HEIGHT}"
         aria-hidden="true"
       ></canvas>
-      ${isDefeated ? renderCrossedOpponentMark(opponent) : ''}
     </button>
-  `;
-}
-
-function renderCrossedOpponentMark(opponent) {
-  return `
-    <canvas
-      class="sprite-canvas crossed-opponent-mark"
-      data-doodle="${opponent.crossedDoodle}"
-      data-frame-width="${CROSSED_FRAME_WIDTH}"
-      data-frame-height="${CROSSED_FRAME_HEIGHT}"
-      width="${CROSSED_FRAME_WIDTH}"
-      height="${CROSSED_FRAME_HEIGHT}"
-      aria-hidden="true"
-    ></canvas>
   `;
 }
 
@@ -1950,11 +1960,11 @@ function renderQueueScreen() {
       <canvas
         class="sprite-canvas title-logo"
         data-doodle="title/LOGO"
-        data-frame-width="${TITLE_FRAME_WIDTH}"
-        data-frame-height="${TITLE_FRAME_HEIGHT}"
-        width="${TITLE_FRAME_WIDTH}"
-        height="${TITLE_FRAME_HEIGHT}"
-        aria-label="Tap Tap Shoot"
+        data-frame-width="${TITLE_LOGO_FRAME_WIDTH}"
+        data-frame-height="${TITLE_LOGO_FRAME_HEIGHT}"
+        width="${TITLE_LOGO_FRAME_WIDTH}"
+        height="${TITLE_LOGO_FRAME_HEIGHT}"
+        aria-label="Super Rock Paper Scissors Online"
       ></canvas>
       <canvas
         class="sprite-canvas finding-match-art"
@@ -2016,7 +2026,7 @@ function getPlayerIdentity(playerId) {
   }
 
   return {
-    name: playerId === 'p1' ? 'YOU' : OPPONENTS[selectedOpponentId]?.name ?? 'THEM',
+    name: playerId === 'p1' ? 'YOU' : 'CPU',
     rating: null,
   };
 }
@@ -2364,8 +2374,13 @@ function queueLocalComputerMove() {
     return;
   }
 
-  choice.moves.p2 = chooseAiMove(state, selectedOpponentId);
+  choice.moves.p2 = chooseEasyComputerMove(state);
   handleLocalMoveQueued('p2');
+}
+
+function chooseEasyComputerMove(roundState, rng = Math.random) {
+  const legalMoves = getPlayerLegalMoves(roundState, 'p2');
+  return legalMoves[Math.floor(rng() * legalMoves.length)] ?? legalMoves[0];
 }
 
 function handleLocalMoveQueued(playerId) {
@@ -2654,6 +2669,7 @@ async function startTestModeFromTitle() {
   }
 
   selectedOpponentId = DEFAULT_OPPONENT_ID;
+  selectedVariantId = DEFAULT_VARIANT_ID;
   playMode = 'test';
   clearLocalTurnChoice();
   requestMusicTrack('game');
@@ -2666,12 +2682,13 @@ async function startTestModeFromTitle() {
   beginOpeningCues();
 }
 
-async function startLocalGame(opponentId) {
+async function startLocalGame(variantId) {
   if (isTransitioning) {
     return;
   }
 
-  selectedOpponentId = OPPONENTS[opponentId] ? opponentId : DEFAULT_OPPONENT_ID;
+  selectedOpponentId = DEFAULT_OPPONENT_ID;
+  selectedVariantId = COMPUTER_VARIANT_IDS.includes(variantId) ? variantId : DEFAULT_VARIANT_ID;
   playMode = 'local';
   clearLocalTurnChoice();
   requestMusicTrack('game');
@@ -2921,7 +2938,7 @@ function isLocalChoiceMode() {
 
 function setNewRound() {
   clearLocalTurnChoice();
-  state = createRoundState();
+  state = createRoundState({ variantId: selectedVariantId });
   screen = 'playing';
   rankedSnapshot = null;
   turnPhase = 'ready';
@@ -3722,10 +3739,6 @@ function showRoundOverScene() {
     roundWins[state.winner] += 1;
   }
   syncMusicTopper();
-
-  if (playMode === 'local' && screen !== 'tutorial' && getGameWinner() === 'p1') {
-    defeatedOpponentIds.add(selectedOpponentId);
-  }
 
   if (playMode === 'local' && screen !== 'tutorial' && !isGameOver()) {
     if (state.winner === 'p1') {

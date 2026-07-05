@@ -2,6 +2,7 @@ export const VARIANT_IDS = Object.freeze({
   rps: 'rps',
   chargeBlockFireball: 'chargeBlockFireball',
   shootStabDuck: 'shootStabDuck',
+  punchStabShoot: 'punchStabShoot',
   tapTapShoot: 'tapTapShoot',
   doubleTap: 'doubleTap',
 });
@@ -64,6 +65,12 @@ export const MOVES = Object.freeze({
   stab: Object.freeze({
     id: 'stab',
     label: 'Stab',
+    cost: 0,
+    gain: 0,
+  }),
+  punch: Object.freeze({
+    id: 'punch',
+    label: 'Punch',
     cost: 0,
     gain: 0,
   }),
@@ -140,6 +147,20 @@ export const VARIANTS = Object.freeze({
     hitTable: freezeHitTable({
       shoot: { stab: 'shot', reload: 'shot' },
       stab: { duck: 'stabbed' },
+    }),
+  }),
+  [VARIANT_IDS.punchStabShoot]: Object.freeze({
+    id: VARIANT_IDS.punchStabShoot,
+    label: 'Punch Stab Shoot',
+    isRanked: false,
+    moveIds: Object.freeze(['punch', 'stab', 'shoot']),
+    moves: MOVES,
+    resourceMax: AMMO_START,
+    startResource: AMMO_START,
+    hitTable: freezeHitTable({
+      punch: { shoot: 'punched' },
+      shoot: { stab: 'shot' },
+      stab: { punch: 'stabbed' },
     }),
   }),
   [VARIANT_IDS.tapTapShoot]: Object.freeze({
