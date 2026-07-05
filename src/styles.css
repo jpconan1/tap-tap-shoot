@@ -218,6 +218,11 @@ button {
   font-size: 18px;
 }
 
+.layout-slot .player-debug {
+  margin-top: 4px;
+  font-size: 14px;
+}
+
 .layout-moves {
   display: contents;
 }
@@ -843,6 +848,13 @@ button {
   margin-top: 8px;
   color: var(--soft-ink);
   font-size: 26px;
+}
+
+.player-debug {
+  margin-top: 6px;
+  color: var(--soft-ink);
+  font-size: 18px;
+  line-height: 1;
 }
 
 .bullets-meter {

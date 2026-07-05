@@ -84,6 +84,7 @@ const GAME_LAYOUT_URL = './new_layout.json';
 const VARIANT_LAYOUT_URLS = Object.freeze({
   [VARIANT_IDS.shootStabDuck]: GAME_LAYOUT_URL,
   [VARIANT_IDS.rps]: './assets/rock-paper-scissors/rps-layout.json',
+  [VARIANT_IDS.chargeBlockFireball]: './assets/charge-block-fireball/cbf-layout.json',
 });
 const DEFAULT_LAYOUT_STATE_ID = 'playing.default';
 const DISADVANTAGED_LAYOUT_STATE_ID = 'playing.disadvantaged';
@@ -173,9 +174,9 @@ const MOVE_BUTTON_DOODLES = Object.freeze({
   rock: 'rock-paper-scissors/rock_button',
   paper: 'rock-paper-scissors/paper_button',
   scissors: 'rock-paper-scissors/scissors_button',
-  charge: 'reload_button',
-  block: 'duck_button',
-  fireball: 'shoot_button',
+  charge: 'charge-block-fireball/charge_button',
+  block: 'charge-block-fireball/block_button',
+  fireball: 'charge-block-fireball/fireball_button',
   punch: 'punch-stab-shoot/punch_button',
   reload: 'reload_button',
   shoot: 'shoot_button',
@@ -188,9 +189,9 @@ const MOVE_ICON_DOODLES = Object.freeze({
   rock: 'rock-paper-scissors/rock_button',
   paper: 'rock-paper-scissors/paper_button',
   scissors: 'rock-paper-scissors/scissors_button',
-  charge: 'reload_icon',
-  block: 'dodge_icon',
-  fireball: 'shoot_icon',
+  charge: 'charge-block-fireball/charge icon',
+  block: 'charge-block-fireball/block_button',
+  fireball: 'charge-block-fireball/fireball_button',
   punch: 'stab_icon',
   reload: 'reload_icon',
   shoot: 'shoot_icon',
@@ -687,16 +688,21 @@ function getGamePreloadDoodles() {
     'quit_button',
     'reload_button',
     'reload-to-stab_arrow',
+    'right_red',
+    'down-right_red',
+    'up-right_red',
+    'down-right_blue',
+    'left_blue',
     'rematch_button',
     'tips_button',
     'wins_label',
     'you_picked',
     'they_picked',
-    'winner',
-    'loser',
-    'nocontest',
-    'round_won',
-    'round_lost',
+    'system_scenes/game_won',
+    'system_scenes/game_lost',
+    'system_scenes/no_contest',
+    'system_scenes/round_won',
+    'system_scenes/round_lost',
     'tip1graphic',
     'tip2graphicgraphic',
     'title/LOGO',
@@ -1267,6 +1273,19 @@ function renderLayoutBulletSlots(playerId) {
     return '';
   }
 
+  if (getCurrentVariantId() === VARIANT_IDS.chargeBlockFireball) {
+    return Array.from({ length: BULLET_SLOT_COUNT }, (_, index) => {
+      const slot = playerId === 'p2' ? BULLET_SLOT_COUNT - index : index + 1;
+      return renderLayoutSlot(
+        `${playerId}-charge-slot-${index + 1}`,
+        slot <= state.players[playerId].bullets
+          ? renderStaticDoodle('charge-block-fireball/charge icon', BULLETS_ICON_FRAME_WIDTH, BULLETS_ICON_FRAME_HEIGHT, 'bullets-icon')
+          : '<span class="empty-bullet-slot" aria-hidden="true"></span>',
+        'bullet-slot',
+      );
+    }).join('');
+  }
+
   return `
     ${renderLayoutSlot(`${playerId}-bullets-label`, renderStaticDoodle('bullets_label', BULLETS_LABEL_FRAME_WIDTH, BULLETS_LABEL_FRAME_HEIGHT, 'bullets-label'), 'hud-art-slot')}
     ${Array.from({ length: BULLET_SLOT_COUNT }, (_, index) => {
@@ -1281,7 +1300,7 @@ function renderLayoutBulletSlots(playerId) {
 }
 
 function renderLayoutPickHistorySlots(playerId) {
-  if (!state.history.length) {
+  if (!shouldShowPickHistory()) {
     return '';
   }
 
@@ -1311,6 +1330,11 @@ function renderLayoutMoveArrows() {
   }
 
   return `
+    ${renderLayoutSlot('right-red-arrow', renderStaticDoodle('right_red', 128, 128, 'move-arrow'), 'move-arrow-slot')}
+    ${renderLayoutSlot('down-right-red-arrow', renderStaticDoodle('down-right_red', 128, 128, 'move-arrow'), 'move-arrow-slot')}
+    ${renderLayoutSlot('up-right-red-arrow', renderStaticDoodle('up-right_red', 128, 128, 'move-arrow'), 'move-arrow-slot')}
+    ${renderLayoutSlot('down-right-blue-arrow', renderStaticDoodle('down-right_blue', 128, 128, 'move-arrow'), 'move-arrow-slot')}
+    ${renderLayoutSlot('left-blue-arrow', renderStaticDoodle('left_blue', 128, 128, 'move-arrow'), 'move-arrow-slot')}
     ${renderLayoutSlot('stab-to-duck-arrow', renderStaticDoodle('stab-to-duck_arrow', 128, 128, 'move-arrow'), 'move-arrow-slot')}
     ${renderLayoutSlot('reload-to-stab-arrow', renderStaticDoodle('reload-to-stab_arrow', 128, 128, 'move-arrow'), 'move-arrow-slot')}
     ${renderLayoutSlot('duck-to-shoot-arrow', renderStaticDoodle('duck-to-shoot_arrow', 128, 128, 'move-arrow'), 'move-arrow-slot')}
@@ -1384,6 +1408,7 @@ function getLayoutStateId(legalMoves) {
 
 function isDisadvantagedLayoutState(legalMoves) {
   return state.status === 'playing'
+    && getCurrentVariantId() !== VARIANT_IDS.chargeBlockFireball
     && state.players.p1.bullets === 0
     && state.players.p2.bullets > 0
     && !legalMoves.has('shoot');
@@ -1395,7 +1420,7 @@ function shouldSuppressStageAudio() {
 }
 
 function renderPickHistories() {
-  if (!state.history.length) {
+  if (!shouldShowPickHistory()) {
     return '';
   }
 
@@ -1403,6 +1428,11 @@ function renderPickHistories() {
     ${renderPickHistory('p1')}
     ${renderPickHistory('p2')}
   `;
+}
+
+function shouldShowPickHistory() {
+  return state.history.length > 0
+    && ![VARIANT_IDS.rps, VARIANT_IDS.chargeBlockFireball].includes(getCurrentVariantId());
 }
 
 function renderPickHistory(playerId) {
@@ -2059,8 +2089,21 @@ function renderPlayerIdentity(playerId) {
     <div class="player-identity ${playerId}" aria-label="${escapeHtml(identity.name)}${identity.rating ? ` rating ${identity.rating}` : ''}">
       <div class="player-name">${escapeHtml(identity.name)}</div>
       ${identity.rating ? `<div class="player-rating">${identity.rating}</div>` : ''}
+      ${renderComputerDebugLine(playerId)}
     </div>
   `;
+}
+
+function renderComputerDebugLine(playerId) {
+  if (playerId !== 'p2' || playMode !== 'local' || getCurrentVariantId() !== VARIANT_IDS.chargeBlockFireball) {
+    return '';
+  }
+
+  const queuedMove = localTurnChoice?.moves?.p2;
+  const lastComputerMove = state.history[0]?.p2Move ?? null;
+  const debugMove = queuedMove || lastComputerMove;
+
+  return debugMove ? `<div class="player-debug">CPU last: ${escapeHtml(debugMove)}</div>` : '';
 }
 
 function getPlayerIdentity(playerId) {
@@ -2524,6 +2567,36 @@ function getReadySplitPresentation(readyPlayerId) {
     return null;
   }
 
+  const rpsSplitScene = getRpsReadySplitScene(scene);
+
+  if (rpsSplitScene) {
+    return {
+      kind: 'doodle',
+      name: `rock-paper-scissors/split_scenes/${rpsSplitScene}_${readyPlayerId}_is_ready`,
+      flip: false,
+    };
+  }
+
+  const cbfSplitScene = getChargeBlockFireballReadySplitScene(scene);
+
+  if (cbfSplitScene) {
+    const separator = cbfSplitScene === 'charge' ? '-' : '_';
+    return {
+      kind: 'doodle',
+      name: `charge-block-fireball/split_scenes/${cbfSplitScene}${separator}${readyPlayerId}_is_ready`,
+      flip: false,
+    };
+  }
+
+  if (scene === 'charge-block-fireball/block-fireball') {
+    const isFireballerReady = lastMoves[readyPlayerId] === 'fireball';
+    return {
+      kind: 'doodle',
+      name: `charge-block-fireball/split_scenes/block-fireball_${isFireballerReady ? 'fireballer' : 'blocker'}_is_ready`,
+      flip: false,
+    };
+  }
+
   if (scene === 'reloading' || scene === 'clash' || scene === 'collision' || scene === 'hiding') {
     return {
       kind: 'doodle',
@@ -2551,6 +2624,40 @@ function getReadySplitPresentation(readyPlayerId) {
   }
 
   return null;
+}
+
+function getRpsReadySplitScene(scene) {
+  const prefix = 'rock-paper-scissors/';
+
+  if (!scene.startsWith(prefix)) {
+    return null;
+  }
+
+  const sceneName = scene.slice(prefix.length);
+  const splitSceneName = sceneName === 'scissors-tie' ? 'scissors-draw' : sceneName;
+  return ['rps-standoff', 'rock-draw', 'paper-draw', 'scissors-draw'].includes(splitSceneName)
+    ? splitSceneName
+    : null;
+}
+
+function getChargeBlockFireballReadySplitScene(scene) {
+  const prefix = 'charge-block-fireball/';
+
+  if (!scene.startsWith(prefix)) {
+    return null;
+  }
+
+  const sceneName = scene.slice(prefix.length);
+
+  if (sceneName === 'cbf-standoff') {
+    return 'cbf_standoff';
+  }
+
+  if (sceneName === 'both-charge') {
+    return 'charge';
+  }
+
+  return ['block-draw', 'fireball-draw'].includes(sceneName) ? sceneName : null;
 }
 
 function getRoleSplitPresentation(scene, readyPlayerId, { role, basePlayerId }) {
@@ -3011,6 +3118,14 @@ function setNewRoundAtReloadScene() {
 }
 
 function getIdleStagePresentation(variantId = getCurrentVariantId()) {
+  if (variantId === VARIANT_IDS.chargeBlockFireball) {
+    return {
+      kind: 'doodle',
+      name: 'charge-block-fireball/cbf-standoff',
+      flip: false,
+    };
+  }
+
   return {
     kind: 'doodle',
     name: variantId === VARIANT_IDS.rps ? 'rock-paper-scissors/rps-standoff' : 'reloading',
@@ -3242,7 +3357,7 @@ function commitRankedSnapshot(snapshot, previousPhase = rankedSnapshot?.phase) {
   if (snapshot.phase === 'gameOver' && snapshot.noContest) {
     stagePresentation = {
       kind: 'doodle',
-      name: 'nocontest',
+      name: 'system_scenes/no_contest',
       flip: false,
     };
   } else if (snapshot.phase === 'revealed') {
@@ -3266,7 +3381,7 @@ function commitRankedSnapshot(snapshot, previousPhase = rankedSnapshot?.phase) {
     finishMusicLoopThenStop();
     stagePresentation = {
       kind: 'doodle',
-      name: snapshot.winner === snapshot.playerKey ? 'winner' : 'loser',
+      name: snapshot.winner === snapshot.playerKey ? 'system_scenes/game_won' : 'system_scenes/game_lost',
       flip: false,
     };
   }
@@ -3703,7 +3818,7 @@ function resolveQueuedTurn() {
       p1: p1Move,
       p2: p2Move,
     };
-    stagePresentation = getDoodlePresentation(p1Move, p2Move, { variantId: getCurrentVariantId() });
+    stagePresentation = getTurnStagePresentation(turn.result, p1Move, p2Move);
 
     if (screen === 'tutorial' && state.status === 'finished' && state.winner) {
       roundWins[state.winner] += 1;
@@ -3727,6 +3842,23 @@ function resolveQueuedTurn() {
 
   p1QueuedMove = null;
   render();
+}
+
+function getTurnStagePresentation(result, p1Move, p2Move) {
+  if (
+    getCurrentVariantId() === VARIANT_IDS.chargeBlockFireball
+    && result?.winner
+    && result[`${result.winner}Move`] === 'charge'
+    && result[`${result.winner}Bullets`] >= getVariantResourceMax(VARIANT_IDS.chargeBlockFireball)
+  ) {
+    return {
+      kind: 'doodle',
+      name: 'charge-block-fireball/super-blasting',
+      flip: result.winner === 'p2',
+    };
+  }
+
+  return getDoodlePresentation(p1Move, p2Move, { variantId: getCurrentVariantId() });
 }
 
 function settleTutorialScene() {
@@ -3824,10 +3956,10 @@ function showRoundOverScene() {
 
 function getRoundOverDoodle(winner, useRoundDoodle) {
   if (winner === 'p1') {
-    return useRoundDoodle ? 'round_won' : 'winner';
+    return useRoundDoodle ? 'system_scenes/round_won' : 'system_scenes/game_won';
   }
 
-  return useRoundDoodle ? 'round_lost' : 'loser';
+  return useRoundDoodle ? 'system_scenes/round_lost' : 'system_scenes/game_lost';
 }
 
 function setNewTutorialRound() {

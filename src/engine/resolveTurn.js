@@ -1,5 +1,6 @@
 import {
   DEFAULT_VARIANT_ID,
+  doesVariantWinAtResourceMax,
   getForcedMove,
   getMove,
   getVariantHitTable,
@@ -23,14 +24,21 @@ export function resolveTurn({ p1Move, p2Move, p1Bullets, p2Bullets, variantId = 
   const hitTable = getVariantHitTable(variant);
   const p1Hit = hitTable[p1Move]?.[p2Move] ?? null;
   const p2Hit = hitTable[p2Move]?.[p1Move] ?? null;
-  const winner = p1Hit && !p2Hit ? 'p1' : p2Hit && !p1Hit ? 'p2' : null;
+  const hitWinner = p1Hit && !p2Hit ? 'p1' : p2Hit && !p1Hit ? 'p2' : null;
+  const p1BulletsAfter = spendAndGain(p1Bullets, p1Move, variant);
+  const p2BulletsAfter = spendAndGain(p2Bullets, p2Move, variant);
+  const resourceTieBullets = getResourceTieBullets(p1Bullets, p2Bullets, p1BulletsAfter, p2BulletsAfter, variant);
+  const resourceWinner = hitWinner
+    ? null
+    : getResourceWinner(p1Bullets, p2Bullets, p1BulletsAfter, p2BulletsAfter, variant);
+  const winner = hitWinner ?? resourceWinner;
 
   return {
     ok: true,
     p1Move,
     p2Move,
-    p1Bullets: spendAndGain(p1Bullets, p1Move, variant),
-    p2Bullets: spendAndGain(p2Bullets, p2Move, variant),
+    p1Bullets: resourceTieBullets?.p1 ?? p1BulletsAfter,
+    p2Bullets: resourceTieBullets?.p2 ?? p2BulletsAfter,
     p1Hit,
     p2Hit,
     winner,
@@ -66,4 +74,39 @@ function validateChoice(player, moveId, bullets, opponentBullets, variantId) {
 function spendAndGain(bullets, moveId, variantId) {
   const move = getMove(moveId, variantId);
   return Math.min(getVariantResourceMax(variantId), bullets - move.cost + move.gain);
+}
+
+function getResourceWinner(p1BulletsBefore, p2BulletsBefore, p1BulletsAfter, p2BulletsAfter, variantId) {
+  const resourceMax = getVariantResourceMax(variantId);
+  const p1ReachedMax = p1BulletsBefore < resourceMax && p1BulletsAfter === resourceMax;
+  const p2ReachedMax = p2BulletsBefore < resourceMax && p2BulletsAfter === resourceMax;
+
+  if (!doesVariantWinAtResourceMax(variantId) || resourceMax <= 0 || !p1ReachedMax && !p2ReachedMax) {
+    return null;
+  }
+
+  if (p1ReachedMax && !p2ReachedMax) {
+    return 'p1';
+  }
+
+  if (p2ReachedMax && !p1ReachedMax) {
+    return 'p2';
+  }
+
+  return null;
+}
+
+function getResourceTieBullets(p1BulletsBefore, p2BulletsBefore, p1BulletsAfter, p2BulletsAfter, variantId) {
+  const resourceMax = getVariantResourceMax(variantId);
+  const p1ReachedMax = p1BulletsBefore < resourceMax && p1BulletsAfter === resourceMax;
+  const p2ReachedMax = p2BulletsBefore < resourceMax && p2BulletsAfter === resourceMax;
+
+  if (!doesVariantWinAtResourceMax(variantId) || resourceMax <= 0 || !p1ReachedMax || !p2ReachedMax) {
+    return null;
+  }
+
+  return {
+    p1: resourceMax - 1,
+    p2: resourceMax - 1,
+  };
 }

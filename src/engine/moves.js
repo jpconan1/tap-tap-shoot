@@ -134,8 +134,8 @@ export const VARIANTS = Object.freeze({
     moveIds: Object.freeze(['charge', 'block', 'fireball']),
     moves: MOVES,
     resourceMax: MAX_BULLETS,
-    startResource: 0,
-    forcedMoveAtNoResource: 'charge',
+    startResource: AMMO_START,
+    winsAtResourceMax: true,
     hitTable: freezeHitTable({
       fireball: { charge: 'fireballed' },
     }),
@@ -226,6 +226,10 @@ export function getVariantStartResource(variantId = DEFAULT_VARIANT_ID) {
 
 export function getVariantHitTable(variantId = DEFAULT_VARIANT_ID) {
   return getVariant(variantId).hitTable;
+}
+
+export function doesVariantWinAtResourceMax(variantId = DEFAULT_VARIANT_ID) {
+  return Boolean(getVariant(variantId).winsAtResourceMax);
 }
 
 export function getMove(moveId, variantId = DEFAULT_VARIANT_ID) {

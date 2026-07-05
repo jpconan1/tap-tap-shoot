@@ -1,4 +1,4 @@
-import { getLegalMoves } from './moves.js';
+import { VARIANT_IDS, getLegalMoves, normalizeVariantId } from './moves.js';
 import { RIVAL_CONFIG } from './rivalConfig.js';
 
 export const RIVALS = RIVAL_CONFIG.rivals;
@@ -13,13 +13,26 @@ export function chooseRivalMove(state, rivalId = DEFAULT_RIVAL_ID, rng = Math.ra
   const rival = RIVALS[rivalId] ?? RIVALS[DEFAULT_RIVAL_ID];
   const ownBullets = state.players.p2.bullets;
   const enemyBullets = state.players.p1.bullets;
+  const variantId = state.variantId;
   const policyKey = getPolicyKey(ownBullets, enemyBullets);
   const fallbackPolicyKey = getFallbackPolicyKey(ownBullets, enemyBullets);
   const policy = rival.matchups[policyKey]
     ?? rival.matchups[fallbackPolicyKey]
     ?? RIVALS[DEFAULT_RIVAL_ID].matchups[fallbackPolicyKey];
 
-  return chooseWeightedLegalMove(ownBullets, enemyBullets, policy, rng);
+  return chooseWeightedLegalMove(ownBullets, enemyBullets, getVariantPolicy(policy, variantId), rng, variantId);
+}
+
+function getVariantPolicy(policy, variantId) {
+  if (normalizeVariantId(variantId) !== VARIANT_IDS.chargeBlockFireball) {
+    return policy;
+  }
+
+  return {
+    charge: policy.reload ?? 0,
+    block: (policy.duck ?? 0) + (policy.stab ?? 0),
+    fireball: policy.shoot ?? 0,
+  };
 }
 
 function getPolicyKey(ownBullets, enemyBullets) {
@@ -54,8 +67,8 @@ function getFallbackPolicyKey(ownBullets, enemyBullets) {
   return '1-1';
 }
 
-function chooseWeightedLegalMove(ownBullets, enemyBullets, policy, rng) {
-  const legalMoves = getLegalMoves(ownBullets, enemyBullets);
+function chooseWeightedLegalMove(ownBullets, enemyBullets, policy, rng, variantId) {
+  const legalMoves = getLegalMoves(ownBullets, enemyBullets, variantId);
   const weightedMoves = Object.entries(policy)
     .filter(([moveId, weight]) => legalMoves.includes(moveId) && weight > 0)
     .map(([moveId, weight]) => ({ moveId, weight }));

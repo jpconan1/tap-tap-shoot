@@ -60,6 +60,15 @@ const INTERACTION_DOODLES = Object.freeze({
   'duck|duck': 'hiding',
 });
 
+const CHARGE_BLOCK_FIREBALL_DOODLES = Object.freeze({
+  'block|block': 'charge-block-fireball/block-draw',
+  'charge|block': 'charge-block-fireball/block-charge',
+  'block|fireball': 'charge-block-fireball/block-fireball',
+  'charge|charge': 'charge-block-fireball/both-charge',
+  'charge|fireball': 'charge-block-fireball/charge-fireball',
+  'fireball|fireball': 'charge-block-fireball/fireball-draw',
+});
+
 const STARBURST_WIPE_STEPS = Object.freeze([
   Object.freeze(['1_w']),
   Object.freeze(['2_w', '1']),
@@ -83,6 +92,7 @@ export function preloadDoodleSheets(doodles) {
 export function getRendererPreloadDoodles() {
   return [
     ...Object.values(INTERACTION_DOODLES),
+    ...Object.values(CHARGE_BLOCK_FIREBALL_DOODLES),
     ...SPLIT_READY_DOODLES,
     ...STARBURST_WIPE_STEPS.flat().map((name) => `starburst_wipe/${name}`),
     ...READY_WAITING_READY_STEPS.map((name) => `ready_waiting/${name}`),
@@ -422,13 +432,23 @@ function drawWipeStep(canvas, layers, now) {
 }
 
 function getDoodleForMoves(p1Move, p2Move, variantId = '') {
-  if (variantId === 'rps') {
+  if (variantId === 'rps' || variantId === 'rock-paper-scissors') {
     return getRpsDoodleForMoves(p1Move, p2Move);
+  }
+
+  if (variantId === 'chargeBlockFireball' || variantId === 'charge-block-fireball') {
+    return getChargeBlockFireballDoodleForMoves(p1Move, p2Move);
   }
 
   const sortedMoves = [p1Move, p2Move].sort((a, b) => MOVE_IDS.indexOf(a) - MOVE_IDS.indexOf(b));
   const key = sortedMoves.join('|');
   return INTERACTION_DOODLES[key] ?? 'hiding';
+}
+
+function getChargeBlockFireballDoodleForMoves(p1Move, p2Move) {
+  const sortedMoves = [p1Move, p2Move].sort((a, b) => MOVE_IDS.indexOf(a) - MOVE_IDS.indexOf(b));
+  const key = sortedMoves.join('|');
+  return CHARGE_BLOCK_FIREBALL_DOODLES[key] ?? 'charge-block-fireball/cbf-standoff';
 }
 
 function getRpsDoodleForMoves(p1Move, p2Move) {
@@ -452,10 +472,16 @@ function getRpsDoodleForMoves(p1Move, p2Move) {
 }
 
 function shouldFlipDoodle(doodle, p1Move, p2Move, variantId = '') {
-  if (variantId === 'rps') {
+  if (variantId === 'rps' || variantId === 'rock-paper-scissors') {
     return (doodle === 'rock-paper-scissors/rock-scissors' && p2Move === 'rock')
       || (doodle === 'rock-paper-scissors/paper-rock' && p2Move === 'paper')
       || (doodle === 'rock-paper-scissors/scissors-paper' && p2Move === 'scissors');
+  }
+
+  if (variantId === 'chargeBlockFireball' || variantId === 'charge-block-fireball') {
+    return (doodle === 'charge-block-fireball/block-charge' && p1Move === 'charge')
+      || (doodle === 'charge-block-fireball/block-fireball' && p1Move === 'fireball')
+      || (doodle === 'charge-block-fireball/charge-fireball' && p1Move === 'fireball');
   }
 
   if (doodle === 'shooting') {

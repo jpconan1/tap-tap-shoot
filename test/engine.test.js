@@ -118,18 +118,21 @@ test('rock paper scissors has no resource and resolves classic wins', () => {
   assert.equal(tie.winner, null);
 });
 
-test('charge block fireball forces charge at 0-0 and fireball beats charge', () => {
-  assert.deepEqual(getLegalMoves(0, 0, VARIANT_IDS.chargeBlockFireball), ['charge']);
+test('charge block fireball starts at one bar and fireball beats charge', () => {
+  const state = createRoundState({ variantId: VARIANT_IDS.chargeBlockFireball });
+  assert.equal(state.players.p1.bullets, 1);
+  assert.equal(state.players.p2.bullets, 1);
+  assert.deepEqual(getLegalMoves(0, 0, VARIANT_IDS.chargeBlockFireball), ['charge', 'block']);
 
-  const illegal = resolveTurn({
+  const blockAtZero = resolveTurn({
     p1Move: 'block',
     p2Move: 'charge',
     p1Bullets: 0,
     p2Bullets: 0,
     variantId: VARIANT_IDS.chargeBlockFireball,
   });
-  assert.equal(illegal.ok, false);
-  assert.deepEqual(illegal.errors, ['p1 must charge at 0-0']);
+  assert.equal(blockAtZero.ok, true);
+  assert.equal(blockAtZero.winner, null);
 
   const charge = resolveTurn({
     p1Move: 'charge',
@@ -151,6 +154,44 @@ test('charge block fireball forces charge at 0-0 and fireball beats charge', () 
   });
   assert.equal(fireball.ok, true);
   assert.equal(fireball.winner, 'p1');
+});
+
+test('charge block fireball wins at three charges unless fireball hits first', () => {
+  const chargeWin = resolveTurn({
+    p1Move: 'charge',
+    p2Move: 'block',
+    p1Bullets: MAX_BULLETS - 1,
+    p2Bullets: 1,
+    variantId: VARIANT_IDS.chargeBlockFireball,
+  });
+  assert.equal(chargeWin.ok, true);
+  assert.equal(chargeWin.p1Bullets, MAX_BULLETS);
+  assert.equal(chargeWin.winner, 'p1');
+  assert.equal(chargeWin.isRoundOver, true);
+
+  const fireballFirst = resolveTurn({
+    p1Move: 'fireball',
+    p2Move: 'charge',
+    p1Bullets: 1,
+    p2Bullets: MAX_BULLETS - 1,
+    variantId: VARIANT_IDS.chargeBlockFireball,
+  });
+  assert.equal(fireballFirst.ok, true);
+  assert.equal(fireballFirst.p2Bullets, MAX_BULLETS);
+  assert.equal(fireballFirst.winner, 'p1');
+
+  const bothCharged = resolveTurn({
+    p1Move: 'charge',
+    p2Move: 'charge',
+    p1Bullets: MAX_BULLETS - 1,
+    p2Bullets: MAX_BULLETS - 1,
+    variantId: VARIANT_IDS.chargeBlockFireball,
+  });
+  assert.equal(bothCharged.ok, true);
+  assert.equal(bothCharged.p1Bullets, MAX_BULLETS - 1);
+  assert.equal(bothCharged.p2Bullets, MAX_BULLETS - 1);
+  assert.equal(bothCharged.winner, null);
+  assert.equal(bothCharged.isRoundOver, false);
 });
 
 test('tap tap shoot adds counterstab to the four move rules', () => {
@@ -256,6 +297,27 @@ test('rival AI only chooses legal moves across bullet matchups', () => {
             `${rival.id} picked illegal ${move} at ${rivalBullets}-${playerBullets}`,
           );
         }
+      }
+    }
+  }
+});
+
+test('rival AI chooses legal charge block fireball moves', () => {
+  const rolls = [0, 0.25, 0.5, 0.75, 0.999];
+
+  for (let rivalBullets = 0; rivalBullets <= MAX_BULLETS; rivalBullets += 1) {
+    for (let playerBullets = 0; playerBullets <= MAX_BULLETS; playerBullets += 1) {
+      const legalMoves = getLegalMoves(rivalBullets, playerBullets, VARIANT_IDS.chargeBlockFireball);
+
+      for (const roll of rolls) {
+        const move = chooseRivalMove(
+          createStateWithBullets(rivalBullets, playerBullets, VARIANT_IDS.chargeBlockFireball),
+          fixedRoll(roll),
+        );
+        assert.ok(
+          legalMoves.includes(move),
+          `picked illegal ${move} at ${rivalBullets}-${playerBullets}`,
+        );
       }
     }
   }
