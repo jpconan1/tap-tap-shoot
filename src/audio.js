@@ -49,9 +49,31 @@ let htmlMusicAudio = null;
 let htmlMusicTrack = null;
 let lastStageAudioKey = null;
 let getMusicTopperFile = () => null;
+let soundEnabled = false;
+let musicEnabled = false;
 
 export function configureAudio(options) {
   getMusicTopperFile = options.getMusicTopperFile;
+}
+
+export function setSoundEnabled(isEnabled) {
+  soundEnabled = Boolean(isEnabled);
+
+  if (soundEnabled) {
+    unlockSceneAudio();
+  }
+}
+
+export function setMusicEnabled(isEnabled) {
+  musicEnabled = Boolean(isEnabled);
+
+  if (!musicEnabled) {
+    stopCurrentMusicSegment();
+    return;
+  }
+
+  unlockSceneAudio();
+  syncMusicTrack();
 }
 
 export function resetStageAudioKey() {
@@ -74,6 +96,11 @@ export function requestMusicTrack(trackId) {
 
   desiredMusicTrack = trackId;
 
+  if (!musicEnabled) {
+    stopCurrentMusicSegment();
+    return;
+  }
+
   const context = getExistingSceneAudioContext();
 
   if (!context) {
@@ -85,6 +112,10 @@ export function requestMusicTrack(trackId) {
 }
 
 export function queueMusicTrackOnce(trackId, returnTrackId) {
+  if (!musicEnabled) {
+    return;
+  }
+
   if (!MUSIC_TRACKS[trackId] || !MUSIC_TRACKS[returnTrackId]) {
     return;
   }
@@ -119,6 +150,10 @@ export function finishMusicLoopThenStop() {
 }
 
 export function restartMusicTrack(trackId) {
+  if (!musicEnabled) {
+    return;
+  }
+
   if (!MUSIC_TRACKS[trackId]) {
     return;
   }
@@ -145,6 +180,10 @@ export function restartMusicTrack(trackId) {
 }
 
 export function restartMusicTrackOnce(trackId, returnTrackId) {
+  if (!musicEnabled) {
+    return;
+  }
+
   if (!MUSIC_TRACKS[trackId] || !MUSIC_TRACKS[returnTrackId]) {
     return;
   }
@@ -172,6 +211,10 @@ export function restartMusicTrackOnce(trackId, returnTrackId) {
 }
 
 export function interruptMusicFileOnce(fileName, returnTrackId = desiredMusicTrack ?? 'game', resumeCurrentTrack = true) {
+  if (!musicEnabled) {
+    return;
+  }
+
   if (!fileName) {
     return;
   }
@@ -218,6 +261,11 @@ export function interruptMusicFileOnce(fileName, returnTrackId = desiredMusicTra
 }
 
 export function syncMusicTopper() {
+  if (!musicEnabled) {
+    stopMusicTopperSegment();
+    return;
+  }
+
   const fileName = getMusicTopperFile();
 
   if (!fileName) {
@@ -246,6 +294,10 @@ export function syncMusicTopper() {
 }
 
 export function playStageAudio({ isTransitioning, presentation, audioKey }) {
+  if (!soundEnabled) {
+    return;
+  }
+
   if (isTransitioning || presentation.kind !== 'doodle') {
     return;
   }
@@ -265,6 +317,10 @@ export function playStageAudio({ isTransitioning, presentation, audioKey }) {
 }
 
 export function playOneShotAudio(fileName) {
+  if (!soundEnabled) {
+    return;
+  }
+
   const context = getSceneAudioContext();
 
   if (!context) {
@@ -290,6 +346,10 @@ export function playOneShotAudio(fileName) {
 }
 
 export function unlockSceneAudio() {
+  if (!soundEnabled && !musicEnabled) {
+    return Promise.resolve();
+  }
+
   if (sceneAudioUnlockPromise) {
     return sceneAudioUnlockPromise;
   }
@@ -307,7 +367,7 @@ export function unlockSceneAudio() {
     .catch((error) => {
       console.warn('Could not unlock scene audio context', error);
     })
-    .then(() => desiredMusicTrack ? loadSceneAudioBuffer(MUSIC_TRACKS[desiredMusicTrack]) : null)
+    .then(() => musicEnabled && desiredMusicTrack ? loadSceneAudioBuffer(MUSIC_TRACKS[desiredMusicTrack]) : null)
     .then(() => syncMusicTrack())
     .then(() => Promise.all(audioFiles.map((fileName) => loadSceneAudioBuffer(fileName))))
     .then(() => syncMusicTrack())
@@ -427,6 +487,10 @@ function resumeInterruptedMusic(resumeSegment) {
 }
 
 function syncMusicTrack() {
+  if (!musicEnabled) {
+    return;
+  }
+
   const context = getExistingSceneAudioContext();
 
   if (!context) {
@@ -458,6 +522,10 @@ function syncMusicTrack() {
 }
 
 function startMusicSegment(trackId, startAt, returnTrackId, offset = 0) {
+  if (!musicEnabled) {
+    return;
+  }
+
   const context = getSceneAudioContext();
   const fileName = MUSIC_TRACKS[trackId];
   const buffer = fileName ? sceneAudioBuffers.get(fileName) : null;
@@ -671,6 +739,10 @@ function scheduleNextMusicSegment() {
 }
 
 function startHtmlMusicTrack(trackId, returnTrackId) {
+  if (!musicEnabled) {
+    return;
+  }
+
   const fileName = MUSIC_TRACKS[trackId];
 
   if (!fileName) {

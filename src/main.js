@@ -24,6 +24,8 @@ import {
   resetStageAudioKey,
   restartMusicTrackOnce,
   STARBURST_WIPE_AUDIO,
+  setMusicEnabled,
+  setSoundEnabled,
   syncMusicTopper,
   unlockSceneAudio,
   WIN_SOUND_AUDIO,
@@ -73,6 +75,8 @@ const TITLE_LOGO_FRAME_WIDTH = 512;
 const TITLE_LOGO_FRAME_HEIGHT = 368;
 const TITLE_BUTTON_FRAME_WIDTH = 256;
 const TITLE_BUTTON_FRAME_HEIGHT = 128;
+const TITLE_AUDIO_BUTTON_FRAME_WIDTH = 384;
+const TITLE_AUDIO_BUTTON_FRAME_HEIGHT = 192;
 const VARIANT_BUTTON_FRAME_WIDTH = 325;
 const VARIANT_BUTTON_FRAME_HEIGHT = 128;
 const PICK_VARIANT_FRAME_WIDTH = 388;
@@ -368,6 +372,8 @@ let playMode = 'local';
 let selectedOpponentId = DEFAULT_OPPONENT_ID;
 let selectedVariantId = DEFAULT_VARIANT_ID;
 let isTransitioning = false;
+let isMusicEnabled = false;
+let isSoundEnabled = false;
 let pauseMenu = null;
 let pauseStartedAt = null;
 const pausableTimers = new Set();
@@ -722,7 +728,10 @@ function getGamePreloadDoodles() {
     'title/LOGO',
     'title/playvcom_button',
     'title/playonline',
-    'title/tutorial_button',
+    'title/music_button',
+    'title/music_button_checked',
+    'title/sound_button',
+    'title/sound_button_checked',
     ...FINDING_MATCH_DOODLES,
     ...COMPUTER_VARIANTS.map((variant) => variant.buttonDoodle),
     ...Object.values(MOVE_BUTTON_DOODLES),
@@ -1898,29 +1907,58 @@ function renderTitleScreen() {
             aria-hidden="true"
           ></canvas>
         </button>
-
-        <button class="play-button tutorial-button" data-action="tutorial" aria-label="Tutorial">
-          <canvas
-            class="sprite-canvas play-button-art"
-            data-doodle="title/tutorial_button"
-            data-frame-width="${TITLE_BUTTON_FRAME_WIDTH}"
-            data-frame-height="${TITLE_BUTTON_FRAME_HEIGHT}"
-            width="${TITLE_BUTTON_FRAME_WIDTH}"
-            height="${TITLE_BUTTON_FRAME_HEIGHT}"
-            aria-hidden="true"
-          ></canvas>
-        </button>
       </div>
 
-      <button class="text-link title-test-link" data-action="test" type="button">test mode</button>
+      <div class="title-audio-actions" aria-label="Audio">
+        ${renderTitleAudioButton('music', isMusicEnabled)}
+        ${renderTitleAudioButton('sound', isSoundEnabled)}
+      </div>
     </section>
   `;
 
   app.querySelector('[data-action="play"]').addEventListener('click', startGameFromTitle);
   app.querySelector('[data-action="ranked"]').addEventListener('click', startRankedFromTitle);
-  app.querySelector('[data-action="tutorial"]').addEventListener('click', startTutorialFromTitle);
-  app.querySelector('[data-action="test"]').addEventListener('click', startTestModeFromTitle);
+  app.querySelector('[data-action="toggle-music"]').addEventListener('click', toggleMusic);
+  app.querySelector('[data-action="toggle-sound"]').addEventListener('click', toggleSound);
   mountSpriteRenderers(app.querySelectorAll('.sprite-canvas'));
+}
+
+function renderTitleAudioButton(kind, isChecked) {
+  const doodle = `title/${kind}_button${isChecked ? '_checked' : ''}`;
+  const label = `${kind} ${isChecked ? 'on' : 'off'}`;
+
+  return `
+    <button
+      class="title-audio-button"
+      data-action="toggle-${kind}"
+      type="button"
+      aria-label="${label}"
+      aria-pressed="${isChecked ? 'true' : 'false'}"
+    >
+      <canvas
+        class="sprite-canvas title-audio-button-art"
+        data-doodle="${doodle}"
+        data-frame-width="${TITLE_AUDIO_BUTTON_FRAME_WIDTH}"
+        data-frame-height="${TITLE_AUDIO_BUTTON_FRAME_HEIGHT}"
+        width="${TITLE_AUDIO_BUTTON_FRAME_WIDTH}"
+        height="${TITLE_AUDIO_BUTTON_FRAME_HEIGHT}"
+        aria-hidden="true"
+      ></canvas>
+    </button>
+  `;
+}
+
+function toggleMusic() {
+  isMusicEnabled = !isMusicEnabled;
+  setMusicEnabled(isMusicEnabled);
+  requestMusicTrack(screen === 'title' ? 'title' : 'game');
+  render();
+}
+
+function toggleSound() {
+  isSoundEnabled = !isSoundEnabled;
+  setSoundEnabled(isSoundEnabled);
+  render();
 }
 
 function renderOnlineNameScreen() {

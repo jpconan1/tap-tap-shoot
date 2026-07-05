@@ -356,10 +356,47 @@ button {
   margin-top: 16px;
 }
 
-.title-test-link {
+.title-audio-actions {
+  display: flex;
+  gap: 18px;
+  align-items: center;
+  justify-content: center;
   margin-top: 4px;
-  font-size: 28px;
+}
+
+.title-audio-button {
+  display: block;
+  width: 170px;
+  height: 85px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
   transform: rotate(-0.35deg);
+}
+
+.title-audio-button:nth-child(2) {
+  transform: rotate(0.45deg);
+}
+
+.title-audio-button-art {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  image-rendering: auto;
+  filter: drop-shadow(2px 4px 0 rgba(29, 27, 24, 0.12));
+}
+
+.title-audio-button:hover,
+.title-audio-button:focus-visible {
+  outline: 0;
+  transform: rotate(-0.35deg) translateY(-2px);
+}
+
+.title-audio-button:nth-child(2):hover,
+.title-audio-button:nth-child(2):focus-visible {
+  transform: rotate(0.45deg) translateY(-2px);
 }
 
 .online-name-form {
