@@ -1,10 +1,16 @@
+import { getForcedMove as getVariantForcedMove, getMove as getVariantMove, isBlockedByResourceCap } from './variants/shared.js';
+import { createChargeBlockFireballVariant } from './variants/chargeBlockFireball.js';
+import { createPunchStabShootVariant } from './variants/punchStabShoot.js';
+import { createRpsVariant } from './variants/rps.js';
+import { createShootStabDuckVariant } from './variants/shootStabDuck.js';
+import { createTapTapShootVariant } from './variants/tapTapShoot.js';
+
 export const VARIANT_IDS = Object.freeze({
   rps: 'rps',
   chargeBlockFireball: 'chargeBlockFireball',
   shootStabDuck: 'shootStabDuck',
   punchStabShoot: 'punchStabShoot',
   tapTapShoot: 'tapTapShoot',
-  doubleTap: 'doubleTap',
 });
 
 export const DEFAULT_VARIANT_ID = VARIANT_IDS.shootStabDuck;
@@ -91,112 +97,42 @@ export const MOVES = Object.freeze({
     cost: 0,
     gain: 0,
   }),
-  doubletap: Object.freeze({
-    id: 'doubletap',
-    label: 'Double Tap',
-    cost: 2,
-    gain: 0,
-  }),
 });
 
 export const MOVE_IDS = Object.freeze(Object.keys(MOVES));
 export const MAX_BULLETS = 3;
+export const MAX_RESOURCE = MAX_BULLETS;
 export const VARIANT_ORDER = Object.freeze([
   VARIANT_IDS.rps,
   VARIANT_IDS.chargeBlockFireball,
   VARIANT_IDS.shootStabDuck,
+  VARIANT_IDS.punchStabShoot,
   VARIANT_IDS.tapTapShoot,
-  VARIANT_IDS.doubleTap,
 ]);
 
-const NO_RESOURCE_MAX = 0;
-const AMMO_START = 1;
+const HEALTH_START = 3;
 
 export const VARIANTS = Object.freeze({
-  [VARIANT_IDS.rps]: Object.freeze({
-    id: VARIANT_IDS.rps,
-    label: 'Rock Paper Scissors',
-    isRanked: true,
-    moveIds: Object.freeze(['rock', 'paper', 'scissors']),
-    moves: MOVES,
-    resourceMax: NO_RESOURCE_MAX,
-    startResource: 0,
-    hitTable: freezeHitTable({
-      rock: { scissors: 'smashed' },
-      paper: { rock: 'covered' },
-      scissors: { paper: 'cut' },
-    }),
-  }),
-  [VARIANT_IDS.chargeBlockFireball]: Object.freeze({
+  [VARIANT_IDS.rps]: createRpsVariant({ id: VARIANT_IDS.rps, moves: MOVES }),
+  [VARIANT_IDS.chargeBlockFireball]: createChargeBlockFireballVariant({
     id: VARIANT_IDS.chargeBlockFireball,
-    label: 'Charge Block Fireball',
-    isRanked: true,
-    moveIds: Object.freeze(['charge', 'block', 'fireball']),
     moves: MOVES,
-    resourceMax: MAX_BULLETS,
-    startResource: AMMO_START,
-    winsAtResourceMax: true,
-    hitTable: freezeHitTable({
-      fireball: { charge: 'fireballed' },
-    }),
+    maxResource: MAX_RESOURCE,
   }),
-  [VARIANT_IDS.shootStabDuck]: Object.freeze({
+  [VARIANT_IDS.shootStabDuck]: createShootStabDuckVariant({
     id: VARIANT_IDS.shootStabDuck,
-    label: 'Shoot Stab Duck',
-    isRanked: true,
-    moveIds: Object.freeze(['reload', 'shoot', 'stab', 'duck']),
     moves: MOVES,
-    resourceMax: MAX_BULLETS,
-    startResource: AMMO_START,
-    forcedMoveAtNoResource: 'reload',
-    hitTable: freezeHitTable({
-      shoot: { stab: 'shot', reload: 'shot' },
-      stab: { duck: 'stabbed' },
-    }),
+    maxResource: MAX_RESOURCE,
   }),
-  [VARIANT_IDS.punchStabShoot]: Object.freeze({
+  [VARIANT_IDS.punchStabShoot]: createPunchStabShootVariant({
     id: VARIANT_IDS.punchStabShoot,
-    label: 'Punch Stab Shoot',
-    isRanked: false,
-    moveIds: Object.freeze(['punch', 'stab', 'shoot']),
     moves: MOVES,
-    resourceMax: AMMO_START,
-    startResource: AMMO_START,
-    hitTable: freezeHitTable({
-      punch: { shoot: 'punched' },
-      shoot: { stab: 'shot' },
-      stab: { punch: 'stabbed' },
-    }),
+    startHealth: HEALTH_START,
   }),
-  [VARIANT_IDS.tapTapShoot]: Object.freeze({
+  [VARIANT_IDS.tapTapShoot]: createTapTapShootVariant({
     id: VARIANT_IDS.tapTapShoot,
-    label: 'Tap Tap Shoot',
-    isRanked: true,
-    moveIds: Object.freeze(['reload', 'shoot', 'stab', 'duck', 'counterstab']),
     moves: MOVES,
-    resourceMax: MAX_BULLETS,
-    startResource: AMMO_START,
-    forcedMoveAtNoResource: 'reload',
-    hitTable: freezeHitTable({
-      shoot: { stab: 'shot', reload: 'shot', counterstab: 'shot' },
-      stab: { duck: 'stabbed' },
-      counterstab: { stab: 'counterstabbed' },
-    }),
-  }),
-  [VARIANT_IDS.doubleTap]: Object.freeze({
-    id: VARIANT_IDS.doubleTap,
-    label: 'Double Tap',
-    isRanked: true,
-    moveIds: Object.freeze(['reload', 'shoot', 'doubletap', 'stab', 'duck']),
-    moves: MOVES,
-    resourceMax: MAX_BULLETS,
-    startResource: AMMO_START,
-    forcedMoveAtNoResource: 'reload',
-    hitTable: freezeHitTable({
-      shoot: { stab: 'shot', reload: 'shot', doubletap: 'shot' },
-      doubletap: { duck: 'doubletapped', reload: 'doubletapped' },
-      stab: { duck: 'stabbed' },
-    }),
+    maxResource: MAX_RESOURCE,
   }),
 });
 
@@ -228,52 +164,38 @@ export function getVariantHitTable(variantId = DEFAULT_VARIANT_ID) {
   return getVariant(variantId).hitTable;
 }
 
-export function doesVariantWinAtResourceMax(variantId = DEFAULT_VARIANT_ID) {
-  return Boolean(getVariant(variantId).winsAtResourceMax);
-}
-
 export function getMove(moveId, variantId = DEFAULT_VARIANT_ID) {
-  const variant = getVariant(variantId);
-  return variant.moveIds.includes(moveId) ? variant.moves[moveId] ?? null : null;
+  return getVariantMove(getVariant(variantId), moveId);
 }
 
-export function canAfford(moveId, bullets, variantId = DEFAULT_VARIANT_ID) {
+export function canAfford(moveId, resource, variantId = DEFAULT_VARIANT_ID) {
   const move = getMove(moveId, variantId);
-  return Boolean(move) && bullets >= move.cost;
+  return Boolean(move) && resource >= move.cost;
 }
 
-export function getLegalMoves(bullets, opponentBullets = null, variantId = DEFAULT_VARIANT_ID) {
-  const forcedMove = getForcedMove(bullets, opponentBullets, variantId);
+export function getLegalMoves(resource, opponentResource = null, variantId = DEFAULT_VARIANT_ID) {
+  const forcedMove = getForcedMove(resource, opponentResource, variantId);
 
   if (forcedMove) {
     return [forcedMove];
   }
 
   return getVariantMoveIds(variantId)
-    .filter((moveId) => canAfford(moveId, bullets, variantId) && !isBlockedByBulletCap(moveId, bullets, variantId));
+    .filter((moveId) => canAfford(moveId, resource, variantId) && !isBlockedByResourceCap(getVariant(variantId), moveId, resource));
 }
 
-export function getForcedMove(bullets, opponentBullets, variantId = DEFAULT_VARIANT_ID) {
-  const variant = getVariant(variantId);
-  return variant.forcedMoveAtNoResource
-    && bullets === 0
-    && opponentBullets === 0
-    ? variant.forcedMoveAtNoResource
-    : null;
+export function getForcedMove(resource, opponentResource, variantId = DEFAULT_VARIANT_ID) {
+  return getVariantForcedMove(getVariant(variantId), resource, opponentResource);
 }
 
-export function isForcedReload(bullets, opponentBullets, variantId = DEFAULT_VARIANT_ID) {
-  return getForcedMove(bullets, opponentBullets, variantId) === 'reload';
+export function isForcedReload(resource, opponentResource, variantId = DEFAULT_VARIANT_ID) {
+  return getForcedMove(resource, opponentResource, variantId) === 'reload';
 }
 
-export function isBlockedByBulletCap(moveId, bullets, variantId = DEFAULT_VARIANT_ID) {
-  const move = getMove(moveId, variantId);
-  const resourceMax = getVariantResourceMax(variantId);
-  return Boolean(move) && move.gain > 0 && bullets >= resourceMax;
+export function isBlockedByBulletCap(moveId, resource, variantId = DEFAULT_VARIANT_ID) {
+  return isBlockedByResourceCap(getVariant(variantId), moveId, resource);
 }
 
-function freezeHitTable(table) {
-  return Object.freeze(Object.fromEntries(
-    Object.entries(table).map(([moveId, outcomes]) => [moveId, Object.freeze(outcomes)]),
-  ));
+export function isBlockedByResourceCapForMove(moveId, resource, variantId = DEFAULT_VARIANT_ID) {
+  return isBlockedByResourceCap(getVariant(variantId), moveId, resource);
 }

@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
-import { createRoundState, getPlayerLegalMoves, playTurn } from '../src/engine/gameState.js';
+import { createRoundState, getPlayerLegalMoves, getPlayerResource, playTurn } from '../src/engine/gameState.js';
 import {
   DEFAULT_VARIANT_ID,
   VARIANT_ORDER,
@@ -679,14 +679,16 @@ export class RankedDuelService {
       players: {
         p1: {
           displayName: room.players.p1.displayName,
-          bullets: room.roundState.players.p1.bullets,
+          resource: getPlayerResource(room.roundState.players.p1),
+          bullets: getPlayerResource(room.roundState.players.p1),
           legalMoves: room.phase === 'choosing' ? getPlayerLegalMoves(room.roundState, 'p1') : [],
           canContinue: room.phase === 'roundOver' && !room.pendingContinues.has('p1'),
           rating: isRanked ? room.players.p1.player.rating : null,
         },
         p2: {
           displayName: room.players.p2.displayName,
-          bullets: room.roundState.players.p2.bullets,
+          resource: getPlayerResource(room.roundState.players.p2),
+          bullets: getPlayerResource(room.roundState.players.p2),
           legalMoves: room.phase === 'choosing' ? getPlayerLegalMoves(room.roundState, 'p2') : [],
           canContinue: room.phase === 'roundOver' && !room.pendingContinues.has('p2'),
           rating: isRanked ? room.players.p2.player.rating : null,

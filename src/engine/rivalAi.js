@@ -1,4 +1,5 @@
 import { VARIANT_IDS, getLegalMoves, normalizeVariantId } from './moves.js';
+import { getPlayerResource } from './gameState.js';
 import { RIVAL_CONFIG } from './rivalConfig.js';
 
 export const RIVALS = RIVAL_CONFIG.rivals;
@@ -11,16 +12,16 @@ export function chooseRivalMove(state, rivalId = DEFAULT_RIVAL_ID, rng = Math.ra
   }
 
   const rival = RIVALS[rivalId] ?? RIVALS[DEFAULT_RIVAL_ID];
-  const ownBullets = state.players.p2.bullets;
-  const enemyBullets = state.players.p1.bullets;
+  const ownResource = getPlayerResource(state.players.p2);
+  const enemyResource = getPlayerResource(state.players.p1);
   const variantId = state.variantId;
-  const policyKey = getPolicyKey(ownBullets, enemyBullets);
-  const fallbackPolicyKey = getFallbackPolicyKey(ownBullets, enemyBullets);
+  const policyKey = getPolicyKey(ownResource, enemyResource);
+  const fallbackPolicyKey = getFallbackPolicyKey(ownResource, enemyResource);
   const policy = rival.matchups[policyKey]
     ?? rival.matchups[fallbackPolicyKey]
     ?? RIVALS[DEFAULT_RIVAL_ID].matchups[fallbackPolicyKey];
 
-  return chooseWeightedLegalMove(ownBullets, enemyBullets, getVariantPolicy(policy, variantId), rng, variantId);
+  return chooseWeightedLegalMove(ownResource, enemyResource, getVariantPolicy(policy, variantId), rng, variantId);
 }
 
 function getVariantPolicy(policy, variantId) {

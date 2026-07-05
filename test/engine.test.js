@@ -208,36 +208,46 @@ test('tap tap shoot adds counterstab to the four move rules', () => {
   assert.equal(result.winner, 'p1');
 });
 
-test('double tap costs two and beats duck or reload but loses to shoot', () => {
-  const illegal = resolveTurn({
-    p1Move: 'doubletap',
-    p2Move: 'duck',
-    p1Bullets: 1,
-    p2Bullets: 1,
-    variantId: VARIANT_IDS.doubleTap,
-  });
-  assert.equal(illegal.ok, false);
-  assert.deepEqual(illegal.errors, ['p1 cannot afford doubletap']);
+test('punch stab shoot uses health damage before round win', () => {
+  const state = createRoundState({ variantId: VARIANT_IDS.punchStabShoot });
+  assert.equal(state.players.p1.bullets, 3);
+  assert.equal(state.players.p2.bullets, 3);
+  assert.deepEqual(getVariantMoveIds(VARIANT_IDS.punchStabShoot), ['punch', 'stab', 'shoot']);
 
-  const win = resolveTurn({
-    p1Move: 'doubletap',
-    p2Move: 'duck',
-    p1Bullets: 2,
-    p2Bullets: 1,
-    variantId: VARIANT_IDS.doubleTap,
-  });
-  assert.equal(win.ok, true);
-  assert.equal(win.winner, 'p1');
-
-  const lose = resolveTurn({
-    p1Move: 'doubletap',
+  const punchDamage = resolveTurn({
+    p1Move: 'punch',
     p2Move: 'shoot',
-    p1Bullets: 2,
-    p2Bullets: 1,
-    variantId: VARIANT_IDS.doubleTap,
+    p1Bullets: 3,
+    p2Bullets: 3,
+    variantId: VARIANT_IDS.punchStabShoot,
   });
-  assert.equal(lose.ok, true);
-  assert.equal(lose.winner, 'p2');
+  assert.equal(punchDamage.ok, true);
+  assert.equal(punchDamage.p2Bullets, 2);
+  assert.equal(punchDamage.winner, null);
+  assert.equal(punchDamage.isRoundOver, false);
+
+  const stabKill = resolveTurn({
+    p1Move: 'stab',
+    p2Move: 'punch',
+    p1Bullets: 3,
+    p2Bullets: 2,
+    variantId: VARIANT_IDS.punchStabShoot,
+  });
+  assert.equal(stabKill.ok, true);
+  assert.equal(stabKill.p2Bullets, 0);
+  assert.equal(stabKill.winner, 'p1');
+
+  const draw = resolveTurn({
+    p1Move: 'shoot',
+    p2Move: 'shoot',
+    p1Bullets: 3,
+    p2Bullets: 3,
+    variantId: VARIANT_IDS.punchStabShoot,
+  });
+  assert.equal(draw.ok, true);
+  assert.equal(draw.p1Bullets, 3);
+  assert.equal(draw.p2Bullets, 3);
+  assert.equal(draw.winner, null);
 });
 
 test('round state advances on ties and freezes on round win', () => {

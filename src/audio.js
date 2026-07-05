@@ -13,6 +13,15 @@ const SCENE_AUDIO = Object.freeze({
   dodge: 'wiff.mp3',
   reloading: 'reload.mp3',
   tricky: 'reload.mp3',
+  'shoot-stab-duck/standoff-ssd': 'nothing.mp3',
+  'shoot-stab-duck/reload-draw': 'reload.mp3',
+  'shoot-stab-duck/reload-duck': 'reload.mp3',
+  'shoot-stab-duck/shoot-draw': 'collision.mp3',
+  'shoot-stab-duck/shoot-kill': 'gunshot.mp3',
+  'shoot-stab-duck/stab-draw': 'clash.mp3',
+  'shoot-stab-duck/stab-kill': 'stab.mp3',
+  'shoot-stab-duck/stab-reload': 'nothing.mp3',
+  'shoot-stab-duck/duck-draw': 'wiff.mp3',
 });
 const MUSIC_TRACKS = Object.freeze({
   title: 'title_loop.mp3',

@@ -55,8 +55,8 @@ test('bans are realtime unique and leave three variants in canonical order', asy
   assert.equal(room.phase, 'choosing');
   assert.deepEqual(room.remainingVariants, [
     VARIANT_IDS.shootStabDuck,
+    VARIANT_IDS.punchStabShoot,
     VARIANT_IDS.tapTapShoot,
-    VARIANT_IDS.doubleTap,
   ]);
   assert.equal(lastMessage(p1).currentVariantId, VARIANT_IDS.shootStabDuck);
   assert.deepEqual(lastMessage(p1).bans, {
@@ -383,7 +383,7 @@ test('best of three variant games advances variants and updates Elo once', async
   service.receive(p1.session, { type: 'submitContinue' });
   service.receive(p2.session, { type: 'submitContinue' });
   assert.equal(room.phase, 'choosing');
-  assert.equal(room.variantId, VARIANT_IDS.tapTapShoot);
+  assert.equal(room.variantId, VARIANT_IDS.punchStabShoot);
   assert.deepEqual(room.roundWins, { p1: 0, p2: 0 });
 
   room.roundWins.p1 = 4;

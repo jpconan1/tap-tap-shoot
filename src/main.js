@@ -6,7 +6,7 @@ import {
   getVariantMoveIds,
   getVariantResourceMax,
 } from './engine/moves.js';
-import { createRoundState, getPlayerLegalMoves, playTurn } from './engine/gameState.js';
+import { createRoundState, getPlayerLegalMoves, getPlayerResource, playTurn } from './engine/gameState.js';
 import { chooseRivalMove as chooseAiMove, DEFAULT_RIVAL_ID } from './engine/rivalAi.js';
 import {
   configureAudio,
@@ -29,11 +29,13 @@ import {
   WIN_SOUND_AUDIO,
 } from './audio.js';
 import { RankedClient } from './rankedClient.js';
+import { getResourcePresentation, shouldShowPickHistoryForVariant } from './variantPresentation.js';
 import {
   DOODLE_FRAME_RATE,
   DOODLE_FRAME_HEIGHT,
   DOODLE_FRAME_WIDTH,
-  getDoodlePresentation,
+  getVariantStagePresentation,
+  getVariantSuperAnimation,
   getRendererPreloadDoodles,
   mountCountdownOverlays,
   mountReadyWaitingOverlays,
@@ -80,11 +82,11 @@ const LAST_NUMBERED_TURN = 21;
 const GAME_TARGET_ROUNDS = 5;
 const FRAME_WIDTH = 960;
 const FRAME_HEIGHT = 540;
-const GAME_LAYOUT_URL = './new_layout.json';
 const VARIANT_LAYOUT_URLS = Object.freeze({
-  [VARIANT_IDS.shootStabDuck]: GAME_LAYOUT_URL,
+  [VARIANT_IDS.shootStabDuck]: './assets/shoot-stab-duck/layout.json',
   [VARIANT_IDS.rps]: './assets/rock-paper-scissors/rps-layout.json',
   [VARIANT_IDS.chargeBlockFireball]: './assets/charge-block-fireball/cbf-layout.json',
+  [VARIANT_IDS.punchStabShoot]: './assets/punch-stab-shoot/pss-layout.json',
 });
 const DEFAULT_LAYOUT_STATE_ID = 'playing.default';
 const DISADVANTAGED_LAYOUT_STATE_ID = 'playing.disadvantaged';
@@ -93,7 +95,8 @@ const GAME_OVER_LAYOUT_STATE_ID = 'round.game-over';
 const ROUND_OVER_SCENE_BEATS = 2;
 const READY_BEATS = 3;
 const SUPER_FINAL_FRAME_COUNT = 4;
-const SUPER_FINAL_FRAME_MS = 210;
+const SUPER_FINAL_FRAME_MS = 320;
+const SUPER_FINAL_LINGER_BEATS = 1;
 const COMPUTER_MOVE_DELAY_MS = 3000;
 const COUNTDOWN_PHASE_MS = 5000;
 const LOADING_FRAME_WIDTH = 512;
@@ -185,7 +188,6 @@ const MOVE_BUTTON_DOODLES = Object.freeze({
   stab: 'stab_button',
   duck: 'duck_button',
   counterstab: 'mactheknife_button',
-  doubletap: 'shoot_button',
 });
 const MOVE_ICON_DOODLES = Object.freeze({
   rock: 'rock-paper-scissors/rock_button',
@@ -200,7 +202,6 @@ const MOVE_ICON_DOODLES = Object.freeze({
   stab: 'stab_icon',
   duck: 'dodge_icon',
   counterstab: 'counterstab_icon',
-  doubletap: 'shoot_icon',
 });
 const TUTORIAL_OUTCOMES = Object.freeze({
   '1-1:reload': Object.freeze({
@@ -694,6 +695,7 @@ function getGamePreloadDoodles() {
     'right_red',
     'down-right_red',
     'up-right_red',
+    'left_red',
     'down-right_blue',
     'left_blue',
     'rematch_button',
@@ -1276,26 +1278,24 @@ function renderLayoutBulletSlots(playerId) {
     return '';
   }
 
-  if (getCurrentVariantId() === VARIANT_IDS.chargeBlockFireball) {
-    return Array.from({ length: BULLET_SLOT_COUNT }, (_, index) => {
-      const slot = playerId === 'p2' ? BULLET_SLOT_COUNT - index : index + 1;
-      return renderLayoutSlot(
-        `${playerId}-charge-slot-${index + 1}`,
-        slot <= state.players[playerId].bullets
-          ? renderStaticDoodle('charge-block-fireball/charge icon', BULLETS_ICON_FRAME_WIDTH, BULLETS_ICON_FRAME_HEIGHT, 'bullets-icon')
-          : '<span class="empty-bullet-slot" aria-hidden="true"></span>',
-        'bullet-slot',
-      );
-    }).join('');
-  }
+  const resource = getResourcePresentation(getCurrentVariantId());
+  const label = resource.showLabel
+    ? renderLayoutSlot(
+      `${playerId}-${resource.labelSlotSuffix}`,
+      renderStaticDoodle(resource.labelDoodle, BULLETS_LABEL_FRAME_WIDTH, BULLETS_LABEL_FRAME_HEIGHT, 'bullets-label'),
+      'hud-art-slot',
+    )
+    : '';
 
   return `
-    ${renderLayoutSlot(`${playerId}-bullets-label`, renderStaticDoodle('bullets_label', BULLETS_LABEL_FRAME_WIDTH, BULLETS_LABEL_FRAME_HEIGHT, 'bullets-label'), 'hud-art-slot')}
+    ${label}
     ${Array.from({ length: BULLET_SLOT_COUNT }, (_, index) => {
       const slot = playerId === 'p2' ? BULLET_SLOT_COUNT - index : index + 1;
       return renderLayoutSlot(
-        `${playerId}-bullet-slot-${index + 1}`,
-        slot <= state.players[playerId].bullets ? renderBulletIcon() : '<span class="empty-bullet-slot" aria-hidden="true"></span>',
+        `${playerId}-${resource.iconSlotPrefix}-slot-${index + 1}`,
+        slot <= getPlayerResource(state.players[playerId])
+          ? renderStaticDoodle(resource.iconDoodle, BULLETS_ICON_FRAME_WIDTH, BULLETS_ICON_FRAME_HEIGHT, 'bullets-icon')
+          : '<span class="empty-bullet-slot" aria-hidden="true"></span>',
         'bullet-slot',
       );
     }).join('')}
@@ -1336,6 +1336,7 @@ function renderLayoutMoveArrows() {
     ${renderLayoutSlot('right-red-arrow', renderStaticDoodle('right_red', 128, 128, 'move-arrow'), 'move-arrow-slot')}
     ${renderLayoutSlot('down-right-red-arrow', renderStaticDoodle('down-right_red', 128, 128, 'move-arrow'), 'move-arrow-slot')}
     ${renderLayoutSlot('up-right-red-arrow', renderStaticDoodle('up-right_red', 128, 128, 'move-arrow'), 'move-arrow-slot')}
+    ${renderLayoutSlot('left-red-arrow', renderStaticDoodle('left_red', 128, 128, 'move-arrow'), 'move-arrow-slot')}
     ${renderLayoutSlot('down-right-blue-arrow', renderStaticDoodle('down-right_blue', 128, 128, 'move-arrow'), 'move-arrow-slot')}
     ${renderLayoutSlot('left-blue-arrow', renderStaticDoodle('left_blue', 128, 128, 'move-arrow'), 'move-arrow-slot')}
     ${renderLayoutSlot('stab-to-duck-arrow', renderStaticDoodle('stab-to-duck_arrow', 128, 128, 'move-arrow'), 'move-arrow-slot')}
@@ -1412,8 +1413,8 @@ function getLayoutStateId(legalMoves) {
 function isDisadvantagedLayoutState(legalMoves) {
   return state.status === 'playing'
     && getCurrentVariantId() !== VARIANT_IDS.chargeBlockFireball
-    && state.players.p1.bullets === 0
-    && state.players.p2.bullets > 0
+    && getPlayerResource(state.players.p1) === 0
+    && getPlayerResource(state.players.p2) > 0
     && !legalMoves.has('shoot');
 }
 
@@ -1435,7 +1436,7 @@ function renderPickHistories() {
 
 function shouldShowPickHistory() {
   return state.history.length > 0
-    && ![VARIANT_IDS.rps, VARIANT_IDS.chargeBlockFireball].includes(getCurrentVariantId());
+    && shouldShowPickHistoryForVariant(getCurrentVariantId());
 }
 
 function renderPickHistory(playerId) {
@@ -1979,7 +1980,7 @@ function renderOpponentSelectScreen() {
     <section class="title-screen opponent-select-screen" aria-label="Choose variant">
       <canvas
         class="sprite-canvas pick-variant-header"
-        data-doodle-file="pick_variant_sheet.png"
+        data-doodle-file="pick_variant_sheet.webp"
         data-frame-width="${PICK_VARIANT_FRAME_WIDTH}"
         data-frame-height="${PICK_VARIANT_FRAME_HEIGHT}"
         width="${PICK_VARIANT_FRAME_WIDTH}"
@@ -2129,8 +2130,8 @@ function getPlayerIdentity(playerId) {
 function renderBulletMeters() {
   return `
     <div class="bullets-super-meters" aria-label="Bullets">
-      ${renderBulletMeter('p1', state.players.p1.bullets)}
-      ${renderBulletMeter('p2', state.players.p2.bullets)}
+      ${renderBulletMeter('p1', getPlayerResource(state.players.p1))}
+      ${renderBulletMeter('p2', getPlayerResource(state.players.p2))}
     </div>
   `;
 }
@@ -2455,8 +2456,8 @@ function getOrCreateLocalTurnChoice() {
 function getLocalTurnChoiceKey() {
   return [
     state.turn,
-    state.players.p1.bullets,
-    state.players.p2.bullets,
+    getPlayerResource(state.players.p1),
+    getPlayerResource(state.players.p2),
     roundWins.p1,
     roundWins.p2,
   ].join(':');
@@ -2591,6 +2592,18 @@ function getReadySplitPresentation(readyPlayerId) {
     };
   }
 
+  const pssSplitPresentation = getPunchStabShootReadySplitPresentation(scene, readyPlayerId);
+
+  if (pssSplitPresentation) {
+    return pssSplitPresentation;
+  }
+
+  const ssdSplitPresentation = getShootStabDuckReadySplitPresentation(scene, readyPlayerId);
+
+  if (ssdSplitPresentation) {
+    return ssdSplitPresentation;
+  }
+
   if (scene === 'charge-block-fireball/block-charge') {
     const isChargerReady = lastMoves[readyPlayerId] === 'charge';
     return {
@@ -2670,6 +2683,98 @@ function getChargeBlockFireballReadySplitScene(scene) {
   }
 
   return ['block-draw', 'fireball-draw'].includes(sceneName) ? sceneName : null;
+}
+
+function getPunchStabShootReadySplitPresentation(scene, readyPlayerId) {
+  const prefix = 'punch-stab-shoot/';
+
+  if (!scene.startsWith(prefix)) {
+    return null;
+  }
+
+  const sceneName = scene.slice(prefix.length);
+
+  if (sceneName === 'pss-standoff' || ['punch-draw', 'shoot-draw', 'stab-draw'].includes(sceneName)) {
+    return {
+      kind: 'doodle',
+      name: `punch-stab-shoot/split_scenes/${sceneName}_${readyPlayerId}_is_ready`,
+      flip: false,
+    };
+  }
+
+  if (sceneName.startsWith('punch-shoot')) {
+    const isPuncherReady = lastMoves[readyPlayerId] === 'punch';
+    return {
+      kind: 'doodle',
+      name: `punch-stab-shoot/split_scenes/punch-shoot_${isPuncherReady ? 'puncher' : 'shooter'}_is_ready`,
+      flip: lastMoves.p2 === 'punch',
+    };
+  }
+
+  if (sceneName.startsWith('stab-punch')) {
+    const isStabberReady = lastMoves[readyPlayerId] === 'stab';
+    return {
+      kind: 'doodle',
+      name: `punch-stab-shoot/split_scenes/stab-punch_${isStabberReady ? 'stabber' : 'puncher'}_is_ready`,
+      flip: lastMoves.p2 === 'stab',
+    };
+  }
+
+  return null;
+}
+
+function getShootStabDuckReadySplitPresentation(scene, readyPlayerId) {
+  const prefix = 'shoot-stab-duck/';
+
+  if (!scene.startsWith(prefix)) {
+    return null;
+  }
+
+  const sceneName = scene.slice(prefix.length);
+
+  if (sceneName === 'standoff-ssd') {
+    return {
+      kind: 'doodle',
+      name: `shoot-stab-duck/split_scenes/ssd-standoff_${readyPlayerId}_is_ready`,
+      flip: false,
+    };
+  }
+
+  if (sceneName === 'reload-draw') {
+    return {
+      kind: 'doodle',
+      name: `shoot-stab-duck/split_scenes/reloading_${readyPlayerId}_is_ready`,
+      flip: false,
+    };
+  }
+
+  if (['shoot-draw', 'stab-draw', 'duck-draw'].includes(sceneName)) {
+    return {
+      kind: 'doodle',
+      name: `shoot-stab-duck/split_scenes/${sceneName}_${readyPlayerId}_is_ready`,
+      flip: false,
+    };
+  }
+
+  if (sceneName === 'reload-duck') {
+    const isReloaderReady = lastMoves[readyPlayerId] === 'reload';
+    return {
+      kind: 'doodle',
+      name: `shoot-stab-duck/split_scenes/reload-duck_${isReloaderReady ? 'reloader' : 'ducker'}_is_ready`,
+      flip: lastMoves.p1 === 'duck',
+    };
+  }
+
+  if (sceneName === 'stab-reload') {
+    const isStabberReady = lastMoves[readyPlayerId] === 'stab';
+    return {
+      kind: 'doodle',
+      name: `shoot-stab-duck/split_scenes/stab-reload_${isStabberReady ? 'stabber' : 'reloader'}_is_ready`,
+      flip: lastMoves.p2 === 'stab',
+    };
+  }
+
+  return null;
 }
 
 function getRoleSplitPresentation(scene, readyPlayerId, { role, basePlayerId }) {
@@ -3140,9 +3245,17 @@ function getIdleStagePresentation(variantId = getCurrentVariantId()) {
     };
   }
 
+  if (variantId === VARIANT_IDS.punchStabShoot) {
+    return {
+      kind: 'doodle',
+      name: 'punch-stab-shoot/pss-standoff',
+      flip: false,
+    };
+  }
+
   return {
     kind: 'doodle',
-    name: variantId === VARIANT_IDS.rps ? 'rock-paper-scissors/rps-standoff' : 'reloading',
+    name: variantId === VARIANT_IDS.rps ? 'rock-paper-scissors/rps-standoff' : 'shoot-stab-duck/standoff-ssd',
     flip: false,
   };
 }
@@ -3376,7 +3489,7 @@ function commitRankedSnapshot(snapshot, previousPhase = rankedSnapshot?.phase) {
     };
   } else if (snapshot.phase === 'revealed') {
     lastMoves = getLocalMovesFromRankedSnapshot(snapshot);
-    stagePresentation = getDoodlePresentation(lastMoves.p1, lastMoves.p2, { variantId: snapshot.currentVariantId ?? snapshot.variantId });
+    stagePresentation = getVariantStagePresentation(snapshot.round?.lastTurn ?? {}, lastMoves.p1, lastMoves.p2, { variantId: snapshot.currentVariantId ?? snapshot.variantId });
   } else if (snapshot.phase === 'roundOver') {
     stagePresentation = {
       kind: 'doodle',
@@ -3433,7 +3546,7 @@ function maybePlayRankedRoundResultAudio(snapshot) {
 function getRankedIdleChoosingPresentation(snapshot) {
   if (snapshot.round?.lastTurn) {
     const moves = getLocalMovesFromRankedSnapshot(snapshot);
-    return getDoodlePresentation(moves.p1, moves.p2, { variantId: snapshot.currentVariantId ?? snapshot.variantId });
+    return getVariantStagePresentation(snapshot.round?.lastTurn ?? {}, moves.p1, moves.p2, { variantId: snapshot.currentVariantId ?? snapshot.variantId });
   }
 
   return getIdleStagePresentation(snapshot.currentVariantId ?? snapshot.variantId);
@@ -3444,7 +3557,7 @@ function getRankedChoosingPresentation(snapshot) {
     return getIdleStagePresentation(snapshot.currentVariantId ?? snapshot.variantId);
   }
 
-  return getDoodlePresentation(lastMoves.p1, lastMoves.p2, { variantId: snapshot.currentVariantId ?? snapshot.variantId });
+  return getVariantStagePresentation(snapshot.round?.lastTurn ?? {}, lastMoves.p1, lastMoves.p2, { variantId: snapshot.currentVariantId ?? snapshot.variantId });
 }
 
 function getLocalStateFromRankedSnapshot(snapshot) {
@@ -3458,12 +3571,14 @@ function getLocalStateFromRankedSnapshot(snapshot) {
     winner: snapshot.winner === playerKey ? 'p1' : snapshot.winner === opponentKey ? 'p2' : null,
     players: {
       p1: {
-        bullets: snapshot.players[playerKey]?.bullets ?? 0,
+        resource: snapshot.players[playerKey]?.resource ?? snapshot.players[playerKey]?.bullets ?? 0,
+        bullets: snapshot.players[playerKey]?.resource ?? snapshot.players[playerKey]?.bullets ?? 0,
         move: null,
         hit: null,
       },
       p2: {
-        bullets: snapshot.players[opponentKey]?.bullets ?? 0,
+        resource: snapshot.players[opponentKey]?.resource ?? snapshot.players[opponentKey]?.bullets ?? 0,
+        bullets: snapshot.players[opponentKey]?.resource ?? snapshot.players[opponentKey]?.bullets ?? 0,
         move: null,
         hit: null,
       },
@@ -3782,11 +3897,11 @@ function isActiveLoop(token) {
 }
 
 function getTutorialOutcome(p1Move) {
-  const p1Bullets = state.players.p1.bullets;
-  const p2Bullets = state.players.p2.bullets;
-  const key = `${p1Bullets}-${p2Bullets}:${p1Move}`;
+  const p1Resource = getPlayerResource(state.players.p1);
+  const p2Resource = getPlayerResource(state.players.p2);
+  const key = `${p1Resource}-${p2Resource}:${p1Move}`;
   const outcome = TUTORIAL_OUTCOMES[key]
-    ?? (p2Bullets === 0 && p1Bullets >= 2 && p1Bullets <= MAX_BULLETS ? TUTORIAL_OUTCOMES[`advantage:${p1Move}`] : null);
+    ?? (p2Resource === 0 && p1Resource >= 2 && p1Resource <= MAX_BULLETS ? TUTORIAL_OUTCOMES[`advantage:${p1Move}`] : null);
 
   if (!outcome) {
     return null;
@@ -3867,32 +3982,15 @@ function getTurnStagePresentation(result, p1Move, p2Move) {
     return superAnimation.frames[0];
   }
 
-  return getDoodlePresentation(p1Move, p2Move, { variantId: getCurrentVariantId() });
+  return getVariantStagePresentation(result, p1Move, p2Move, { variantId: getCurrentVariantId() });
 }
 
 function getSuperAnimation(result) {
-  if (
-    getCurrentVariantId() === VARIANT_IDS.chargeBlockFireball
-    && result?.winner
-    && result[`${result.winner}Move`] === 'charge'
-    && result[`${result.winner}Bullets`] >= getVariantResourceMax(VARIANT_IDS.chargeBlockFireball)
-  ) {
-    const flip = result.winner === 'p2';
-    return {
-      frames: Array.from({ length: SUPER_FINAL_FRAME_COUNT }, (_, index) => ({
-        kind: 'doodle',
-        name: `charge-block-fireball/super-final-frame${index + 1}`,
-        flip,
-      })),
-      finalFrame: {
-        kind: 'doodle',
-        name: 'charge-block-fireball/super-blasting',
-        flip,
-      },
-    };
-  }
-
-  return null;
+  return getVariantSuperAnimation(result, {
+    variantId: getCurrentVariantId(),
+    resourceMax: getVariantResourceMax(getCurrentVariantId()),
+    frameCount: SUPER_FINAL_FRAME_COUNT,
+  });
 }
 
 async function playPendingSuperAnimation(token) {
@@ -3922,6 +4020,7 @@ async function playPendingSuperAnimation(token) {
 
   stagePresentation = animation.finalFrame;
   render();
+  await waitBeats(SUPER_FINAL_LINGER_BEATS, token);
 }
 
 function settleTutorialScene() {
@@ -4032,10 +4131,12 @@ function setNewTutorialRound() {
     players: {
       p1: {
         ...state.players.p1,
+        resource: 0,
         bullets: 0,
       },
       p2: {
         ...state.players.p2,
+        resource: 0,
         bullets: 0,
       },
     },
