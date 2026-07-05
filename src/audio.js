@@ -1,4 +1,6 @@
 export const STARBURST_WIPE_AUDIO = 'starbust.mp3';
+export const CURTAIN_CLOSE_AUDIO = 'curtains-close.m4a';
+export const CURTAIN_OPEN_AUDIO = 'curtains-open.m4a';
 export const LOSE_JINGLE_AUDIO = 'lose_jingle.mp3';
 export const READY_AUDIO = 'ready.mp3';
 export const WIN_SOUND_AUDIO = 'win_sound.mp3';
@@ -64,7 +66,11 @@ export function setSoundEnabled(isEnabled) {
   }
 }
 
-export function setMusicEnabled(isEnabled) {
+export function setMusicEnabled(isEnabled, trackId = null) {
+  if (MUSIC_TRACKS[trackId]) {
+    desiredMusicTrack = trackId;
+  }
+
   musicEnabled = Boolean(isEnabled);
 
   if (!musicEnabled) {
@@ -72,7 +78,7 @@ export function setMusicEnabled(isEnabled) {
     return;
   }
 
-  unlockSceneAudio();
+  unlockSceneAudio().then(() => syncMusicTrack());
   syncMusicTrack();
 }
 
@@ -101,12 +107,13 @@ export function requestMusicTrack(trackId) {
     return;
   }
 
-  const context = getExistingSceneAudioContext();
+  const context = getSceneAudioContext();
 
   if (!context) {
     return;
   }
 
+  unlockSceneAudio().then(() => syncMusicTrack());
   loadSceneAudioBuffer(MUSIC_TRACKS[trackId]).then(() => syncMusicTrack());
   syncMusicTrack();
 }
@@ -345,6 +352,14 @@ export function playOneShotAudio(fileName) {
   });
 }
 
+export function playUserGestureAudio(fileName) {
+  if (!soundEnabled || !fileName) {
+    return;
+  }
+
+  playSceneHtmlAudio(fileName);
+}
+
 export function unlockSceneAudio() {
   if (!soundEnabled && !musicEnabled) {
     return Promise.resolve();
@@ -371,7 +386,10 @@ export function unlockSceneAudio() {
     .then(() => syncMusicTrack())
     .then(() => Promise.all(audioFiles.map((fileName) => loadSceneAudioBuffer(fileName))))
     .then(() => syncMusicTrack())
-    .then(() => undefined);
+    .then(() => undefined)
+    .finally(() => {
+      sceneAudioUnlockPromise = null;
+    });
 
   return sceneAudioUnlockPromise;
 }
@@ -810,6 +828,8 @@ function getAudioFiles() {
     ...new Set([
       ...Object.values(SCENE_AUDIO),
       STARBURST_WIPE_AUDIO,
+      CURTAIN_CLOSE_AUDIO,
+      CURTAIN_OPEN_AUDIO,
       LOSE_JINGLE_AUDIO,
       READY_AUDIO,
       WIN_SOUND_AUDIO,
@@ -895,6 +915,19 @@ function playSceneAudioBuffer(buffer, audioKey) {
 }
 
 function startSceneAudioBuffer(context, buffer) {
+  if (context.state !== 'running') {
+    context.resume()
+      .then(() => {
+        if (context.state === 'running') {
+          startSceneAudioBuffer(context, buffer);
+        }
+      })
+      .catch((error) => {
+        console.warn('Could not resume scene audio context', error);
+      });
+    return;
+  }
+
   const source = context.createBufferSource();
   source.buffer = buffer;
   source.connect(context.destination);

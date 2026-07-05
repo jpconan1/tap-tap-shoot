@@ -34,22 +34,6 @@ const READY_WAITING_READY_STEPS = Object.freeze([
   '7',
 ]);
 const READY_WAITING_SPLIT_STEP = 3;
-const SPLIT_READY_DOODLES = Object.freeze([
-  'split_scenes/reloading-p1_ready',
-  'split_scenes/reloading-p2_ready',
-  'split_scenes/clash-p1_ready',
-  'split_scenes/clash-p2_ready',
-  'split_scenes/collision-p1_ready',
-  'split_scenes/collision-p2_ready',
-  'split_scenes/hiding-p1_ready',
-  'split_scenes/hiding-p2_ready',
-  'split_scenes/dodge-p1shooteris_ready',
-  'split_scenes/dodge-p2dodgeris_ready',
-  'split_scenes/counterstab-p1stabberis_ready',
-  'split_scenes/counterstab-p2countereris_ready',
-  'split_scenes/tricky-p1tricksteris_ready',
-  'split_scenes/tricky-p2fooledis_ready',
-]);
 
 const INTERACTION_DOODLES = Object.freeze({
   'reload|reload': 'reloading',
@@ -158,7 +142,6 @@ export function preloadDoodleSheets(doodles) {
 
 export function getRendererPreloadDoodles() {
   return [
-    ...Object.values(INTERACTION_DOODLES),
     ...Object.values(CHARGE_BLOCK_FIREBALL_DOODLES),
     'charge-block-fireball/super-blasting',
     ...Array.from({ length: 4 }, (_, index) => `charge-block-fireball/super-final-frame${index + 1}`),
@@ -166,7 +149,6 @@ export function getRendererPreloadDoodles() {
     ...SHOOT_STAB_DUCK_SPLIT_DOODLES,
     ...PUNCH_STAB_SHOOT_DOODLES,
     ...PUNCH_STAB_SHOOT_SPLIT_DOODLES,
-    ...SPLIT_READY_DOODLES,
     ...STARBURST_WIPE_STEPS.flat().map((name) => `starburst_wipe/${name}`),
     ...CURTAIN_WIPE_STEPS.map((name) => `curtains/${name}`),
     ...READY_WAITING_READY_STEPS.map((name) => `ready_waiting/${name}`),
@@ -212,12 +194,13 @@ export async function playStarburstWipeTransition(app, onCovered, playWipeAudio)
 }
 
 // Generic full-screen curtain transition. Put screen/state changes in onCovered.
-export async function playCurtainWipeTransition(app, onCovered) {
+export async function playCurtainWipeTransition(app, onCovered, { playCloseAudio = null, playOpenAudio = null } = {}) {
   await preloadCurtainWipe();
 
   let overlay = createCurtainOverlay(app);
   const closedStep = CURTAIN_WIPE_STEPS.length - 1;
 
+  playCloseAudio?.();
   await animateCurtainSteps(overlay, 0, closedStep);
   await holdCurtainStep(overlay, CURTAIN_WIPE_STEPS[closedStep], CURTAIN_CLOSED_BEAT_MS);
 
@@ -225,23 +208,25 @@ export async function playCurtainWipeTransition(app, onCovered) {
 
   overlay = createCurtainOverlay(app);
   drawCurtainStep(overlay, CURTAIN_WIPE_STEPS[closedStep], performance.now());
+  playOpenAudio?.();
   await animateCurtainSteps(overlay, closedStep - 1, 0);
   overlay.remove();
 }
 
-export async function closeCurtainWipe(app) {
+export async function closeCurtainWipe(app, playCloseAudio = null) {
   await preloadCurtainWipe();
 
   const overlay = createCurtainOverlay(app);
   const closedStep = CURTAIN_WIPE_STEPS.length - 1;
 
+  playCloseAudio?.();
   await animateCurtainSteps(overlay, 0, closedStep);
   startCurtainBoil(overlay, CURTAIN_WIPE_STEPS[closedStep]);
 
   return overlay;
 }
 
-export async function openCurtainWipe(overlay) {
+export async function openCurtainWipe(overlay, playOpenAudio = null) {
   if (!overlay?.isConnected) {
     return;
   }
@@ -249,6 +234,7 @@ export async function openCurtainWipe(overlay) {
   stopCurtainBoil(overlay);
   const closedStep = CURTAIN_WIPE_STEPS.length - 1;
   drawCurtainStep(overlay, CURTAIN_WIPE_STEPS[closedStep], performance.now());
+  playOpenAudio?.();
   await animateCurtainSteps(overlay, closedStep - 1, 0);
   overlay.remove();
 }

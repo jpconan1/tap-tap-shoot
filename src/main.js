@@ -10,12 +10,15 @@ import { createRoundState, getPlayerLegalMoves, getPlayerResource, playTurn } fr
 import { chooseRivalMove as chooseAiMove, DEFAULT_RIVAL_ID } from './engine/rivalAi.js';
 import {
   configureAudio,
+  CURTAIN_CLOSE_AUDIO,
+  CURTAIN_OPEN_AUDIO,
   finishMusicLoopThenStop,
   getMusicTopperId,
   installAudioUnlockListeners,
   interruptMusicFileOnce,
   LOSE_JINGLE_AUDIO,
   playOneShotAudio,
+  playUserGestureAudio,
   preloadSceneAudio,
   playStageAudio,
   queueMusicTrackOnce,
@@ -398,7 +401,7 @@ let tutorialTipsSlideIndex = 0;
 let tutorialStageMode = 'slide';
 let tutorialFeedbackMarkup = '';
 let tutorialPendingFeedbackMarkup = '';
-let stagePresentation = { kind: 'doodle', name: 'reloading', flip: false };
+let stagePresentation = getIdleStagePresentation();
 let gameLayouts = new Map();
 let gameLayout = null;
 let activeLayoutStateId = DEFAULT_LAYOUT_STATE_ID;
@@ -1095,7 +1098,7 @@ async function openPauseMenu() {
 
   pauseGameplayTimers();
   isTransitioning = true;
-  const curtain = await closeCurtainWipe(app);
+  const curtain = await closeCurtainWipe(app, playCurtainCloseAudio);
 
   if (screen !== 'playing') {
     curtain.remove();
@@ -1117,7 +1120,7 @@ async function closePauseMenu() {
 
   pauseMenu = null;
   menu.overlay.remove();
-  await openCurtainWipe(menu.curtain);
+  await openCurtainWipe(menu.curtain, playCurtainOpenAudio);
   isTransitioning = false;
   resumeGameplayTimers();
 }
@@ -1150,7 +1153,7 @@ async function quitFromPauseMenu() {
   quitToVariantMenu();
   render();
   app.append(menu.curtain);
-  await openCurtainWipe(menu.curtain);
+  await openCurtainWipe(menu.curtain, playCurtainOpenAudio);
   isTransitioning = false;
   resumeGameplayTimers();
 }
@@ -1174,7 +1177,7 @@ function quitToVariantMenu() {
   p1QueuedMove = null;
   rankedSnapshot = null;
   pendingSuperAnimation = null;
-  stagePresentation = { kind: 'doodle', name: 'reloading', flip: false };
+  stagePresentation = getIdleStagePresentation();
 }
 
 function setPausableTimeout(callback, duration) {
@@ -1771,8 +1774,29 @@ function getReadyWaitingSceneClass() {
     return '';
   }
 
-  const scene = stagePresentation.name.replace(/^split_scenes\//, '').split('-')[0];
+  const scene = getReadyWaitingSceneName(stagePresentation.name);
   return scene ? `scene-${scene}` : '';
+}
+
+function getReadyWaitingSceneName(doodleName) {
+  const splitPrefix = 'split_scenes/';
+  const splitIndex = doodleName.indexOf(splitPrefix);
+  const localName = splitIndex === -1
+    ? doodleName.split('/').pop()
+    : doodleName.slice(splitIndex + splitPrefix.length);
+
+  if (!localName) {
+    return '';
+  }
+
+  return localName
+    .replace(/_is_ready$/, '')
+    .replace(/_p[12]$/, '')
+    .replace(/_(reloader|ducker|stabber|blocker|charger|fireballer|puncher|shooter|counterstabber)$/, '')
+    .replace(/-p[12].*$/, '')
+    .replace(/-p[12]_ready$/, '')
+    .replace(/_standoff$/, '-standoff')
+    .split('-')[0];
 }
 
 function getReadyWaitingRoleClass(playerId) {
@@ -1949,16 +1973,28 @@ function renderTitleAudioButton(kind, isChecked) {
 }
 
 function toggleMusic() {
+  const trackId = screen === 'title' ? 'title' : 'game';
+
   isMusicEnabled = !isMusicEnabled;
-  setMusicEnabled(isMusicEnabled);
-  requestMusicTrack(screen === 'title' ? 'title' : 'game');
+  setMusicEnabled(isMusicEnabled, trackId);
+  playAudioToggleSound();
   render();
 }
 
 function toggleSound() {
   isSoundEnabled = !isSoundEnabled;
   setSoundEnabled(isSoundEnabled);
+  playAudioToggleSound();
   render();
+}
+
+function playAudioToggleSound() {
+  if (!isSoundEnabled) {
+    return;
+  }
+
+  playUserGestureAudio(READY_AUDIO);
+  unlockSceneAudio();
 }
 
 function renderOnlineNameScreen() {
@@ -2880,32 +2916,6 @@ function getReadySplitPresentation(readyPlayerId) {
     };
   }
 
-  if (scene === 'reloading' || scene === 'clash' || scene === 'collision' || scene === 'hiding') {
-    return {
-      kind: 'doodle',
-      name: `split_scenes/${scene}-${readyPlayerId}_ready`,
-      flip: false,
-    };
-  }
-
-  if (scene === 'dodge') {
-    return getRoleSplitPresentation(scene, readyPlayerId, lastMoves[readyPlayerId] === 'shoot'
-      ? { role: 'shooter', basePlayerId: 'p1' }
-      : { role: 'dodger', basePlayerId: 'p2' });
-  }
-
-  if (scene === 'counterstab') {
-    return getRoleSplitPresentation(scene, readyPlayerId, lastMoves[readyPlayerId] === 'reload'
-      ? { role: 'counterer', basePlayerId: 'p2' }
-      : { role: 'stabber', basePlayerId: 'p1' });
-  }
-
-  if (scene === 'tricky') {
-    return getRoleSplitPresentation(scene, readyPlayerId, lastMoves[readyPlayerId] === 'reload'
-      ? { role: 'trickster', basePlayerId: 'p1' }
-      : { role: 'fooled', basePlayerId: 'p2' });
-  }
-
   return null;
 }
 
@@ -3033,14 +3043,6 @@ function getShootStabDuckReadySplitPresentation(scene, readyPlayerId) {
   }
 
   return null;
-}
-
-function getRoleSplitPresentation(scene, readyPlayerId, { role, basePlayerId }) {
-  return {
-    kind: 'doodle',
-    name: `split_scenes/${scene}-${basePlayerId}${role}is_ready`,
-    flip: readyPlayerId !== basePlayerId,
-  };
 }
 
 function clearLocalTurnChoice() {
@@ -3208,7 +3210,7 @@ async function startTutorialFromTitle() {
     p1QueuedMove = null;
     rankedSnapshot = null;
     pendingSuperAnimation = null;
-    stagePresentation = { kind: 'doodle', name: 'reloading', flip: false };
+    stagePresentation = getIdleStagePresentation();
     render();
   });
   isTransitioning = false;
@@ -3339,7 +3341,7 @@ async function restartTutorialPractice() {
       p1: 'reload',
       p2: 'reload',
     };
-    stagePresentation = { kind: 'doodle', name: 'reloading', flip: false };
+    stagePresentation = getIdleStagePresentation();
     render();
   });
   isTransitioning = false;
@@ -3430,7 +3432,7 @@ async function quitLocalGame() {
     tutorialPendingFeedbackMarkup = '';
     p1QueuedMove = null;
     rankedSnapshot = null;
-    stagePresentation = { kind: 'doodle', name: 'reloading', flip: false };
+    stagePresentation = getIdleStagePresentation();
     render();
   });
   isTransitioning = false;
@@ -4426,7 +4428,7 @@ function setNewTutorialRound() {
     p1: 'reload',
     p2: 'reload',
   };
-  stagePresentation = { kind: 'doodle', name: 'reloading', flip: false };
+  stagePresentation = getIdleStagePresentation();
   render();
 }
 
@@ -4454,5 +4456,16 @@ function playWipeTransition(onCovered) {
 }
 
 function playCurtainMenuTransition(onCovered) {
-  return playCurtainWipeTransition(app, onCovered);
+  return playCurtainWipeTransition(app, onCovered, {
+    playCloseAudio: playCurtainCloseAudio,
+    playOpenAudio: playCurtainOpenAudio,
+  });
+}
+
+function playCurtainCloseAudio() {
+  playOneShotAudio(CURTAIN_CLOSE_AUDIO);
+}
+
+function playCurtainOpenAudio() {
+  playOneShotAudio(CURTAIN_OPEN_AUDIO);
 }
