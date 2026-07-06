@@ -336,14 +336,14 @@ const TUTORIAL_OUTCOMES = Object.freeze({
 const DEFAULT_OPPONENT_ID = DEFAULT_RIVAL_ID;
 const COMPUTER_VARIANTS = Object.freeze([
   Object.freeze({
-    id: VARIANT_IDS.rps,
-    name: 'Rock Paper Scissors',
-    buttonDoodle: 'rps_button_w',
-  }),
-  Object.freeze({
     id: VARIANT_IDS.chargeBlockFireball,
     name: 'Charge Block Fireball',
     buttonDoodle: 'cbf_button_w',
+  }),
+  Object.freeze({
+    id: VARIANT_IDS.rps,
+    name: 'Rock Paper Scissors',
+    buttonDoodle: 'rps_button_w',
   }),
   Object.freeze({
     id: VARIANT_IDS.shootStabDuck,
@@ -739,7 +739,7 @@ function getGamePreloadDoodles() {
     'READY',
     'bullets_label',
     'bullet_icon',
-    'back_button',
+    'back_button_w',
     'continue_button',
     'continue_t_button',
     'next_slide_button',
@@ -2330,50 +2330,31 @@ async function showVariantDetail(variantId, sourceButton) {
   }
 
   const variant = getComputerVariant(variantId);
-  const selectedRect = getElementRectInApp(sourceButton);
-  const selectedButton = renderVariantDetailSelectedButton(variant, selectedRect, sourceButton);
+  const selectedButton = promoteVariantButton(sourceButton);
   isTransitioning = true;
   const curtain = await closeCurtainWipe(app, playCurtainCloseAudio);
 
   if (screen !== 'opponent-select') {
-    selectedButton.remove();
+    restoreVariantButton(selectedButton);
     curtain.remove();
     isTransitioning = false;
     return;
   }
 
+  app.classList.add('variant-detail-open');
   const overlay = renderVariantDetailOverlay(variant);
   variantDetailMenu = { curtain, overlay, selectedButton };
   isTransitioning = false;
 }
 
-function renderVariantDetailSelectedButton(variant, selectedRect, sourceButton) {
-  const selectedButton = document.createElement('div');
-  selectedButton.className = 'variant-detail-selected-button';
-  selectedButton.style.left = `${selectedRect.left}px`;
-  selectedButton.style.top = `${selectedRect.top}px`;
-  selectedButton.style.width = `${selectedRect.width}px`;
-  selectedButton.style.height = `${selectedRect.height}px`;
-  selectedButton.setAttribute('aria-hidden', 'true');
-  selectedButton.style.transform = window.getComputedStyle(sourceButton).transform;
-  selectedButton.innerHTML = `
-    <div
-      class="variant-detail-selected-button-inner"
-    >
-      <canvas
-        class="sprite-canvas variant-button-art"
-        data-doodle="${variant.buttonDoodle}"
-        data-frame-width="${VARIANT_BUTTON_FRAME_WIDTH}"
-        data-frame-height="${VARIANT_BUTTON_FRAME_HEIGHT}"
-        width="${VARIANT_BUTTON_FRAME_WIDTH}"
-        height="${VARIANT_BUTTON_FRAME_HEIGHT}"
-      ></canvas>
-    </div>
-  `;
+function promoteVariantButton(button) {
+  button.classList.add('variant-button-above-curtain');
+  return button;
+}
 
-  app.append(selectedButton);
-  mountSpriteRenderers(app.querySelectorAll('.sprite-canvas'));
-  return selectedButton;
+function restoreVariantButton(button) {
+  app.classList.remove('variant-detail-open');
+  button?.classList.remove('variant-button-above-curtain');
 }
 
 function renderVariantDetailOverlay(variant) {
@@ -2389,7 +2370,7 @@ function renderVariantDetailOverlay(variant) {
       <button class="variant-detail-action" data-action="variant-back" type="button" aria-label="Back">
         <canvas
           class="sprite-canvas variant-detail-action-art"
-          data-doodle="back_button"
+          data-doodle="back_button_w"
           data-frame-width="${TITLE_BUTTON_FRAME_WIDTH}"
           data-frame-height="${TITLE_BUTTON_FRAME_HEIGHT}"
           width="${TITLE_BUTTON_FRAME_WIDTH}"
@@ -2425,19 +2406,6 @@ function renderVariantDetailCopy(variantId) {
     .join('');
 }
 
-function getElementRectInApp(element) {
-  const appRect = app.getBoundingClientRect();
-  const rect = element.getBoundingClientRect();
-  const scale = appRect.width / FRAME_WIDTH || 1;
-
-  return {
-    left: (rect.left - appRect.left) / scale,
-    top: (rect.top - appRect.top) / scale,
-    width: rect.width / scale,
-    height: rect.height / scale,
-  };
-}
-
 function getComputerVariant(variantId) {
   return COMPUTER_VARIANTS.find((variant) => variant.id === variantId) ?? COMPUTER_VARIANTS[0];
 }
@@ -2461,7 +2429,7 @@ function renderBackButton() {
     <button class="opponent-button back-button" data-action="back-title" aria-label="Back">
       <canvas
         class="sprite-canvas opponent-button-art"
-        data-doodle="back_button"
+        data-doodle="back_button_w"
         data-frame-width="${TITLE_BUTTON_FRAME_WIDTH}"
         data-frame-height="${TITLE_BUTTON_FRAME_HEIGHT}"
         width="${TITLE_BUTTON_FRAME_WIDTH}"
@@ -3434,7 +3402,7 @@ async function closeVariantDetail() {
   isTransitioning = true;
   menu.overlay.remove();
   await openCurtainWipe(menu.curtain, playCurtainOpenAudio);
-  menu.selectedButton.remove();
+  restoreVariantButton(menu.selectedButton);
   mountSpriteRenderers(app.querySelectorAll('.sprite-canvas'));
   isTransitioning = false;
 }
@@ -3521,7 +3489,7 @@ async function playSelectedVariant(variantId) {
   variantDetailMenu = null;
   isTransitioning = true;
   menu.overlay.remove();
-  menu.selectedButton.remove();
+  restoreVariantButton(menu.selectedButton);
   selectedOpponentId = DEFAULT_OPPONENT_ID;
   selectedVariantId = COMPUTER_VARIANT_IDS.includes(variantId) ? variantId : DEFAULT_VARIANT_ID;
   await setActiveGameLayoutForVariant(selectedVariantId);

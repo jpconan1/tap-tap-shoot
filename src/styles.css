@@ -565,6 +565,14 @@ button {
   height: 96px;
 }
 
+.variant-button-above-curtain {
+  z-index: 212;
+}
+
+.variant-detail-open .variant-actions .back-button {
+  visibility: hidden;
+}
+
 .variant-detail-overlay {
   position: absolute;
   inset: 0;
@@ -574,29 +582,15 @@ button {
   pointer-events: all;
 }
 
-.variant-detail-selected-button {
-  position: absolute;
-  z-index: 212;
-  display: grid;
-  place-items: center;
-  pointer-events: none;
-}
-
-.variant-detail-selected-button-inner {
-  filter: drop-shadow(3px 6px 0 rgba(29, 27, 24, 0.16));
-}
-
 .variant-detail-copy {
-  top: 84px;
-  left: 50%;
   position: absolute;
   z-index: 2;
   display: grid;
   align-content: center;
   justify-items: center;
   gap: 8px;
-  width: 560px;
-  min-height: 292px;
+  width: 520px;
+  min-height: 272px;
   padding: 22px 26px;
   border: 4px solid rgba(29, 27, 24, 0.78);
   border-radius: 6px;
@@ -604,7 +598,7 @@ button {
   box-shadow: 6px 8px 0 rgba(29, 27, 24, 0.2);
   color: var(--ink);
   text-align: center;
-  transform: translateX(-50%) rotate(-0.35deg);
+  transform: rotate(-0.35deg);
 }
 
 .variant-detail-copy p {
@@ -666,11 +660,48 @@ button {
   filter: drop-shadow(3px 6px 0 rgba(29, 27, 24, 0.1));
 }
 
-.variant-detail-tap-tap-shoot .variant-detail-copy p {
+.variant-detail-chargeBlockFireball .variant-detail-copy,
+.variant-detail-punchStabShoot .variant-detail-copy {
+  top: 82px;
+  right: 70px;
+}
+
+.variant-detail-shootStabDuck .variant-detail-copy {
+  top: 82px;
+  left: 70px;
+}
+
+.variant-detail-rps .variant-detail-copy {
+  top: 28px;
+  left: 50%;
+  width: 620px;
+  min-height: 158px;
+  padding-top: 18px;
+  padding-bottom: 18px;
+  transform: translateX(-50%) rotate(-0.25deg);
+}
+
+.variant-detail-rps .variant-detail-copy p {
+  font-size: 24px;
+}
+
+.variant-detail-rps .variant-detail-copy .lead {
+  font-size: 28px;
+}
+
+.variant-detail-tapTapShoot .variant-detail-copy {
+  top: 26px;
+  left: 50%;
+  width: 610px;
+  min-height: 276px;
+  transform: translateX(-50%) rotate(-0.35deg);
+}
+
+.variant-detail-tapTapShoot .variant-detail-copy p {
   font-size: 23px;
 }
 
-.variant-detail-tap-tap-shoot .variant-detail-copy .lead {
+.variant-detail-tapTapShoot .variant-detail-copy .lead {
   font-size: 28px;
 }
 
