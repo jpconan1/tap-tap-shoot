@@ -54,6 +54,7 @@ import {
   preloadDoodleSheets,
   READY_WAITING_SAFE_PHASE_MS,
   resumeRendererClock,
+  setBoilEnabled,
 } from './renderer.js';
 
 const BEAT_MS = 750;
@@ -130,6 +131,7 @@ const LOADING_CLICK_MESSAGE_URL = './assets/click_msg_sheet.webp';
 const PAPER_BACKGROUND_URL = './assets/crumpled_paper_background.webp';
 const ONLINE_STATUS_POLL_MS = 5000;
 const RANKED_DISPLAY_NAME_KEY = 'tapTapShoot.rankedDisplayName';
+const BOIL_ENABLED_KEY = 'tapTapShoot.boilEnabled';
 const DEFAULT_RANKED_DISPLAY_NAME = 'Guest';
 const MAX_RANKED_DISPLAY_NAME_LENGTH = 50;
 const NAME_PREFIXES = Object.freeze([
@@ -414,6 +416,7 @@ let isTransitioning = false;
 let variantDetailMenu = null;
 let isMusicEnabled = false;
 let isSoundEnabled = false;
+let isBoilEnabled = readStoredBoilEnabled();
 let pauseMenu = null;
 let pauseStartedAt = null;
 const pausableTimers = new Set();
@@ -457,6 +460,7 @@ const rankedClient = new RankedClient({
 });
 
 configureAudio({ getMusicTopperFile });
+setBoilEnabled(isBoilEnabled);
 
 updateFrameScale();
 window.addEventListener('resize', updateFrameScale);
@@ -585,7 +589,7 @@ function drawLoadingScreen(loadingScreen, images, now) {
   const clickMessageContext = loadingScreen.clickMessageCanvas?.getContext('2d');
   const currentBoilFrame = loadingScreen.isDone
     ? LOADING_FRAME_COUNT - 1
-    : Math.min(LOADING_FRAME_COUNT - 1, Math.floor((elapsed / 1000) * LOADING_FRAME_RATE));
+    : getLoadingBoilFrame(elapsed);
 
   if (!loadingScreen.isDone && elapsed >= LOADING_DURATION_MS) {
     removeLoadingBoil(loadingScreen);
@@ -599,7 +603,7 @@ function drawLoadingScreen(loadingScreen, images, now) {
     return;
   }
 
-  const barFrame = Math.floor((now / 1000) * LOADING_BAR_FRAME_RATE) % LOADING_BAR_FRAME_COUNT;
+  const barFrame = getLoadingBarFrame(now);
   const barWidth = Math.round(LOADING_FRAME_WIDTH * progress);
 
   progressContext.clearRect(0, 0, LOADING_FRAME_WIDTH, LOADING_FRAME_HEIGHT);
@@ -653,6 +657,22 @@ function drawLoadingScreen(loadingScreen, images, now) {
     LOADING_FRAME_HEIGHT,
   );
   clickMessageContext.restore();
+}
+
+function getLoadingBoilFrame(elapsed) {
+  if (!isBoilEnabled) {
+    return 0;
+  }
+
+  return Math.min(LOADING_FRAME_COUNT - 1, Math.floor((elapsed / 1000) * LOADING_FRAME_RATE));
+}
+
+function getLoadingBarFrame(now) {
+  if (!isBoilEnabled) {
+    return 0;
+  }
+
+  return Math.floor((now / 1000) * LOADING_BAR_FRAME_RATE) % LOADING_BAR_FRAME_COUNT;
 }
 
 function getLoadingProgress(elapsed) {
@@ -1093,6 +1113,22 @@ function writeStoredDisplayName(value) {
     window.localStorage.setItem(RANKED_DISPLAY_NAME_KEY, value);
   } catch {
     // Online play still works for this tab; it just cannot remember the name.
+  }
+}
+
+function readStoredBoilEnabled() {
+  try {
+    return window.localStorage.getItem(BOIL_ENABLED_KEY) !== 'false';
+  } catch {
+    return true;
+  }
+}
+
+function writeStoredBoilEnabled(value) {
+  try {
+    window.localStorage.setItem(BOIL_ENABLED_KEY, value ? 'true' : 'false');
+  } catch {
+    // Game still works for this tab; it just cannot remember the setting.
   }
 }
 
@@ -1977,9 +2013,10 @@ function renderTitleScreen() {
         </button>
       </div>
 
-      <div class="title-audio-actions" aria-label="Audio">
+      <div class="title-audio-actions" aria-label="Settings">
         ${renderTitleAudioButton('music', isMusicEnabled)}
         ${renderTitleAudioButton('sound', isSoundEnabled)}
+        ${renderTitleBoilButton()}
       </div>
     </section>
   `;
@@ -1988,6 +2025,7 @@ function renderTitleScreen() {
   app.querySelector('[data-action="ranked"]').addEventListener('click', startRankedFromTitle);
   app.querySelector('[data-action="toggle-music"]').addEventListener('click', toggleMusic);
   app.querySelector('[data-action="toggle-sound"]').addEventListener('click', toggleSound);
+  app.querySelector('[data-action="toggle-boil"]').addEventListener('click', toggleBoil);
   mountSpriteRenderers(app.querySelectorAll('.sprite-canvas'));
 }
 
@@ -2016,6 +2054,21 @@ function renderTitleAudioButton(kind, isChecked) {
   `;
 }
 
+function renderTitleBoilButton() {
+  return `
+    <button
+      class="title-audio-button title-boil-button ${isBoilEnabled ? 'is-checked' : ''}"
+      data-action="toggle-boil"
+      type="button"
+      aria-label="boil ${isBoilEnabled ? 'on' : 'off'}"
+      aria-pressed="${isBoilEnabled ? 'true' : 'false'}"
+    >
+      <span class="title-boil-button-main">BOIL</span>
+      <span class="title-boil-button-state">${isBoilEnabled ? 'ON' : 'OFF'}</span>
+    </button>
+  `;
+}
+
 function toggleMusic() {
   const trackId = screen === 'title' ? 'title' : 'game';
 
@@ -2028,6 +2081,14 @@ function toggleMusic() {
 function toggleSound() {
   isSoundEnabled = !isSoundEnabled;
   setSoundEnabled(isSoundEnabled);
+  playAudioToggleSound();
+  render();
+}
+
+function toggleBoil() {
+  isBoilEnabled = !isBoilEnabled;
+  writeStoredBoilEnabled(isBoilEnabled);
+  setBoilEnabled(isBoilEnabled);
   playAudioToggleSound();
   render();
 }

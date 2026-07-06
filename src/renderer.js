@@ -23,6 +23,7 @@ const WAITING_DOTS_STEP_MS = (WAITING_DOTS_STEP_FRAMES / DOODLE_FRAME_RATE) * 10
 export const READY_WAITING_SAFE_PHASE_MS = WAITING_DOTS_START_DELAY + (3 * WAITING_DOTS_STEP_MS);
 const COUNTDOWN_NUMBERS = Object.freeze([5, 4, 3, 2, 1]);
 const COUNTDOWN_STEP_MS = 1000;
+let isBoilEnabled = true;
 
 const READY_WAITING_READY_STEPS = Object.freeze([
   '1',
@@ -400,6 +401,11 @@ export function mountSpriteRenderers(canvases) {
   ensureDoodleLoop();
 }
 
+export function setBoilEnabled(isEnabled) {
+  isBoilEnabled = Boolean(isEnabled);
+  drawDoodleFrame(getRendererNow(performance.now()));
+}
+
 export function mountReadyWaitingOverlays(canvases) {
   [...canvases].forEach((canvas) => {
     startReadyWaitingLoop(canvas);
@@ -528,7 +534,7 @@ function getReadyWaitingLayersForStep(stepIndex) {
 }
 
 function drawReadyWaitingStep(canvas, context, layers, now) {
-  const frame = Math.floor((now / 1000) * DOODLE_FRAME_RATE) % DOODLE_FRAME_COUNT;
+  const frame = getBoilFrame(now);
 
   context.clearRect(0, 0, canvas.width, canvas.height);
 
@@ -587,7 +593,7 @@ function drawWaitingDotsStep(canvas, context, elapsed, now) {
     return;
   }
 
-  const frame = Math.floor((now / 1000) * DOODLE_FRAME_RATE) % DOODLE_FRAME_COUNT;
+  const frame = getBoilFrame(now);
 
   context.drawImage(
     image,
@@ -634,7 +640,7 @@ function drawCountdownStep(canvas, context, elapsed, now) {
     return;
   }
 
-  const frame = Math.floor((now / 1000) * DOODLE_FRAME_RATE) % DOODLE_FRAME_COUNT;
+  const frame = getBoilFrame(now);
 
   context.drawImage(
     image,
@@ -769,7 +775,7 @@ function drawWipeStep(canvas, layers, now) {
   }
 
   const context = canvas.getContext('2d');
-  const frame = Math.floor((now / 1000) * DOODLE_FRAME_RATE) % DOODLE_FRAME_COUNT;
+  const frame = getBoilFrame(now);
 
   context.clearRect(0, 0, canvas.width, canvas.height);
 
@@ -797,7 +803,7 @@ function drawWipeStep(canvas, layers, now) {
 function drawCurtainStep(canvas, step, now) {
   const context = canvas.getContext('2d');
   const image = loadDoodleSheet(`curtains/${step}`);
-  const frame = Math.floor((now / 1000) * DOODLE_FRAME_RATE) % DOODLE_FRAME_COUNT;
+  const frame = getBoilFrame(now);
 
   context.clearRect(0, 0, canvas.width, canvas.height);
 
@@ -1055,7 +1061,7 @@ function drawDoodleFrame(now) {
     return;
   }
 
-  const frame = Math.floor((now / 1000) * DOODLE_FRAME_RATE) % DOODLE_FRAME_COUNT;
+  const frame = getBoilFrame(now);
 
   doodleRenderers.forEach(({ canvas, context, image, frameWidth, frameHeight, flip }) => {
     if (!canvas.isConnected || !image.complete || !image.naturalWidth) {
@@ -1085,4 +1091,12 @@ function drawDoodleFrame(now) {
 
     canvas.style.backgroundImage = 'none';
   });
+}
+
+function getBoilFrame(now) {
+  if (!isBoilEnabled) {
+    return 0;
+  }
+
+  return Math.floor((now / 1000) * DOODLE_FRAME_RATE) % DOODLE_FRAME_COUNT;
 }
