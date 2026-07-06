@@ -2,13 +2,20 @@ import { DEFAULT_VARIANT_ID, VARIANT_IDS } from './engine/moves.js';
 
 const DEFAULT_RESOURCE_PRESENTATION = Object.freeze({
   labelSlotSuffix: 'bullets-label',
-  labelDoodle: 'bullets_label',
+  labelDoodle: '',
   iconSlotPrefix: 'bullet',
-  iconDoodle: 'bullet_icon',
-  showLabel: true,
+  iconDoodle: 'shoot-stab-duck/bullet_icon',
+  showLabel: false,
 });
 
 const RESOURCE_PRESENTATIONS = Object.freeze({
+  [VARIANT_IDS.tapTapShoot]: Object.freeze({
+    labelSlotSuffix: 'bullets-label',
+    labelDoodle: '',
+    iconSlotPrefix: 'bullet',
+    iconDoodle: 'tap-tap-shoot/ap_icon',
+    showLabel: false,
+  }),
   [VARIANT_IDS.chargeBlockFireball]: Object.freeze({
     iconSlotPrefix: 'charge',
     iconDoodle: 'charge-block-fireball/charge icon',

@@ -109,16 +109,28 @@ const PREVIOUS_MOVE_ELEMENTS = [
   { key: "p2-previous-move-icon", name: "P2 previous move icon", asset: "assets/shoot_icon_sheet.webp" },
 ];
 
-const BULLET_ELEMENTS = [
-  { key: "p1-bullets-label", name: "P1 bullets label", asset: "assets/bullets_label_sheet.webp" },
-  { key: "p2-bullets-label", name: "P2 bullets label", asset: "assets/bullets_label_sheet.webp" },
-  { key: "p1-bullet-slot-1", name: "P1 bullet slot 1", asset: "assets/bullet_icon_sheet.webp" },
-  { key: "p1-bullet-slot-2", name: "P1 bullet slot 2", asset: "assets/bullet_icon_sheet.webp" },
-  { key: "p1-bullet-slot-3", name: "P1 bullet slot 3", asset: "assets/bullet_icon_sheet.webp" },
-  { key: "p2-bullet-slot-1", name: "P2 bullet slot 1", asset: "assets/bullet_icon_sheet.webp" },
-  { key: "p2-bullet-slot-2", name: "P2 bullet slot 2", asset: "assets/bullet_icon_sheet.webp" },
-  { key: "p2-bullet-slot-3", name: "P2 bullet slot 3", asset: "assets/bullet_icon_sheet.webp" },
-];
+function resourceSlotElements({ iconAsset, labelAsset = "" }) {
+  return [
+    ...(labelAsset ? [
+      { key: "p1-bullets-label", name: "P1 bullets label", asset: labelAsset },
+      { key: "p2-bullets-label", name: "P2 bullets label", asset: labelAsset },
+    ] : []),
+    { key: "p1-bullet-slot-1", name: "P1 bullet slot 1", asset: iconAsset },
+    { key: "p1-bullet-slot-2", name: "P1 bullet slot 2", asset: iconAsset },
+    { key: "p1-bullet-slot-3", name: "P1 bullet slot 3", asset: iconAsset },
+    { key: "p2-bullet-slot-1", name: "P2 bullet slot 1", asset: iconAsset },
+    { key: "p2-bullet-slot-2", name: "P2 bullet slot 2", asset: iconAsset },
+    { key: "p2-bullet-slot-3", name: "P2 bullet slot 3", asset: iconAsset },
+  ];
+}
+
+const SHOOT_STAB_DUCK_RESOURCE_ELEMENTS = resourceSlotElements({
+  iconAsset: "assets/shoot-stab-duck/bullet_icon_sheet.webp",
+});
+
+const TAP_TAP_SHOOT_RESOURCE_ELEMENTS = resourceSlotElements({
+  iconAsset: "assets/tap-tap-shoot/ap_icon_sheet.webp",
+});
 
 const CHARGE_ELEMENTS = [
   { key: "p1-charge-slot-1", name: "P1 charge slot 1", asset: "assets/charge-block-fireball/charge icon_sheet.webp" },
@@ -151,29 +163,29 @@ const VARIANT_ELEMENTS = {
     ...CHARGE_ELEMENTS,
   ],
   "punch-stab-shoot": [
-    { key: "punch-button", name: "Punch button", asset: "assets/punch-stab-shoot/punch_button_sheet.webp" },
-    { key: "stab-button", name: "Stab button", asset: "assets/stab_button_sheet.webp" },
-    { key: "shoot-button", name: "Shoot button", asset: "assets/shoot_button_sheet.webp" },
+    { key: "punch-button", name: "Fist button", asset: "assets/punch-stab-shoot/fist_button_sheet.webp" },
+    { key: "stab-button", name: "Knife button", asset: "assets/punch-stab-shoot/knife_button_sheet.webp" },
+    { key: "shoot-button", name: "Gun button", asset: "assets/punch-stab-shoot/gun_button_sheet.webp" },
     ...HEALTH_ELEMENTS,
   ],
   "shoot-stab-duck": [
-    { key: "reload-button", name: "Reload button", asset: "assets/reload_button_sheet.webp" },
-  { key: "shoot-button", name: "Shoot button", asset: "assets/shoot_button_sheet.webp" },
-  { key: "shoot-decorative-icon", name: "Shoot decorative icon", asset: "assets/shoot_icon_sheet.webp" },
-  { key: "stab-button", name: "Stab button", asset: "assets/stab_button_sheet.webp" },
-  { key: "stab-decorative-icon", name: "Stab decorative icon", asset: "assets/stab_icon_sheet.webp" },
-  { key: "duck-button", name: "Duck button", asset: "assets/duck_button_sheet.webp" },
-    ...BULLET_ELEMENTS,
+    { key: "reload-button", name: "Reload button", asset: "assets/shoot-stab-duck/reload_button_sheet.webp" },
+    { key: "shoot-button", name: "Shoot button", asset: "assets/shoot-stab-duck/shoot_button_sheet.webp" },
+    { key: "shoot-decorative-icon", name: "Shoot decorative icon", asset: "assets/shoot_icon_sheet.webp" },
+    { key: "stab-button", name: "Stab button", asset: "assets/shoot-stab-duck/stab_button_sheet.webp" },
+    { key: "stab-decorative-icon", name: "Stab decorative icon", asset: "assets/stab_icon_sheet.webp" },
+    { key: "duck-button", name: "Duck button", asset: "assets/shoot-stab-duck/duck_button_sheet.webp" },
+    ...SHOOT_STAB_DUCK_RESOURCE_ELEMENTS,
     ...PREVIOUS_MOVE_ELEMENTS,
   ],
   "tap-tap-shoot": [
-    { key: "reload-button", name: "Reload button", asset: "assets/reload_button_sheet.webp" },
-    { key: "shoot-button", name: "Shoot button", asset: "assets/shoot_button_sheet.webp" },
-    { key: "stab-button", name: "Stab button", asset: "assets/stab_button_sheet.webp" },
-    { key: "duck-button", name: "Duck button", asset: "assets/duck_button_sheet.webp" },
+    { key: "reload-button", name: "Charge AP button", asset: "assets/tap-tap-shoot/charge_ap_button_sheet.webp" },
+    { key: "shoot-button", name: "Shoot AP button", asset: "assets/tap-tap-shoot/shoot_ap_button_sheet.webp" },
+    { key: "stab-button", name: "Stab AP button", asset: "assets/tap-tap-shoot/stab_ap_button_sheet.webp" },
+    { key: "duck-button", name: "Duck button", asset: "assets/tap-tap-shoot/duck_button_sheet.webp" },
     { key: "counterstab-button", name: "Counterstab button", asset: "assets/tap-tap-shoot/counterstab_button_sheet.webp" },
     { key: "counterstab-decorative-icon", name: "Counterstab decorative icon", asset: "assets/counterstab_icon_sheet.webp" },
-    ...BULLET_ELEMENTS,
+    ...TAP_TAP_SHOOT_RESOURCE_ELEMENTS,
     ...PREVIOUS_MOVE_ELEMENTS,
   ],
 };

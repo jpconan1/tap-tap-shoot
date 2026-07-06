@@ -81,6 +81,8 @@ const TITLE_BUTTON_FRAME_WIDTH = 256;
 const TITLE_BUTTON_FRAME_HEIGHT = 128;
 const TITLE_AUDIO_BUTTON_FRAME_WIDTH = 384;
 const TITLE_AUDIO_BUTTON_FRAME_HEIGHT = 192;
+const TITLE_BOIL_TOGGLE_FRAME_WIDTH = 320;
+const TITLE_BOIL_TOGGLE_FRAME_HEIGHT = 160;
 const VARIANT_BUTTON_FRAME_WIDTH = 325;
 const VARIANT_BUTTON_FRAME_HEIGHT = 128;
 const PICK_VARIANT_FRAME_WIDTH = 388;
@@ -190,19 +192,39 @@ const NAME_SUFFIXES = Object.freeze([
   'Parker',
   '####',
 ]);
-const MOVE_BUTTON_DOODLES = Object.freeze({
+const DEFAULT_MOVE_BUTTON_DOODLES = Object.freeze({
   rock: 'rock-paper-scissors/rock_button',
   paper: 'rock-paper-scissors/paper_button',
   scissors: 'rock-paper-scissors/scissors_button',
   charge: 'charge-block-fireball/charge_button',
   block: 'charge-block-fireball/block_button',
   fireball: 'charge-block-fireball/fireball_button',
-  punch: 'punch-stab-shoot/punch_button',
-  reload: 'reload_button',
-  shoot: 'shoot_button',
-  stab: 'stab_button',
-  duck: 'duck_button',
+  punch: 'punch-stab-shoot/fist_button',
+  reload: 'shoot-stab-duck/reload_button',
+  shoot: 'shoot-stab-duck/shoot_button',
+  stab: 'shoot-stab-duck/stab_button',
+  duck: 'shoot-stab-duck/duck_button',
   counterstab: 'tap-tap-shoot/counterstab_button',
+});
+const VARIANT_MOVE_BUTTON_DOODLES = Object.freeze({
+  [VARIANT_IDS.punchStabShoot]: Object.freeze({
+    punch: 'punch-stab-shoot/fist_button',
+    stab: 'punch-stab-shoot/knife_button',
+    shoot: 'punch-stab-shoot/gun_button',
+  }),
+  [VARIANT_IDS.shootStabDuck]: Object.freeze({
+    reload: 'shoot-stab-duck/reload_button',
+    shoot: 'shoot-stab-duck/shoot_button',
+    stab: 'shoot-stab-duck/stab_button',
+    duck: 'shoot-stab-duck/duck_button',
+  }),
+  [VARIANT_IDS.tapTapShoot]: Object.freeze({
+    reload: 'tap-tap-shoot/charge_ap_button',
+    shoot: 'tap-tap-shoot/shoot_ap_button',
+    stab: 'tap-tap-shoot/stab_ap_button',
+    duck: 'tap-tap-shoot/duck_button',
+    counterstab: 'tap-tap-shoot/counterstab_button',
+  }),
 });
 const MOVE_ICON_DOODLES = Object.freeze({
   rock: 'rock-paper-scissors/rock_button',
@@ -757,15 +779,12 @@ function getGamePreloadDoodles() {
   return [
     ...getRendererPreloadDoodles(),
     'READY',
-    'bullets_label',
-    'bullet_icon',
     'back_button_w',
     'continue_button',
     'continue_t_button',
     'next_slide_button',
     'Prev_slide_button',
     'quit_button',
-    'reload_button',
     'reload-to-stab_arrow',
     'right_red',
     'down-right_red',
@@ -794,11 +813,14 @@ function getGamePreloadDoodles() {
     'title/music_button_checked',
     'title/sound_button',
     'title/sound_button_checked',
+    'title/boiling_toggle_on',
+    'title/boiling_toggle_off',
     'variant_play_button',
     ...FINDING_MATCH_DOODLES,
     ...COMPUTER_VARIANTS.map((variant) => variant.buttonDoodle),
-    ...Object.values(MOVE_BUTTON_DOODLES),
+    ...getMoveButtonDoodlesForPreload(),
     ...Object.values(MOVE_ICON_DOODLES),
+    ...getResourceDoodlesForPreload(),
     ...Array.from({ length: LAST_NUMBERED_TURN + 1 }, (_, turn) => `turn${turn}`),
     'turnlostcount',
     ...Array.from({ length: GAME_TARGET_ROUNDS }, (_, index) => `w${index + 1}`),
@@ -2055,16 +2077,25 @@ function renderTitleAudioButton(kind, isChecked) {
 }
 
 function renderTitleBoilButton() {
+  const doodle = `title/boiling_toggle_${isBoilEnabled ? 'on' : 'off'}`;
+
   return `
     <button
-      class="title-audio-button title-boil-button ${isBoilEnabled ? 'is-checked' : ''}"
+      class="title-audio-button title-boil-button"
       data-action="toggle-boil"
       type="button"
       aria-label="boil ${isBoilEnabled ? 'on' : 'off'}"
       aria-pressed="${isBoilEnabled ? 'true' : 'false'}"
     >
-      <span class="title-boil-button-main">BOIL</span>
-      <span class="title-boil-button-state">${isBoilEnabled ? 'ON' : 'OFF'}</span>
+      <canvas
+        class="sprite-canvas title-audio-button-art"
+        data-doodle="${doodle}"
+        data-frame-width="${TITLE_BOIL_TOGGLE_FRAME_WIDTH}"
+        data-frame-height="${TITLE_BOIL_TOGGLE_FRAME_HEIGHT}"
+        width="${TITLE_BOIL_TOGGLE_FRAME_WIDTH}"
+        height="${TITLE_BOIL_TOGGLE_FRAME_HEIGHT}"
+        aria-hidden="true"
+      ></canvas>
     </button>
   `;
 }
@@ -2655,17 +2686,24 @@ function renderWinMark(count) {
 }
 
 function renderBulletMeter(playerId, bullets) {
-  return `
-    <div class="bullets-meter ${playerId}">
+  const resource = getResourcePresentation(getCurrentVariantId());
+  const label = resource.showLabel && resource.labelDoodle
+    ? `
       <canvas
         class="sprite-canvas bullets-label"
-        data-doodle="bullets_label"
+        data-doodle="${resource.labelDoodle}"
         data-frame-width="${BULLETS_LABEL_FRAME_WIDTH}"
         data-frame-height="${BULLETS_LABEL_FRAME_HEIGHT}"
         width="${BULLETS_LABEL_FRAME_WIDTH}"
         height="${BULLETS_LABEL_FRAME_HEIGHT}"
         aria-hidden="true"
       ></canvas>
+    `
+    : '';
+
+  return `
+    <div class="bullets-meter ${playerId}">
+      ${label}
       <div class="bullets-icons" aria-label="${playerId} bullets: ${bullets}">
         ${Array.from({ length: BULLET_SLOT_COUNT }, (_, index) => renderBulletSlot(playerId, index, bullets)).join('')}
       </div>
@@ -2685,10 +2723,12 @@ function renderBulletSlot(playerId, index, bullets) {
 }
 
 function renderBulletIcon() {
+  const resource = getResourcePresentation(getCurrentVariantId());
+
   return `
     <canvas
       class="sprite-canvas bullets-icon"
-      data-doodle="bullet_icon"
+      data-doodle="${resource.iconDoodle}"
       data-frame-width="${BULLETS_ICON_FRAME_WIDTH}"
       data-frame-height="${BULLETS_ICON_FRAME_HEIGHT}"
       width="${BULLETS_ICON_FRAME_WIDTH}"
@@ -2761,7 +2801,7 @@ function renderMoveButton(move, isLegal) {
     <button class="move-card ${isQueued ? 'selected' : ''}" data-move="${move.id}" ${isLegal && canChooseMove && state.status === 'playing' && !isTransitioning ? '' : 'disabled'}>
       <canvas
         class="sprite-canvas move-button-art"
-        data-doodle="${MOVE_BUTTON_DOODLES[move.id]}"
+        data-doodle="${getMoveButtonDoodle(move.id)}"
         data-frame-width="${BUTTON_FRAME_WIDTH}"
         data-frame-height="${BUTTON_FRAME_HEIGHT}"
         width="${BUTTON_FRAME_WIDTH}"
@@ -2770,6 +2810,26 @@ function renderMoveButton(move, isLegal) {
       ></canvas>
     </button>
   `;
+}
+
+function getMoveButtonDoodle(moveId, variantId = getCurrentVariantId()) {
+  return VARIANT_MOVE_BUTTON_DOODLES[variantId]?.[moveId] ?? DEFAULT_MOVE_BUTTON_DOODLES[moveId];
+}
+
+function getMoveButtonDoodlesForPreload() {
+  return [
+    ...Object.values(DEFAULT_MOVE_BUTTON_DOODLES),
+    ...Object.values(VARIANT_MOVE_BUTTON_DOODLES).flatMap((moves) => Object.values(moves)),
+  ];
+}
+
+function getResourceDoodlesForPreload() {
+  return Object.values(VARIANT_IDS)
+    .flatMap((variantId) => {
+      const resource = getResourcePresentation(variantId);
+      return [resource.labelDoodle, resource.iconDoodle];
+    })
+    .filter(Boolean);
 }
 
 function getActiveMoveIds() {

@@ -860,17 +860,33 @@ function normalizeElement(element) {
 
 function migrateAssetPath(path) {
   return {
-    'assets/action_points_sheet.webp': 'assets/bullets_label_sheet.webp',
-    'assets/ap_icon_sheet.webp': 'assets/bullet_icon_sheet.webp',
-    'assets/dodge_button_sheet.webp': 'assets/duck_button_sheet.webp',
+    'assets/action_points_sheet.webp': 'assets/tap-tap-shoot/ap_icon_sheet.webp',
+    'assets/ap_icon_sheet.webp': 'assets/tap-tap-shoot/ap_icon_sheet.webp',
+    'assets/bullet_icon_sheet.webp': 'assets/shoot-stab-duck/bullet_icon_sheet.webp',
+    'assets/dodge_button_sheet.webp': 'assets/shoot-stab-duck/duck_button_sheet.webp',
+    'assets/duck_button_sheet.webp': 'assets/shoot-stab-duck/duck_button_sheet.webp',
+    'assets/reload_button_sheet.webp': 'assets/shoot-stab-duck/reload_button_sheet.webp',
+    'assets/shoot_button_sheet.webp': 'assets/shoot-stab-duck/shoot_button_sheet.webp',
+    'assets/stab_button_sheet.webp': 'assets/shoot-stab-duck/stab_button_sheet.webp',
+    'assets/punch-stab-shoot/punch_button_sheet.webp': 'assets/punch-stab-shoot/fist_button_sheet.webp',
   }[path] ?? path;
 }
 
 const NEW_ASSET_SOURCE_SIZES = Object.freeze({
-  'assets/bullets_label_sheet.webp': Object.freeze({ width: 256, height: 80 }),
-  'assets/bullet_icon_sheet.webp': Object.freeze({ width: 64, height: 64 }),
-  'assets/duck_button_sheet.webp': Object.freeze({ width: 256, height: 128 }),
+  'assets/shoot-stab-duck/bullet_icon_sheet.webp': Object.freeze({ width: 64, height: 64 }),
+  'assets/tap-tap-shoot/ap_icon_sheet.webp': Object.freeze({ width: 64, height: 64 }),
+  'assets/punch-stab-shoot/fist_button_sheet.webp': Object.freeze({ width: 256, height: 128 }),
+  'assets/punch-stab-shoot/knife_button_sheet.webp': Object.freeze({ width: 256, height: 128 }),
+  'assets/punch-stab-shoot/gun_button_sheet.webp': Object.freeze({ width: 256, height: 128 }),
+  'assets/shoot-stab-duck/duck_button_sheet.webp': Object.freeze({ width: 256, height: 128 }),
+  'assets/shoot-stab-duck/reload_button_sheet.webp': Object.freeze({ width: 256, height: 128 }),
+  'assets/shoot-stab-duck/shoot_button_sheet.webp': Object.freeze({ width: 256, height: 128 }),
+  'assets/shoot-stab-duck/stab_button_sheet.webp': Object.freeze({ width: 256, height: 128 }),
+  'assets/tap-tap-shoot/charge_ap_button_sheet.webp': Object.freeze({ width: 256, height: 128 }),
   'assets/tap-tap-shoot/counterstab_button_sheet.webp': Object.freeze({ width: 256, height: 384 }),
+  'assets/tap-tap-shoot/duck_button_sheet.webp': Object.freeze({ width: 256, height: 128 }),
+  'assets/tap-tap-shoot/shoot_ap_button_sheet.webp': Object.freeze({ width: 256, height: 128 }),
+  'assets/tap-tap-shoot/stab_ap_button_sheet.webp': Object.freeze({ width: 256, height: 128 }),
 });
 
 function createEmptyLayouts() {
