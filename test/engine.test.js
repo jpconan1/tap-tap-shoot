@@ -224,15 +224,71 @@ test('charge block fireball wins at three charges unless fireball hits first', (
 test('tap tap shoot adds counterstab to the four move rules', () => {
   assert.deepEqual(getVariantMoveIds(VARIANT_IDS.tapTapShoot), ['reload', 'shoot', 'stab', 'duck', 'counterstab']);
 
-  const result = resolveTurn({
+  const counterstabDraw = resolveTurn({
     p1Move: 'counterstab',
     p2Move: 'stab',
     p1Bullets: 0,
     p2Bullets: 1,
     variantId: VARIANT_IDS.tapTapShoot,
   });
-  assert.equal(result.ok, true);
-  assert.equal(result.winner, 'p1');
+  assert.equal(counterstabDraw.ok, true);
+  assert.equal(counterstabDraw.winner, null);
+
+  const stabReload = resolveTurn({
+    p1Move: 'stab',
+    p2Move: 'reload',
+    p1Bullets: 1,
+    p2Bullets: 1,
+    variantId: VARIANT_IDS.tapTapShoot,
+  });
+  assert.equal(stabReload.ok, true);
+  assert.equal(stabReload.winner, 'p1');
+  assert.equal(stabReload.p1Bullets, 0);
+
+  const noBulletStab = resolveTurn({
+    p1Move: 'stab',
+    p2Move: 'reload',
+    p1Bullets: 0,
+    p2Bullets: 1,
+    variantId: VARIANT_IDS.tapTapShoot,
+  });
+  assert.equal(noBulletStab.ok, false);
+  assert.deepEqual(noBulletStab.errors, ['p1 cannot afford stab']);
+
+  const stabDuck = resolveTurn({
+    p1Move: 'stab',
+    p2Move: 'duck',
+    p1Bullets: 1,
+    p2Bullets: 1,
+    variantId: VARIANT_IDS.tapTapShoot,
+  });
+  assert.equal(stabDuck.ok, true);
+  assert.equal(stabDuck.winner, 'p1');
+  assert.equal(stabDuck.p1Bullets, 0);
+
+  const stabDuckPresentation = getVariantStagePresentation(
+    stabDuck,
+    'stab',
+    'duck',
+    { variantId: VARIANT_IDS.tapTapShoot },
+  );
+  assert.equal(stabDuckPresentation.name, 'tap-tap-shoot/stab-kill');
+
+  const legacyStabDuckPresentation = getVariantStagePresentation(
+    stabDuck,
+    'stab',
+    'duck',
+    { variantId: 'counterstab' },
+  );
+  assert.equal(legacyStabDuckPresentation.name, 'tap-tap-shoot/stab-kill');
+
+  const shootDuckPresentation = getVariantStagePresentation(
+    { p1Hit: null, p2Hit: null, winner: null },
+    'shoot',
+    'duck',
+    { variantId: VARIANT_IDS.tapTapShoot },
+  );
+  assert.equal(shootDuckPresentation.name, 'tap-tap-shoot/shoot-duck');
 });
 
 test('punch stab shoot uses health damage before round win', () => {

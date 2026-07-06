@@ -19,6 +19,7 @@ const VARIANT_LAYOUT_FILE_NAMES = Object.freeze({
   'charge-block-fireball': 'cbf-layout.json',
   'punch-stab-shoot': 'pss-layout.json',
   'shoot-stab-duck': 'ssd-layout.json',
+  'tap-tap-shoot': 'tts-layout.json',
 });
 
 const stage = document.querySelector('[data-stage]');
@@ -869,6 +870,7 @@ const NEW_ASSET_SOURCE_SIZES = Object.freeze({
   'assets/bullets_label_sheet.webp': Object.freeze({ width: 256, height: 80 }),
   'assets/bullet_icon_sheet.webp': Object.freeze({ width: 64, height: 64 }),
   'assets/duck_button_sheet.webp': Object.freeze({ width: 256, height: 128 }),
+  'assets/tap-tap-shoot/counterstab_button_sheet.webp': Object.freeze({ width: 256, height: 384 }),
 });
 
 function createEmptyLayouts() {

@@ -1,19 +1,25 @@
 import { freezeHitTable, resolveHitTableTurn } from './shared.js';
 
 export function createTapTapShootVariant({ id, moves, maxResource }) {
+  const variantMoves = Object.freeze({
+    ...moves,
+    stab: Object.freeze({
+      ...moves.stab,
+      cost: 1,
+    }),
+  });
   const variant = {
     id,
     label: 'Tap Tap Shoot',
     isRanked: true,
     moveIds: Object.freeze(['reload', 'shoot', 'stab', 'duck', 'counterstab']),
-    moves,
+    moves: variantMoves,
     resourceMax: maxResource,
     startResource: 1,
     forcedMoveAtNoResource: 'reload',
     hitTable: freezeHitTable({
       shoot: { stab: 'shot', reload: 'shot', counterstab: 'shot' },
-      stab: { duck: 'stabbed' },
-      counterstab: { stab: 'counterstabbed' },
+      stab: { duck: 'stabbed', reload: 'stabbed' },
     }),
   };
 

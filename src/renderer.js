@@ -112,6 +112,36 @@ const SHOOT_STAB_DUCK_SPLIT_DOODLES = Object.freeze([
   'shoot-stab-duck/split_scenes/stab-reload_stabber_is_ready',
   'shoot-stab-duck/split_scenes/stab-reload_reloader_is_ready',
 ]);
+const TAP_TAP_SHOOT_DOODLES = Object.freeze([
+  'tap-tap-shoot/standoff-tts',
+  'tap-tap-shoot/defense-draw',
+  'tap-tap-shoot/reload-draw',
+  'tap-tap-shoot/reload-duck',
+  'tap-tap-shoot/shoot-draw',
+  'tap-tap-shoot/shoot-duck',
+  'tap-tap-shoot/shoot-kill',
+  'tap-tap-shoot/stab-counterstab',
+  'tap-tap-shoot/stab-draw',
+  'tap-tap-shoot/stab-kill',
+]);
+const TAP_TAP_SHOOT_SPLIT_DOODLES = Object.freeze([
+  'tap-tap-shoot/split_scenes/tts-standoff_p1_is_ready',
+  'tap-tap-shoot/split_scenes/tts-standoff_p2_is_ready',
+  'tap-tap-shoot/split_scenes/reloading_p1_is_ready',
+  'tap-tap-shoot/split_scenes/reloading_p2_is_ready',
+  'tap-tap-shoot/split_scenes/shoot-draw_p1_is_ready',
+  'tap-tap-shoot/split_scenes/shoot-draw_p2_is_ready',
+  'tap-tap-shoot/split_scenes/shoot-duck_shooter_is_ready',
+  'tap-tap-shoot/split_scenes/shoot-duck_ducker_is_ready',
+  'tap-tap-shoot/split_scenes/stab-draw_p1_is_ready',
+  'tap-tap-shoot/split_scenes/stab-draw_p2_is_ready',
+  'tap-tap-shoot/split_scenes/defense-draw_p1_is_ready',
+  'tap-tap-shoot/split_scenes/defense-draw_p2_is_ready',
+  'tap-tap-shoot/split_scenes/reload-defense_reloader_is_ready',
+  'tap-tap-shoot/split_scenes/reload-defense_defender_is_ready',
+  'tap-tap-shoot/split_scenes/stab-counterstab_stabber_is_ready',
+  'tap-tap-shoot/split_scenes/stab-counterstab_counterstabber_is_ready',
+]);
 
 const STARBURST_WIPE_STEPS = Object.freeze([
   Object.freeze(['1_w']),
@@ -152,6 +182,8 @@ export function getRendererPreloadDoodles() {
     ...SHOOT_STAB_DUCK_SPLIT_DOODLES,
     ...PUNCH_STAB_SHOOT_DOODLES,
     ...PUNCH_STAB_SHOOT_SPLIT_DOODLES,
+    ...TAP_TAP_SHOOT_DOODLES,
+    ...TAP_TAP_SHOOT_SPLIT_DOODLES,
     ...STARBURST_WIPE_STEPS.flat().map((name) => `starburst_wipe/${name}`),
     ...CURTAIN_WIPE_STEPS.map((name) => `curtains/${name}`),
     ...READY_WAITING_READY_STEPS.map((name) => `ready_waiting/${name}`),
@@ -259,6 +291,10 @@ export function getVariantStagePresentation(result, p1Move, p2Move, { variantId 
 
   if (variantId === 'punchStabShoot' || variantId === 'punch-stab-shoot') {
     return getPunchStabShootStagePresentation(result, p1Move, p2Move);
+  }
+
+  if (variantId === 'tapTapShoot' || variantId === 'tap-tap-shoot' || variantId === 'counterstab') {
+    return getTapTapShootStagePresentation(result, p1Move, p2Move);
   }
 
   return getDoodlePresentation(p1Move, p2Move, { variantId });
@@ -855,6 +891,76 @@ function getPunchStabShootStagePresentation(result, p1Move, p2Move) {
     kind: 'doodle',
     name: 'punch-stab-shoot/shoot-stab',
     flip: p2Move === 'shoot',
+  };
+}
+
+function getTapTapShootStagePresentation(result, p1Move, p2Move) {
+  if (p1Move === p2Move) {
+    const drawName = p1Move === 'duck' || p1Move === 'counterstab'
+      ? 'defense-draw'
+      : `${p1Move === 'reload' ? 'reload' : p1Move}-draw`;
+
+    return {
+      kind: 'doodle',
+      name: `tap-tap-shoot/${drawName}`,
+      flip: false,
+    };
+  }
+
+  const hitMove = result.p1Hit ? p1Move : result.p2Hit ? p2Move : null;
+
+  if (hitMove === 'shoot') {
+    return {
+      kind: 'doodle',
+      name: 'tap-tap-shoot/shoot-kill',
+      flip: p2Move === 'shoot',
+    };
+  }
+
+  if (hitMove === 'stab') {
+    return {
+      kind: 'doodle',
+      name: 'tap-tap-shoot/stab-kill',
+      flip: p2Move === 'stab',
+    };
+  }
+
+  if ((p1Move === 'stab' && p2Move === 'counterstab') || (p1Move === 'counterstab' && p2Move === 'stab')) {
+    return {
+      kind: 'doodle',
+      name: 'tap-tap-shoot/stab-counterstab',
+      flip: p2Move === 'stab',
+    };
+  }
+
+  if ((p1Move === 'stab' && p2Move === 'duck') || (p1Move === 'duck' && p2Move === 'stab')) {
+    return {
+      kind: 'doodle',
+      name: 'tap-tap-shoot/defense-draw',
+      flip: p1Move === 'duck',
+    };
+  }
+
+  if ((p1Move === 'reload' && p2Move === 'duck') || (p1Move === 'duck' && p2Move === 'reload')) {
+    return {
+      kind: 'doodle',
+      name: 'tap-tap-shoot/reload-duck',
+      flip: p1Move === 'duck',
+    };
+  }
+
+  if ((p1Move === 'shoot' && p2Move === 'duck') || (p1Move === 'duck' && p2Move === 'shoot')) {
+    return {
+      kind: 'doodle',
+      name: 'tap-tap-shoot/shoot-duck',
+      flip: p2Move === 'shoot',
+    };
+  }
+
+  return {
+    kind: 'doodle',
+    name: 'tap-tap-shoot/defense-draw',
+    flip: p2Move === 'duck' || p2Move === 'counterstab',
   };
 }
 

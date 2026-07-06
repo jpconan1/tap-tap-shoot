@@ -99,6 +99,7 @@ const VARIANT_LAYOUT_URLS = Object.freeze({
   [VARIANT_IDS.rps]: './assets/rock-paper-scissors/rps-layout.json',
   [VARIANT_IDS.chargeBlockFireball]: './assets/charge-block-fireball/cbf-layout.json',
   [VARIANT_IDS.punchStabShoot]: './assets/punch-stab-shoot/pss-layout.json',
+  [VARIANT_IDS.tapTapShoot]: './assets/tap-tap-shoot/tts-layout.json',
 });
 const DEFAULT_LAYOUT_STATE_ID = 'playing.default';
 const DISADVANTAGED_LAYOUT_STATE_ID = 'playing.disadvantaged';
@@ -199,7 +200,7 @@ const MOVE_BUTTON_DOODLES = Object.freeze({
   shoot: 'shoot_button',
   stab: 'stab_button',
   duck: 'duck_button',
-  counterstab: 'mactheknife_button',
+  counterstab: 'tap-tap-shoot/counterstab_button',
 });
 const MOVE_ICON_DOODLES = Object.freeze({
   rock: 'rock-paper-scissors/rock_button',
@@ -713,6 +714,8 @@ function getGamePreloadDoodles() {
     'right_red',
     'down-right_red',
     'up-right_red',
+    'down-left_red',
+    'up_blue',
     'left_red',
     'down-right_blue',
     'left_blue',
@@ -1553,6 +1556,9 @@ function renderLayoutMoveArrows() {
     ${renderLayoutSlot('down-right-red-arrow', renderStaticDoodle('down-right_red', 128, 128, 'move-arrow'), 'move-arrow-slot')}
     ${renderLayoutSlot('up-right-red-arrow', renderStaticDoodle('up-right_red', 128, 128, 'move-arrow'), 'move-arrow-slot')}
     ${renderLayoutSlot('left-red-arrow', renderStaticDoodle('left_red', 128, 128, 'move-arrow'), 'move-arrow-slot')}
+    ${renderLayoutSlot('down-left-red-arrow', renderStaticDoodle('down-left_red', 128, 128, 'move-arrow'), 'move-arrow-slot')}
+    ${renderLayoutSlot('up-blue-arrow', renderStaticDoodle('up_blue', 128, 128, 'move-arrow'), 'move-arrow-slot')}
+    ${renderLayoutSlot('up-blue-arrow-2', renderStaticDoodle('up_blue', 128, 128, 'move-arrow'), 'move-arrow-slot')}
     ${renderLayoutSlot('down-right-blue-arrow', renderStaticDoodle('down-right_blue', 128, 128, 'move-arrow'), 'move-arrow-slot')}
     ${renderLayoutSlot('left-blue-arrow', renderStaticDoodle('left_blue', 128, 128, 'move-arrow'), 'move-arrow-slot')}
     ${renderLayoutSlot('stab-to-duck-arrow', renderStaticDoodle('stab-to-duck_arrow', 128, 128, 'move-arrow'), 'move-arrow-slot')}
@@ -1629,6 +1635,7 @@ function getLayoutStateId(legalMoves) {
 function isDisadvantagedLayoutState(legalMoves) {
   return state.status === 'playing'
     && getCurrentVariantId() !== VARIANT_IDS.chargeBlockFireball
+    && getCurrentVariantId() !== VARIANT_IDS.tapTapShoot
     && getPlayerResource(state.players.p1) === 0
     && getPlayerResource(state.players.p2) > 0
     && !legalMoves.has('shoot');
@@ -2890,6 +2897,12 @@ function getReadySplitPresentation(readyPlayerId) {
     return ssdSplitPresentation;
   }
 
+  const ttsSplitPresentation = getTapTapShootReadySplitPresentation(scene, readyPlayerId);
+
+  if (ttsSplitPresentation) {
+    return ttsSplitPresentation;
+  }
+
   if (scene === 'charge-block-fireball/block-charge') {
     const isChargerReady = lastMoves[readyPlayerId] === 'charge';
     return {
@@ -3039,6 +3052,69 @@ function getShootStabDuckReadySplitPresentation(scene, readyPlayerId) {
     return {
       kind: 'doodle',
       name: `shoot-stab-duck/split_scenes/stab-reload_${isStabberReady ? 'stabber' : 'reloader'}_is_ready`,
+      flip: lastMoves.p2 === 'stab',
+    };
+  }
+
+  return null;
+}
+
+function getTapTapShootReadySplitPresentation(scene, readyPlayerId) {
+  const prefix = 'tap-tap-shoot/';
+
+  if (!scene.startsWith(prefix)) {
+    return null;
+  }
+
+  const sceneName = scene.slice(prefix.length);
+
+  if (sceneName === 'standoff-tts') {
+    return {
+      kind: 'doodle',
+      name: `tap-tap-shoot/split_scenes/tts-standoff_${readyPlayerId}_is_ready`,
+      flip: false,
+    };
+  }
+
+  if (sceneName === 'reload-draw') {
+    return {
+      kind: 'doodle',
+      name: `tap-tap-shoot/split_scenes/reloading_${readyPlayerId}_is_ready`,
+      flip: false,
+    };
+  }
+
+  if (['shoot-draw', 'stab-draw', 'defense-draw'].includes(sceneName)) {
+    return {
+      kind: 'doodle',
+      name: `tap-tap-shoot/split_scenes/${sceneName}_${readyPlayerId}_is_ready`,
+      flip: false,
+    };
+  }
+
+  if (sceneName === 'reload-duck') {
+    const isReloaderReady = lastMoves[readyPlayerId] === 'reload';
+    return {
+      kind: 'doodle',
+      name: `tap-tap-shoot/split_scenes/reload-defense_${isReloaderReady ? 'reloader' : 'defender'}_is_ready`,
+      flip: lastMoves.p1 === 'duck',
+    };
+  }
+
+  if (sceneName === 'shoot-duck') {
+    const isShooterReady = lastMoves[readyPlayerId] === 'shoot';
+    return {
+      kind: 'doodle',
+      name: `tap-tap-shoot/split_scenes/shoot-duck_${isShooterReady ? 'shooter' : 'ducker'}_is_ready`,
+      flip: lastMoves.p2 === 'shoot',
+    };
+  }
+
+  if (sceneName === 'stab-counterstab') {
+    const isStabberReady = lastMoves[readyPlayerId] === 'stab';
+    return {
+      kind: 'doodle',
+      name: `tap-tap-shoot/split_scenes/stab-counterstab_${isStabberReady ? 'stabber' : 'counterstabber'}_is_ready`,
       flip: lastMoves.p2 === 'stab',
     };
   }
@@ -3530,6 +3606,14 @@ function getIdleStagePresentation(variantId = getCurrentVariantId()) {
     return {
       kind: 'doodle',
       name: 'punch-stab-shoot/pss-standoff',
+      flip: false,
+    };
+  }
+
+  if (variantId === VARIANT_IDS.tapTapShoot) {
+    return {
+      kind: 'doodle',
+      name: 'tap-tap-shoot/standoff-tts',
       flip: false,
     };
   }
