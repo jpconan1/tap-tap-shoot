@@ -14,6 +14,12 @@ const LAYOUT_STATES = Object.freeze([
 ]);
 const DEFAULT_FRAME_COUNT = 3;
 const DEFAULT_ELEMENT_SCALE = 0.5;
+const VARIANT_LAYOUT_FILE_NAMES = Object.freeze({
+  'rock-paper-scissors': 'rps-layout.json',
+  'charge-block-fireball': 'cbf-layout.json',
+  'punch-stab-shoot': 'pss-layout.json',
+  'shoot-stab-duck': 'ssd-layout.json',
+});
 
 const stage = document.querySelector('[data-stage]');
 const layoutTargetSelect = document.querySelector('[data-layout-target]');
@@ -696,7 +702,7 @@ function exportLayouts() {
   const blob = new Blob([`${JSON.stringify(payload, null, 2)}\n`], { type: 'application/json' });
   const link = document.createElement('a');
   link.href = URL.createObjectURL(blob);
-  link.download = isParent ? 'parent-layout.json' : `${variantId}-layout.json`;
+  link.download = isParent ? 'parent-layout.json' : getVariantLayoutFileName(variantId);
   link.click();
   URL.revokeObjectURL(link.href);
 }
@@ -922,7 +928,11 @@ function hasStoredLayouts() {
 function getBundledLayoutUrl() {
   return layoutTarget === 'parent'
     ? './assets/parent-layout.json'
-    : `./assets/${variantId}/layout.json`;
+    : `./assets/${variantId}/${getVariantLayoutFileName(variantId)}`;
+}
+
+function getVariantLayoutFileName(id) {
+  return VARIANT_LAYOUT_FILE_NAMES[id] ?? `${id}-layout.json`;
 }
 
 function collectSceneAnchors() {

@@ -95,7 +95,7 @@ const GAME_TARGET_ROUNDS = 5;
 const FRAME_WIDTH = 960;
 const FRAME_HEIGHT = 540;
 const VARIANT_LAYOUT_URLS = Object.freeze({
-  [VARIANT_IDS.shootStabDuck]: './assets/shoot-stab-duck/layout.json',
+  [VARIANT_IDS.shootStabDuck]: './assets/shoot-stab-duck/ssd-layout.json',
   [VARIANT_IDS.rps]: './assets/rock-paper-scissors/rps-layout.json',
   [VARIANT_IDS.chargeBlockFireball]: './assets/charge-block-fireball/cbf-layout.json',
   [VARIANT_IDS.punchStabShoot]: './assets/punch-stab-shoot/pss-layout.json',
