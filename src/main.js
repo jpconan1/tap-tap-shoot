@@ -338,27 +338,27 @@ const COMPUTER_VARIANTS = Object.freeze([
   Object.freeze({
     id: VARIANT_IDS.rps,
     name: 'Rock Paper Scissors',
-    buttonDoodle: 'rock-paper-scissors/rps_button',
+    buttonDoodle: 'rps_button_w',
   }),
   Object.freeze({
     id: VARIANT_IDS.chargeBlockFireball,
     name: 'Charge Block Fireball',
-    buttonDoodle: 'charge-block-fireball/cbf_button',
+    buttonDoodle: 'cbf_button_w',
   }),
   Object.freeze({
     id: VARIANT_IDS.shootStabDuck,
     name: 'Shoot Stab Duck',
-    buttonDoodle: 'shoot-stab-duck/ssd_button',
+    buttonDoodle: 'ssd_button_w',
   }),
   Object.freeze({
     id: VARIANT_IDS.punchStabShoot,
     name: 'Punch Stab Shoot',
-    buttonDoodle: 'punch-stab-shoot/pss_button',
+    buttonDoodle: 'pss_button_w',
   }),
   Object.freeze({
     id: VARIANT_IDS.tapTapShoot,
     name: 'Tap Tap Shoot',
-    buttonDoodle: 'tap-tap-shoot/tap_tap_shoot_button',
+    buttonDoodle: 'tap_tap_shoot_button_w',
   }),
 ]);
 const COMPUTER_VARIANT_IDS = Object.freeze(COMPUTER_VARIANTS.map((variant) => variant.id));
@@ -731,7 +731,7 @@ function getGamePreloadDoodles() {
     'system_scenes/round_lost',
     'tip1graphic',
     'tip2graphicgraphic',
-    'title/LOGO',
+    'new-logo-rev-2-alpha',
     'title/playvcom_button',
     'title/playonline',
     'title/music_button',
@@ -1906,7 +1906,7 @@ function renderTitleScreen() {
     <section class="title-screen" aria-label="Title screen">
       <canvas
         class="sprite-canvas title-logo"
-        data-doodle="title/LOGO"
+        data-doodle="new-logo-rev-2-alpha"
         data-frame-width="${TITLE_LOGO_FRAME_WIDTH}"
         data-frame-height="${TITLE_LOGO_FRAME_HEIGHT}"
         width="${TITLE_LOGO_FRAME_WIDTH}"
@@ -2335,7 +2335,7 @@ function renderQueueScreen() {
     <section class="title-screen queue-screen" aria-label="Ranked queue">
       <canvas
         class="sprite-canvas title-logo"
-        data-doodle="title/LOGO"
+        data-doodle="new-logo-rev-2-alpha"
         data-frame-width="${TITLE_LOGO_FRAME_WIDTH}"
         data-frame-height="${TITLE_LOGO_FRAME_HEIGHT}"
         width="${TITLE_LOGO_FRAME_WIDTH}"
