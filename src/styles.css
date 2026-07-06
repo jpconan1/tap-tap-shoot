@@ -565,6 +565,115 @@ button {
   height: 96px;
 }
 
+.variant-detail-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 211;
+  width: 960px;
+  height: 540px;
+  pointer-events: all;
+}
+
+.variant-detail-selected-button {
+  position: absolute;
+  z-index: 212;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+}
+
+.variant-detail-selected-button-inner {
+  filter: drop-shadow(3px 6px 0 rgba(29, 27, 24, 0.16));
+}
+
+.variant-detail-copy {
+  top: 84px;
+  left: 50%;
+  position: absolute;
+  z-index: 2;
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: 8px;
+  width: 560px;
+  min-height: 292px;
+  padding: 22px 26px;
+  border: 4px solid rgba(29, 27, 24, 0.78);
+  border-radius: 6px;
+  background: rgba(247, 239, 217, 0.86);
+  box-shadow: 6px 8px 0 rgba(29, 27, 24, 0.2);
+  color: var(--ink);
+  text-align: center;
+  transform: translateX(-50%) rotate(-0.35deg);
+}
+
+.variant-detail-copy p {
+  margin: 0;
+  font-size: 25px;
+  line-height: 1.05;
+}
+
+.variant-detail-copy .lead {
+  margin-bottom: 5px;
+  color: var(--red);
+  font-size: 30px;
+  line-height: 0.98;
+}
+
+.variant-detail-actions {
+  position: absolute;
+  left: 174px;
+  bottom: 28px;
+  z-index: 4;
+  display: flex;
+  gap: 18px;
+  align-items: center;
+}
+
+.variant-detail-action {
+  display: block;
+  width: 192px;
+  height: 96px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  transform: rotate(0.35deg);
+  transition: transform 120ms ease, filter 120ms ease;
+}
+
+.variant-detail-action:nth-child(2) {
+  transform: rotate(-0.45deg);
+}
+
+.variant-detail-action:hover,
+.variant-detail-action:focus-visible {
+  outline: 0;
+  transform: translateY(-3px) rotate(0deg);
+}
+
+.variant-detail-action:active {
+  transform: translateY(3px) rotate(0.2deg);
+}
+
+.variant-detail-action-art {
+  display: block;
+  width: 192px;
+  height: 96px;
+  min-height: 0;
+  object-fit: contain;
+  image-rendering: auto;
+  filter: drop-shadow(3px 6px 0 rgba(29, 27, 24, 0.1));
+}
+
+.variant-detail-tap-tap-shoot .variant-detail-copy p {
+  font-size: 23px;
+}
+
+.variant-detail-tap-tap-shoot .variant-detail-copy .lead {
+  font-size: 28px;
+}
+
 .crossed-opponent-mark {
   position: absolute;
   inset: 0;

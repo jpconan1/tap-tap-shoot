@@ -362,6 +362,41 @@ const COMPUTER_VARIANTS = Object.freeze([
   }),
 ]);
 const COMPUTER_VARIANT_IDS = Object.freeze(COMPUTER_VARIANTS.map((variant) => variant.id));
+const VARIANT_DETAIL_COPY = Object.freeze({
+  [VARIANT_IDS.rps]: Object.freeze([
+    "THE ORIGINAL CLASSIC. You're probably familiar.",
+    'Rock beats Scissors.',
+    'Scissors beats Paper.',
+    'Paper beats Rock.',
+  ]),
+  [VARIANT_IDS.punchStabShoot]: Object.freeze([
+    'ROCK PAPER SCISSORS WITH HP. First to deal 3 damage wins.',
+    'Punch beats Shoot (Deals 1 damage).',
+    'Stab beats Punch (Deals 2 damage).',
+    'Shoot beats Stab (Deals a lethal 3 damage).',
+  ]),
+  [VARIANT_IDS.chargeBlockFireball]: Object.freeze([
+    'TWO WAYS TO WIN: Land a Fireball OR Charge 3 Bars.',
+    'Fireball beats Charge (Costs 1 Bar).',
+    'Block neutralizes Fireball.',
+    'Charge grants 1 Bar.',
+  ]),
+  [VARIANT_IDS.shootStabDuck]: Object.freeze([
+    'FOUR MOVES, ONE RESOURCE. Win by landing a Shoot or Stab.',
+    'Shoot beats Stab and Reload (Costs 1 Bullet).',
+    'Stab beats Duck.',
+    'Reload neutralizes Stab AND grants 1 Bullet.',
+    'Duck neutralizes Shoot.',
+  ]),
+  [VARIANT_IDS.tapTapShoot]: Object.freeze([
+    'FIVE MOVES AND LAYERED MIXUPS. Win by landing a Shoot or Stab.',
+    'Shoot beats Stab, Counter-Stab, and Charge (Costs 1 AP).',
+    'Stab beats Duck and Charge (Costs 1 AP).',
+    'Counter-Stab neutralizes Stab.',
+    'Duck neutralizes Shoot.',
+    'Charge grants 1 AP.',
+  ]),
+});
 
 const app = document.querySelector('#app');
 const FINDING_MATCH_DOODLES = Object.freeze([
@@ -376,6 +411,7 @@ let playMode = 'local';
 let selectedOpponentId = DEFAULT_OPPONENT_ID;
 let selectedVariantId = DEFAULT_VARIANT_ID;
 let isTransitioning = false;
+let variantDetailMenu = null;
 let isMusicEnabled = false;
 let isSoundEnabled = false;
 let pauseMenu = null;
@@ -738,6 +774,7 @@ function getGamePreloadDoodles() {
     'title/music_button_checked',
     'title/sound_button',
     'title/sound_button_checked',
+    'variant_play_button',
     ...FINDING_MATCH_DOODLES,
     ...COMPUTER_VARIANTS.map((variant) => variant.buttonDoodle),
     ...Object.values(MOVE_BUTTON_DOODLES),
@@ -2275,10 +2312,134 @@ function renderOpponentSelectScreen() {
   `;
 
   app.querySelectorAll('[data-variant]').forEach((button) => {
-    button.addEventListener('click', () => startLocalGame(button.dataset.variant));
+    button.addEventListener('pointerdown', (event) => {
+      if (event.button > 0) {
+        return;
+      }
+      showVariantDetail(button.dataset.variant, button);
+    });
+    button.addEventListener('click', () => showVariantDetail(button.dataset.variant, button));
   });
   app.querySelector('[data-action="back-title"]').addEventListener('click', returnToTitleFromOpponentSelect);
   mountSpriteRenderers(app.querySelectorAll('.sprite-canvas'));
+}
+
+async function showVariantDetail(variantId, sourceButton) {
+  if (isTransitioning || variantDetailMenu) {
+    return;
+  }
+
+  const variant = getComputerVariant(variantId);
+  const selectedRect = getElementRectInApp(sourceButton);
+  const selectedButton = renderVariantDetailSelectedButton(variant, selectedRect, sourceButton);
+  isTransitioning = true;
+  const curtain = await closeCurtainWipe(app, playCurtainCloseAudio);
+
+  if (screen !== 'opponent-select') {
+    selectedButton.remove();
+    curtain.remove();
+    isTransitioning = false;
+    return;
+  }
+
+  const overlay = renderVariantDetailOverlay(variant);
+  variantDetailMenu = { curtain, overlay, selectedButton };
+  isTransitioning = false;
+}
+
+function renderVariantDetailSelectedButton(variant, selectedRect, sourceButton) {
+  const selectedButton = document.createElement('div');
+  selectedButton.className = 'variant-detail-selected-button';
+  selectedButton.style.left = `${selectedRect.left}px`;
+  selectedButton.style.top = `${selectedRect.top}px`;
+  selectedButton.style.width = `${selectedRect.width}px`;
+  selectedButton.style.height = `${selectedRect.height}px`;
+  selectedButton.setAttribute('aria-hidden', 'true');
+  selectedButton.style.transform = window.getComputedStyle(sourceButton).transform;
+  selectedButton.innerHTML = `
+    <div
+      class="variant-detail-selected-button-inner"
+    >
+      <canvas
+        class="sprite-canvas variant-button-art"
+        data-doodle="${variant.buttonDoodle}"
+        data-frame-width="${VARIANT_BUTTON_FRAME_WIDTH}"
+        data-frame-height="${VARIANT_BUTTON_FRAME_HEIGHT}"
+        width="${VARIANT_BUTTON_FRAME_WIDTH}"
+        height="${VARIANT_BUTTON_FRAME_HEIGHT}"
+      ></canvas>
+    </div>
+  `;
+
+  app.append(selectedButton);
+  mountSpriteRenderers(app.querySelectorAll('.sprite-canvas'));
+  return selectedButton;
+}
+
+function renderVariantDetailOverlay(variant) {
+  const overlay = document.createElement('div');
+  overlay.className = `variant-detail-overlay variant-detail-${variant.id}`;
+  overlay.innerHTML = `
+
+    <div class="variant-detail-copy" role="dialog" aria-modal="true" aria-label="${escapeHtml(variant.name)} rules">
+      ${renderVariantDetailCopy(variant.id)}
+    </div>
+
+    <div class="variant-detail-actions">
+      <button class="variant-detail-action" data-action="variant-back" type="button" aria-label="Back">
+        <canvas
+          class="sprite-canvas variant-detail-action-art"
+          data-doodle="back_button"
+          data-frame-width="${TITLE_BUTTON_FRAME_WIDTH}"
+          data-frame-height="${TITLE_BUTTON_FRAME_HEIGHT}"
+          width="${TITLE_BUTTON_FRAME_WIDTH}"
+          height="${TITLE_BUTTON_FRAME_HEIGHT}"
+          aria-hidden="true"
+        ></canvas>
+      </button>
+      <button class="variant-detail-action" data-action="variant-play" type="button" aria-label="Play ${escapeHtml(variant.name)}">
+        <canvas
+          class="sprite-canvas variant-detail-action-art"
+          data-doodle="variant_play_button"
+          data-frame-width="${TITLE_BUTTON_FRAME_WIDTH}"
+          data-frame-height="${TITLE_BUTTON_FRAME_HEIGHT}"
+          width="${TITLE_BUTTON_FRAME_WIDTH}"
+          height="${TITLE_BUTTON_FRAME_HEIGHT}"
+          aria-hidden="true"
+        ></canvas>
+      </button>
+    </div>
+  `;
+
+  app.append(overlay);
+  overlay.querySelector('[data-action="variant-play"]').addEventListener('click', () => playSelectedVariant(variant.id));
+  overlay.querySelector('[data-action="variant-back"]').addEventListener('click', closeVariantDetail);
+  mountSpriteRenderers(app.querySelectorAll('.sprite-canvas'));
+  overlay.querySelector('[data-action="variant-play"]').focus();
+  return overlay;
+}
+
+function renderVariantDetailCopy(variantId) {
+  return (VARIANT_DETAIL_COPY[variantId] ?? [])
+    .map((line, index) => `<p class="${index === 0 ? 'lead' : ''}">${escapeHtml(line)}</p>`)
+    .join('');
+}
+
+function getElementRectInApp(element) {
+  const appRect = app.getBoundingClientRect();
+  const rect = element.getBoundingClientRect();
+  const scale = appRect.width / FRAME_WIDTH || 1;
+
+  return {
+    left: (rect.left - appRect.left) / scale,
+    top: (rect.top - appRect.top) / scale,
+    width: rect.width / scale,
+    height: rect.height / scale,
+  };
+}
+
+function getComputerVariant(variantId) {
+  return COMPUTER_VARIANTS.find((variant) => variant.id === variantId) ?? COMPUTER_VARIANTS[0];
 }
 
 function renderOpenCurtainBorder() {
@@ -3262,6 +3423,22 @@ async function returnToTitleFromOpponentSelect() {
   render();
 }
 
+async function closeVariantDetail() {
+  const menu = variantDetailMenu;
+
+  if (!menu || isTransitioning) {
+    return;
+  }
+
+  variantDetailMenu = null;
+  isTransitioning = true;
+  menu.overlay.remove();
+  await openCurtainWipe(menu.curtain, playCurtainOpenAudio);
+  menu.selectedButton.remove();
+  mountSpriteRenderers(app.querySelectorAll('.sprite-canvas'));
+  isTransitioning = false;
+}
+
 async function startTutorialFromTitle() {
   if (isTransitioning) {
     return;
@@ -3329,6 +3506,34 @@ async function startLocalGame(variantId) {
   resetRoundWins();
   isTransitioning = true;
   await playWipeTransition(setNewRound);
+  isTransitioning = false;
+  render();
+  beginOpeningCues();
+}
+
+async function playSelectedVariant(variantId) {
+  const menu = variantDetailMenu;
+
+  if (!menu || isTransitioning) {
+    return;
+  }
+
+  variantDetailMenu = null;
+  isTransitioning = true;
+  menu.overlay.remove();
+  menu.selectedButton.remove();
+  selectedOpponentId = DEFAULT_OPPONENT_ID;
+  selectedVariantId = COMPUTER_VARIANT_IDS.includes(variantId) ? variantId : DEFAULT_VARIANT_ID;
+  await setActiveGameLayoutForVariant(selectedVariantId);
+  playMode = 'local';
+  clearLocalTurnChoice();
+  requestMusicTrack('game');
+  unlockSceneAudio();
+  resetRoundWins();
+  setNewRound();
+  render();
+  app.append(menu.curtain);
+  await openCurtainWipe(menu.curtain, playCurtainOpenAudio);
   isTransitioning = false;
   render();
   beginOpeningCues();
