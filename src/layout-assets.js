@@ -48,6 +48,7 @@ const VARIANT_SCENES = {
     "reload-draw",
     "reload-duck",
     "shoot-draw",
+    "shoot-duck",
     "shoot-kill",
     "stab-draw",
     "stab-kill",

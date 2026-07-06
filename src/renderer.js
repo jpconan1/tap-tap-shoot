@@ -87,6 +87,7 @@ const SHOOT_STAB_DUCK_DOODLES = Object.freeze([
   'shoot-stab-duck/reload-draw',
   'shoot-stab-duck/reload-duck',
   'shoot-stab-duck/shoot-draw',
+  'shoot-stab-duck/shoot-duck',
   'shoot-stab-duck/shoot-kill',
   'shoot-stab-duck/stab-draw',
   'shoot-stab-duck/stab-kill',
@@ -106,6 +107,8 @@ const SHOOT_STAB_DUCK_SPLIT_DOODLES = Object.freeze([
   'shoot-stab-duck/split_scenes/duck-draw_p2_is_ready',
   'shoot-stab-duck/split_scenes/reload-duck_reloader_is_ready',
   'shoot-stab-duck/split_scenes/reload-duck_ducker_is_ready',
+  'shoot-stab-duck/split_scenes/shoot-duck_shooter_is_ready',
+  'shoot-stab-duck/split_scenes/shoot-duck_ducker_is_ready',
   'shoot-stab-duck/split_scenes/stab-reload_stabber_is_ready',
   'shoot-stab-duck/split_scenes/stab-reload_reloader_is_ready',
 ]);
@@ -293,6 +296,14 @@ function getShootStabDuckStagePresentation(result, p1Move, p2Move) {
       kind: 'doodle',
       name: 'shoot-stab-duck/reload-duck',
       flip: p1Move === 'duck',
+    };
+  }
+
+  if ((p1Move === 'shoot' && p2Move === 'duck') || (p1Move === 'duck' && p2Move === 'shoot')) {
+    return {
+      kind: 'doodle',
+      name: 'shoot-stab-duck/shoot-duck',
+      flip: p2Move === 'shoot',
     };
   }
 

@@ -19,6 +19,7 @@ const SCENE_AUDIO = Object.freeze({
   'shoot-stab-duck/reload-draw': 'reload.mp3',
   'shoot-stab-duck/reload-duck': 'reload.mp3',
   'shoot-stab-duck/shoot-draw': 'collision.mp3',
+  'shoot-stab-duck/shoot-duck': 'wiff.mp3',
   'shoot-stab-duck/shoot-kill': 'gunshot.mp3',
   'shoot-stab-duck/stab-draw': 'clash.mp3',
   'shoot-stab-duck/stab-kill': 'stab.mp3',

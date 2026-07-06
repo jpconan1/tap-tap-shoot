@@ -2003,15 +2003,7 @@ function renderOnlineNameScreen() {
 
   app.innerHTML = `
     <section class="title-screen online-name-screen" aria-label="Online name">
-      <canvas
-        class="sprite-canvas title-logo"
-        data-doodle="title/LOGO"
-        data-frame-width="${TITLE_LOGO_FRAME_WIDTH}"
-        data-frame-height="${TITLE_LOGO_FRAME_HEIGHT}"
-        width="${TITLE_LOGO_FRAME_WIDTH}"
-        height="${TITLE_LOGO_FRAME_HEIGHT}"
-        aria-label="Super Rock Paper Scissors Online"
-      ></canvas>
+      ${renderOpenCurtainBorder()}
 
       <form class="online-name-form">
         <label class="online-name-label" for="online-name-input">Name</label>
@@ -3033,6 +3025,15 @@ function getShootStabDuckReadySplitPresentation(scene, readyPlayerId) {
     };
   }
 
+  if (sceneName === 'shoot-duck') {
+    const isShooterReady = lastMoves[readyPlayerId] === 'shoot';
+    return {
+      kind: 'doodle',
+      name: `shoot-stab-duck/split_scenes/shoot-duck_${isShooterReady ? 'shooter' : 'ducker'}_is_ready`,
+      flip: lastMoves.p2 === 'shoot',
+    };
+  }
+
   if (sceneName === 'stab-reload') {
     const isStabberReady = lastMoves[readyPlayerId] === 'stab';
     return {
@@ -3548,36 +3549,46 @@ function getCurrentLegalMoves() {
   return rankedSnapshot.players[rankedSnapshot.playerKey].legalMoves;
 }
 
-function startRankedFromTitle() {
+async function startRankedFromTitle() {
   if (isTransitioning) {
     return;
   }
 
-  playMode = 'online';
-  selectedVariantId = DEFAULT_VARIANT_ID;
-  setCachedActiveGameLayoutForVariant(DEFAULT_VARIANT_ID);
-  clearLocalTurnChoice();
-  screen = 'online-name';
-  p1QueuedMove = null;
-  rankedSnapshot = null;
-  pendingRankedSnapshot = null;
-  rankedReadyWaiting = null;
-  rankedRoundAudioKey = null;
+  isTransitioning = true;
+  await playCurtainMenuTransition(() => {
+    playMode = 'online';
+    selectedVariantId = DEFAULT_VARIANT_ID;
+    setCachedActiveGameLayoutForVariant(DEFAULT_VARIANT_ID);
+    clearLocalTurnChoice();
+    screen = 'online-name';
+    p1QueuedMove = null;
+    rankedSnapshot = null;
+    pendingRankedSnapshot = null;
+    rankedReadyWaiting = null;
+    rankedRoundAudioKey = null;
+    render();
+  });
+  isTransitioning = false;
   render();
 }
 
-function returnToTitleFromOnlineName() {
+async function returnToTitleFromOnlineName() {
   if (isTransitioning) {
     return;
   }
 
-  stopOnlineStatusPolling();
-  screen = 'title';
-  p1QueuedMove = null;
-  rankedSnapshot = null;
-  pendingRankedSnapshot = null;
-  rankedReadyWaiting = null;
-  rankedRoundAudioKey = null;
+  isTransitioning = true;
+  await playCurtainMenuTransition(() => {
+    stopOnlineStatusPolling();
+    screen = 'title';
+    p1QueuedMove = null;
+    rankedSnapshot = null;
+    pendingRankedSnapshot = null;
+    rankedReadyWaiting = null;
+    rankedRoundAudioKey = null;
+    render();
+  });
+  isTransitioning = false;
   render();
 }
 

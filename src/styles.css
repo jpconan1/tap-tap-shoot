@@ -303,9 +303,10 @@ button {
   display: grid;
   place-items: center;
   align-content: center;
-  gap: 10px;
+  gap: 0;
   height: 100%;
-  padding-bottom: 20px;
+  padding-top: 8px;
+  padding-bottom: 0;
 }
 
 .opponent-select-screen {
@@ -324,8 +325,8 @@ button {
 
 .title-logo {
   display: block;
-  width: 430px;
-  height: 309px;
+  width: 398px;
+  height: 286px;
   min-height: 0;
   object-fit: contain;
   image-rendering: auto;
@@ -353,7 +354,7 @@ button {
   gap: 24px;
   align-items: center;
   justify-content: center;
-  margin-top: 16px;
+  margin-top: 8px;
 }
 
 .title-audio-actions {
@@ -361,7 +362,7 @@ button {
   gap: 18px;
   align-items: center;
   justify-content: center;
-  margin-top: 4px;
+  margin-top: 0;
 }
 
 .title-audio-button {

@@ -5,6 +5,7 @@ import { createRoundState, getPlayerLegalMoves, playTurn } from '../src/engine/g
 import { MAX_BULLETS, MOVE_IDS, VARIANT_IDS, getLegalMoves, getVariantMoveIds } from '../src/engine/moves.js';
 import { RIVALS, chooseRivalMove } from '../src/engine/rivalAi.js';
 import { resolveTurn } from '../src/engine/resolveTurn.js';
+import { getVariantStagePresentation } from '../src/renderer.js';
 
 test('reload grants bullets and ties with defense', () => {
   const result = resolveTurn({ p1Move: 'reload', p2Move: 'duck', p1Bullets: 0, p2Bullets: 1 });
@@ -101,6 +102,32 @@ test('shoot stab duck uses four button moves', () => {
   });
   assert.equal(result.ok, false);
   assert.deepEqual(result.errors, ['p1 picked unknown move: counterstab']);
+});
+
+test('shoot stab duck shows shoot-duck dodge scene', () => {
+  const p1Shoots = getVariantStagePresentation(
+    { p1Hit: null, p2Hit: null },
+    'shoot',
+    'duck',
+    { variantId: VARIANT_IDS.shootStabDuck },
+  );
+  assert.deepEqual(p1Shoots, {
+    kind: 'doodle',
+    name: 'shoot-stab-duck/shoot-duck',
+    flip: false,
+  });
+
+  const p2Shoots = getVariantStagePresentation(
+    { p1Hit: null, p2Hit: null },
+    'duck',
+    'shoot',
+    { variantId: VARIANT_IDS.shootStabDuck },
+  );
+  assert.deepEqual(p2Shoots, {
+    kind: 'doodle',
+    name: 'shoot-stab-duck/shoot-duck',
+    flip: true,
+  });
 });
 
 test('rock paper scissors has no resource and resolves classic wins', () => {
