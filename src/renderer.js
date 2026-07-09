@@ -170,6 +170,14 @@ const curtainBoilStops = new WeakMap();
 let rendererPauseStartedAt = null;
 let rendererPausedDuration = 0;
 
+function getSharpContext(canvas) {
+  const context = canvas.getContext('2d');
+  if (context) {
+    context.imageSmoothingEnabled = false;
+  }
+  return context;
+}
+
 export function preloadDoodleSheets(doodles) {
   return Promise.all([...new Set(doodles)].map((doodle) => ensureImageLoaded(loadDoodleSheet(doodle))));
 }
@@ -387,7 +395,7 @@ export function getVariantSuperAnimation(result, { variantId = '', resourceMax =
 export function mountSpriteRenderers(canvases) {
   doodleRenderers = [...canvases].map((canvas) => ({
     canvas,
-    context: canvas.getContext('2d'),
+    context: getSharpContext(canvas),
     image: loadSpriteSheet(canvas),
     frameWidth: Number(canvas.dataset.frameWidth) || DOODLE_FRAME_WIDTH,
     frameHeight: Number(canvas.dataset.frameHeight) || DOODLE_FRAME_HEIGHT,
@@ -487,7 +495,7 @@ function ensureImageLoaded(image) {
 }
 
 async function startReadyWaitingLoop(canvas) {
-  const context = canvas.getContext('2d');
+  const context = getSharpContext(canvas);
   await preloadReadyWaiting();
 
   const startedAt = getRendererNow(performance.now());
@@ -560,7 +568,7 @@ function drawReadyWaitingStep(canvas, context, layers, now) {
 }
 
 async function startWaitingDotsLoop(canvas) {
-  const context = canvas.getContext('2d');
+  const context = getSharpContext(canvas);
   await preloadReadyWaiting();
 
   const startedAt = getRendererNow(performance.now());
@@ -609,7 +617,7 @@ function drawWaitingDotsStep(canvas, context, elapsed, now) {
 }
 
 async function startCountdownLoop(canvas) {
-  const context = canvas.getContext('2d');
+  const context = getSharpContext(canvas);
   await preloadReadyWaiting();
 
   const startedAt = getRendererNow(performance.now());
@@ -774,7 +782,7 @@ function drawWipeStep(canvas, layers, now) {
     return;
   }
 
-  const context = canvas.getContext('2d');
+  const context = getSharpContext(canvas);
   const frame = getBoilFrame(now);
 
   context.clearRect(0, 0, canvas.width, canvas.height);
@@ -801,7 +809,7 @@ function drawWipeStep(canvas, layers, now) {
 }
 
 function drawCurtainStep(canvas, step, now) {
-  const context = canvas.getContext('2d');
+  const context = getSharpContext(canvas);
   const image = loadDoodleSheet(`curtains/${step}`);
   const frame = getBoilFrame(now);
 

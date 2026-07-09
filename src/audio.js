@@ -15,6 +15,30 @@ const SCENE_AUDIO = Object.freeze({
   dodge: 'wiff.mp3',
   reloading: 'reload.mp3',
   tricky: 'reload.mp3',
+  'rock-paper-scissors/rps-standoff': 'nothing.mp3',
+  'rock-paper-scissors/rock-draw': 'collision.mp3',
+  'rock-paper-scissors/paper-draw': 'collision.mp3',
+  'rock-paper-scissors/scissors-tie': 'clash.mp3',
+  'rock-paper-scissors/rock-scissors': 'clash.mp3',
+  'rock-paper-scissors/paper-rock': 'collision.mp3',
+  'rock-paper-scissors/scissors-paper': 'wiff.mp3',
+  'charge-block-fireball/cbf-standoff': 'nothing.mp3',
+  'charge-block-fireball/block-draw': 'clash.mp3',
+  'charge-block-fireball/block-charge': 'clash.mp3',
+  'charge-block-fireball/block-fireball': 'collision.mp3',
+  'charge-block-fireball/both-charge': 'reload.mp3',
+  'charge-block-fireball/charge-fireball': 'gunshot.mp3',
+  'charge-block-fireball/fireball-draw': 'gunshot.mp3',
+  'charge-block-fireball/super-blasting': 'gunshot.mp3',
+  'punch-stab-shoot/pss-standoff': 'nothing.mp3',
+  'punch-stab-shoot/punch-draw': 'collision.mp3',
+  'punch-stab-shoot/punch-shoot-damage': 'collision.mp3',
+  'punch-stab-shoot/punch-shoot-kill': 'collision.mp3',
+  'punch-stab-shoot/shoot-draw': 'gunshot.mp3',
+  'punch-stab-shoot/shoot-stab': 'gunshot.mp3',
+  'punch-stab-shoot/stab-draw': 'clash.mp3',
+  'punch-stab-shoot/stab-punch-damage': 'stab.mp3',
+  'punch-stab-shoot/stab-punch-kill': 'stab.mp3',
   'shoot-stab-duck/standoff-ssd': 'nothing.mp3',
   'shoot-stab-duck/reload-draw': 'reload.mp3',
   'shoot-stab-duck/reload-duck': 'reload.mp3',
@@ -25,6 +49,16 @@ const SCENE_AUDIO = Object.freeze({
   'shoot-stab-duck/stab-kill': 'stab.mp3',
   'shoot-stab-duck/stab-reload': 'nothing.mp3',
   'shoot-stab-duck/duck-draw': 'wiff.mp3',
+  'tap-tap-shoot/standoff-tts': 'nothing.mp3',
+  'tap-tap-shoot/defense-draw': 'wiff.mp3',
+  'tap-tap-shoot/reload-draw': 'reload.mp3',
+  'tap-tap-shoot/reload-duck': 'reload.mp3',
+  'tap-tap-shoot/shoot-draw': 'collision.mp3',
+  'tap-tap-shoot/shoot-duck': 'wiff.mp3',
+  'tap-tap-shoot/shoot-kill': 'gunshot.mp3',
+  'tap-tap-shoot/stab-counterstab': 'counterstab.mp3',
+  'tap-tap-shoot/stab-draw': 'clash.mp3',
+  'tap-tap-shoot/stab-kill': 'stab.mp3',
 });
 const MUSIC_TRACKS = Object.freeze({
   title: 'title_loop.mp3',
@@ -42,6 +76,7 @@ const sceneAudioBuffers = new Map();
 const sceneAudioLoadPromises = new Map();
 let sceneAudioContext = null;
 let sceneAudioUnlockPromise = null;
+let didWarnMissingAudioContext = false;
 let desiredMusicTrack = null;
 let queuedMusicTrack = null;
 let queuedMusicSegment = null;
@@ -54,6 +89,8 @@ let lastStageAudioKey = null;
 let getMusicTopperFile = () => null;
 let soundEnabled = false;
 let musicEnabled = false;
+let musicVolume = 1;
+let sfxVolume = 1;
 
 export function configureAudio(options) {
   getMusicTopperFile = options.getMusicTopperFile;
@@ -83,12 +120,34 @@ export function setMusicEnabled(isEnabled, trackId = null) {
   syncMusicTrack();
 }
 
+export function setMusicVolume(volume) {
+  musicVolume = normalizeVolume(volume);
+
+  if (htmlMusicAudio) {
+    htmlMusicAudio.volume = musicVolume;
+  }
+
+  if (currentMusicSegment?.gain) {
+    currentMusicSegment.gain.gain.value = musicVolume;
+  }
+
+  musicTopperSegments.forEach((segment) => {
+    if (segment.gain) {
+      segment.gain.gain.value = musicVolume;
+    }
+  });
+}
+
+export function setSfxVolume(volume) {
+  sfxVolume = normalizeVolume(volume);
+}
+
 export function resetStageAudioKey() {
   lastStageAudioKey = null;
 }
 
 export function installAudioUnlockListeners() {
-  const options = { capture: true, once: true };
+  const options = { capture: true };
   const unlock = () => unlockSceneAudio();
 
   window.addEventListener('pointerdown', unlock, options);
@@ -111,6 +170,7 @@ export function requestMusicTrack(trackId) {
   const context = getSceneAudioContext();
 
   if (!context) {
+    warnMissingAudioContext();
     return;
   }
 
@@ -131,6 +191,7 @@ export function queueMusicTrackOnce(trackId, returnTrackId) {
   const context = getSceneAudioContext();
 
   if (!context) {
+    warnMissingAudioContext();
     return;
   }
 
@@ -240,7 +301,7 @@ export function interruptMusicFileOnce(fileName, returnTrackId = desiredMusicTra
 
     const audio = getSceneAudio(fileName);
     audio.muted = false;
-    audio.volume = 1;
+    audio.volume = musicVolume;
     audio.currentTime = 0;
     audio.onended = () => {
       if (returnTrackId) {
@@ -339,13 +400,13 @@ export function playOneShotAudio(fileName) {
   const buffer = sceneAudioBuffers.get(fileName);
 
   if (buffer) {
-    startSceneAudioBuffer(context, buffer);
+    startSceneAudioBuffer(context, buffer, fileName);
     return;
   }
 
   loadSceneAudioBuffer(fileName).then((loadedBuffer) => {
     if (loadedBuffer) {
-      startSceneAudioBuffer(context, loadedBuffer);
+      startSceneAudioBuffer(context, loadedBuffer, fileName);
       return;
     }
 
@@ -366,14 +427,13 @@ export function unlockSceneAudio() {
     return Promise.resolve();
   }
 
-  if (sceneAudioUnlockPromise) {
+  if (sceneAudioUnlockPromise && sceneAudioContext?.state === 'running') {
     return sceneAudioUnlockPromise;
   }
 
   const context = getSceneAudioContext();
-  const audioFiles = getAudioFiles();
-
   if (!context) {
+    const audioFiles = getAudioFiles();
     audioFiles.forEach((fileName) => getSceneAudio(fileName).load());
     sceneAudioUnlockPromise = Promise.resolve();
     return sceneAudioUnlockPromise;
@@ -385,14 +445,18 @@ export function unlockSceneAudio() {
     })
     .then(() => musicEnabled && desiredMusicTrack ? loadSceneAudioBuffer(MUSIC_TRACKS[desiredMusicTrack]) : null)
     .then(() => syncMusicTrack())
-    .then(() => Promise.all(audioFiles.map((fileName) => loadSceneAudioBuffer(fileName))))
-    .then(() => syncMusicTrack())
+    .then(() => preloadSceneAudioInBackground())
     .then(() => undefined)
     .finally(() => {
       sceneAudioUnlockPromise = null;
     });
 
   return sceneAudioUnlockPromise;
+}
+
+function preloadSceneAudioInBackground() {
+  Promise.allSettled(getAudioFiles().map((fileName) => loadSceneAudioBuffer(fileName)))
+    .then(() => syncMusicTrack());
 }
 
 export function preloadSceneAudio() {
@@ -450,19 +514,22 @@ function startMusicFileSegment(fileName, startAt, resumeSegment) {
   }
 
   const source = context.createBufferSource();
+  const gain = createVolumeGain(context, musicVolume);
   const safeStartAt = Math.max(startAt, context.currentTime + 0.005);
   const segment = {
     trackId: null,
     returnTrackId: null,
     resumeSegment,
     source,
+    gain,
     startTime: safeStartAt,
     offset: 0,
     endTime: safeStartAt + buffer.duration,
   };
 
   source.buffer = buffer;
-  source.connect(context.destination);
+  source.connect(gain);
+  gain.connect(context.destination);
   source.onended = () => {
     if (currentMusicSegment?.source === source) {
       const nextResumeSegment = currentMusicSegment.resumeSegment;
@@ -558,19 +625,22 @@ function startMusicSegment(trackId, startAt, returnTrackId, offset = 0) {
   }
 
   const source = context.createBufferSource();
+  const gain = createVolumeGain(context, musicVolume);
   const safeStartAt = Math.max(startAt, context.currentTime + 0.005);
   const safeOffset = normalizeAudioOffset(offset, buffer.duration);
   const segment = {
     trackId,
     returnTrackId,
     source,
+    gain,
     startTime: safeStartAt,
     offset: safeOffset,
     endTime: safeStartAt + buffer.duration - safeOffset,
   };
 
   source.buffer = buffer;
-  source.connect(context.destination);
+  source.connect(gain);
+  gain.connect(context.destination);
   source.onended = () => {
     if (currentMusicSegment?.source === source) {
       currentMusicSegment = null;
@@ -656,15 +726,18 @@ function syncMusicTopperForSegment(segment, startAt, offset = 0) {
   }
 
   const source = context.createBufferSource();
+  const gain = createVolumeGain(context, musicVolume);
   const safeOffset = normalizeAudioOffset(offset, buffer.duration);
   const topperSegment = {
     source,
+    gain,
     baseSource: segment.source,
     fileName,
   };
 
   source.buffer = buffer;
-  source.connect(context.destination);
+  source.connect(gain);
+  gain.connect(context.destination);
   source.onended = () => {
     forgetMusicTopperSegment(topperSegment);
   };
@@ -772,7 +845,7 @@ function startHtmlMusicTrack(trackId, returnTrackId) {
   htmlMusicTrack = trackId;
   htmlMusicAudio.loop = false;
   htmlMusicAudio.muted = false;
-  htmlMusicAudio.volume = 1;
+  htmlMusicAudio.volume = musicVolume;
   htmlMusicAudio.currentTime = 0;
   htmlMusicAudio.onended = () => {
     const nextTrack = returnTrackId ?? queuedMusicTrack ?? desiredMusicTrack;
@@ -798,13 +871,13 @@ function playSceneAudio(fileName, audioKey) {
   const buffer = sceneAudioBuffers.get(fileName);
 
   if (buffer) {
-    playSceneAudioBuffer(buffer, audioKey);
+    playSceneAudioBuffer(buffer, audioKey, fileName);
     return;
   }
 
   loadSceneAudioBuffer(fileName).then((loadedBuffer) => {
     if (loadedBuffer) {
-      playSceneAudioBuffer(loadedBuffer, audioKey);
+      playSceneAudioBuffer(loadedBuffer, audioKey, fileName);
       return;
     }
 
@@ -817,7 +890,7 @@ function playSceneAudio(fileName, audioKey) {
 function playSceneHtmlAudio(fileName) {
   const audio = getSceneAudio(fileName);
   audio.muted = false;
-  audio.volume = 1;
+  audio.volume = sfxVolume;
   audio.currentTime = 0;
   audio.play().catch((error) => {
     console.warn(`Could not play scene audio: ${fileName}`, error);
@@ -852,7 +925,21 @@ function getSceneAudioContext() {
   }
 
   sceneAudioContext = new AudioContextClass();
+  sceneAudioContext.addEventListener?.('statechange', () => {
+    if (sceneAudioContext?.state === 'running') {
+      syncMusicTrack();
+    }
+  });
   return sceneAudioContext;
+}
+
+function warnMissingAudioContext() {
+  if (didWarnMissingAudioContext) {
+    return;
+  }
+
+  didWarnMissingAudioContext = true;
+  console.warn('WebAudio is unavailable in this browser context. Music loops and layered audio cannot play.');
 }
 
 function getExistingSceneAudioContext() {
@@ -878,13 +965,18 @@ function loadSceneAudioBuffer(fileName) {
 
       return response.arrayBuffer();
     })
-    .then((arrayBuffer) => context.decodeAudioData(arrayBuffer))
+    .then((arrayBuffer) => decodeAudioData(context, arrayBuffer))
     .then((buffer) => {
+      if (!buffer) {
+        throw new Error('No decoded audio buffer');
+      }
+
       sceneAudioBuffers.set(fileName, buffer);
       return buffer;
     })
     .catch((error) => {
       console.warn(`Could not load WebAudio scene audio: ${fileName}`, error);
+      sceneAudioLoadPromises.delete(fileName);
       return null;
     });
 
@@ -892,7 +984,23 @@ function loadSceneAudioBuffer(fileName) {
   return promise;
 }
 
-function playSceneAudioBuffer(buffer, audioKey) {
+function decodeAudioData(context, arrayBuffer) {
+  if (context.decodeAudioData.length > 1) {
+    return new Promise((resolve, reject) => {
+      context.decodeAudioData(arrayBuffer, resolve, reject);
+    });
+  }
+
+  const decodeResult = context.decodeAudioData(arrayBuffer);
+
+  if (decodeResult?.then) {
+    return decodeResult;
+  }
+
+  return Promise.resolve(decodeResult);
+}
+
+function playSceneAudioBuffer(buffer, audioKey, fallbackFileName = null) {
   const context = getSceneAudioContext();
 
   if (!context || audioKey !== lastStageAudioKey) {
@@ -903,36 +1011,70 @@ function playSceneAudioBuffer(buffer, audioKey) {
     context.resume()
       .then(() => {
         if (audioKey === lastStageAudioKey && context.state === 'running') {
-          startSceneAudioBuffer(context, buffer);
+          startSceneAudioBuffer(context, buffer, fallbackFileName);
+          return;
+        }
+
+        if (audioKey === lastStageAudioKey && fallbackFileName) {
+          playSceneHtmlAudio(fallbackFileName);
         }
       })
       .catch((error) => {
         console.warn('Could not resume scene audio context', error);
+        if (audioKey === lastStageAudioKey && fallbackFileName) {
+          playSceneHtmlAudio(fallbackFileName);
+        }
       });
     return;
   }
 
-  startSceneAudioBuffer(context, buffer);
+  startSceneAudioBuffer(context, buffer, fallbackFileName);
 }
 
-function startSceneAudioBuffer(context, buffer) {
+function startSceneAudioBuffer(context, buffer, fallbackFileName = null) {
   if (context.state !== 'running') {
     context.resume()
       .then(() => {
         if (context.state === 'running') {
-          startSceneAudioBuffer(context, buffer);
+          startSceneAudioBuffer(context, buffer, fallbackFileName);
+          return;
+        }
+
+        if (fallbackFileName) {
+          playSceneHtmlAudio(fallbackFileName);
         }
       })
       .catch((error) => {
         console.warn('Could not resume scene audio context', error);
+        if (fallbackFileName) {
+          playSceneHtmlAudio(fallbackFileName);
+        }
       });
     return;
   }
 
   const source = context.createBufferSource();
+  const gain = createVolumeGain(context, sfxVolume);
   source.buffer = buffer;
-  source.connect(context.destination);
+  source.connect(gain);
+  gain.connect(context.destination);
   source.start();
+}
+
+function createVolumeGain(context, volume) {
+  const gain = context.createGain();
+  gain.gain.value = normalizeVolume(volume);
+  return gain;
+}
+
+function normalizeVolume(volume) {
+  const numericVolume = Number(volume);
+
+  if (!Number.isFinite(numericVolume)) {
+    return 1;
+  }
+
+  return Math.max(0, Math.min(1, numericVolume));
 }
 
 function getSceneAudio(fileName) {

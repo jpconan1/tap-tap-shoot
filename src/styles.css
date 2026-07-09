@@ -62,6 +62,10 @@ button {
   font: inherit;
 }
 
+canvas {
+  image-rendering: pixelated;
+}
+
 .text-link {
   padding: 0;
   border: 0;
@@ -179,7 +183,6 @@ button {
   left: 0;
   width: 512px;
   height: 256px;
-  image-rendering: auto;
   filter: drop-shadow(3px 6px 0 rgba(29, 27, 24, 0.1));
 }
 
@@ -329,7 +332,7 @@ button {
   height: 286px;
   min-height: 0;
   object-fit: contain;
-  image-rendering: auto;
+  image-rendering: pixelated;
   filter: drop-shadow(3px 6px 0 rgba(29, 27, 24, 0.1));
 }
 
@@ -343,7 +346,7 @@ button {
   height: 186px;
   min-height: 0;
   object-fit: contain;
-  image-rendering: auto;
+  image-rendering: pixelated;
   filter: drop-shadow(3px 6px 0 rgba(29, 27, 24, 0.1));
   transform: rotate(-0.3deg);
 }
@@ -362,7 +365,7 @@ button {
   gap: 18px;
   align-items: center;
   justify-content: center;
-  margin-top: 0;
+  margin-top: 10px;
 }
 
 .title-audio-button {
@@ -385,7 +388,7 @@ button {
   width: 100%;
   height: 100%;
   object-fit: contain;
-  image-rendering: auto;
+  image-rendering: pixelated;
   filter: drop-shadow(2px 4px 0 rgba(29, 27, 24, 0.12));
 }
 
@@ -398,6 +401,38 @@ button {
 .title-audio-button:nth-child(2):hover,
 .title-audio-button:nth-child(2):focus-visible {
   transform: rotate(0.45deg) translateY(-2px);
+}
+
+.title-volume-slider {
+  display: block;
+  width: 170px;
+  height: 85px;
+  cursor: ew-resize;
+  image-rendering: pixelated;
+  touch-action: none;
+  filter: drop-shadow(2px 4px 0 rgba(29, 27, 24, 0.12));
+  opacity: 1;
+  transform: rotate(0.25deg);
+  transition: opacity 120ms ease, transform 120ms ease;
+}
+
+.title-volume-slider.is-muted {
+  opacity: 0.42;
+}
+
+.title-volume-slider:nth-child(3) {
+  transform: rotate(-0.28deg);
+}
+
+.title-volume-slider:hover,
+.title-volume-slider:focus-visible {
+  outline: 0;
+  transform: rotate(0.25deg) translateY(-2px);
+}
+
+.title-volume-slider:nth-child(3):hover,
+.title-volume-slider:nth-child(3):focus-visible {
+  transform: rotate(-0.28deg) translateY(-2px);
 }
 
 .online-name-form {
@@ -556,7 +591,7 @@ button {
   height: 128px;
   min-height: 0;
   object-fit: contain;
-  image-rendering: auto;
+  image-rendering: pixelated;
   filter: drop-shadow(3px 6px 0 rgba(29, 27, 24, 0.1));
 }
 
@@ -603,15 +638,19 @@ button {
 
 .variant-detail-copy p {
   margin: 0;
-  font-size: 25px;
+  font-size: 22px;
   line-height: 1.05;
 }
 
 .variant-detail-copy .lead {
   margin-bottom: 5px;
-  color: var(--red);
+  color: var(--ink);
   font-size: 30px;
   line-height: 0.98;
+}
+
+.variant-detail-copy .lead-sentence {
+  color: #AC3235;
 }
 
 .variant-detail-actions {
@@ -656,22 +695,23 @@ button {
   height: 96px;
   min-height: 0;
   object-fit: contain;
-  image-rendering: auto;
+  image-rendering: pixelated;
   filter: drop-shadow(3px 6px 0 rgba(29, 27, 24, 0.1));
 }
 
-.variant-detail-chargeBlockFireball .variant-detail-copy,
-.variant-detail-punchStabShoot .variant-detail-copy {
+.variant-detail-slot-1 .variant-detail-copy,
+.variant-detail-slot-4 .variant-detail-copy {
   top: 82px;
   right: 70px;
 }
 
-.variant-detail-shootStabDuck .variant-detail-copy {
+.variant-detail-slot-3 .variant-detail-copy,
+.variant-detail-slot-6 .variant-detail-copy {
   top: 82px;
   left: 70px;
 }
 
-.variant-detail-rps .variant-detail-copy {
+.variant-detail-slot-2 .variant-detail-copy {
   top: 28px;
   left: 50%;
   width: 620px;
@@ -681,15 +721,15 @@ button {
   transform: translateX(-50%) rotate(-0.25deg);
 }
 
-.variant-detail-rps .variant-detail-copy p {
-  font-size: 24px;
+.variant-detail-slot-2 .variant-detail-copy p {
+  font-size: 21px;
 }
 
-.variant-detail-rps .variant-detail-copy .lead {
+.variant-detail-slot-2 .variant-detail-copy .lead {
   font-size: 28px;
 }
 
-.variant-detail-tapTapShoot .variant-detail-copy {
+.variant-detail-slot-5 .variant-detail-copy {
   top: 26px;
   left: 50%;
   width: 610px;
@@ -697,12 +737,58 @@ button {
   transform: translateX(-50%) rotate(-0.35deg);
 }
 
-.variant-detail-tapTapShoot .variant-detail-copy p {
-  font-size: 23px;
+.variant-detail-slot-5 .variant-detail-copy p {
+  font-size: 20px;
 }
 
-.variant-detail-tapTapShoot .variant-detail-copy .lead {
+.variant-detail-slot-5 .variant-detail-copy .lead {
   font-size: 28px;
+}
+
+.variant-page-controls {
+  position: absolute;
+  right: 70px;
+  bottom: 32px;
+  z-index: 5;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.variant-page-button {
+  display: block;
+  width: 128px;
+  height: 64px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  transform: rotate(-0.25deg);
+  transition: transform 120ms ease, filter 120ms ease;
+}
+
+.variant-page-button:nth-child(2) {
+  transform: rotate(0.25deg);
+}
+
+.variant-page-button:hover,
+.variant-page-button:focus-visible {
+  outline: 0;
+  transform: translateY(-3px) rotate(0deg);
+}
+
+.variant-page-button:active {
+  transform: translateY(3px) rotate(0.2deg);
+}
+
+.variant-page-button-art {
+  display: block;
+  width: 128px;
+  height: 64px;
+  min-height: 0;
+  object-fit: contain;
+  image-rendering: pixelated;
+  filter: drop-shadow(3px 6px 0 rgba(29, 27, 24, 0.1));
 }
 
 .crossed-opponent-mark {
@@ -713,7 +799,7 @@ button {
   height: 128px;
   min-height: 0;
   object-fit: contain;
-  image-rendering: auto;
+  image-rendering: pixelated;
   pointer-events: none;
   filter: drop-shadow(2px 4px 0 rgba(29, 27, 24, 0.08));
 }
@@ -762,7 +848,6 @@ button {
   height: 256px;
   min-height: 0;
   object-fit: contain;
-  image-rendering: auto;
   filter: drop-shadow(2px 4px 0 rgba(29, 27, 24, 0.08));
 }
 
@@ -779,7 +864,7 @@ button {
   width: 300px;
   height: 256px;
   min-height: 0;
-  image-rendering: auto;
+  image-rendering: pixelated;
   pointer-events: none;
   transform: rotate(0.35deg);
   transform-origin: center;
@@ -804,7 +889,7 @@ button {
   width: 300px;
   height: 256px;
   min-height: 0;
-  image-rendering: auto;
+  image-rendering: pixelated;
   pointer-events: none;
   transform: rotate(0.35deg);
   transform-origin: center;
@@ -829,7 +914,7 @@ button {
   width: 135px;
   height: 55px;
   min-height: 0;
-  image-rendering: auto;
+  image-rendering: pixelated;
   pointer-events: none;
   transform: rotate(0.35deg) scale(0.5);
   transform-origin: top left;
@@ -962,7 +1047,7 @@ button {
   min-height: 0;
   object-fit: contain;
   filter: none;
-  image-rendering: auto;
+  image-rendering: pixelated;
 }
 
 .pick-history {
@@ -991,7 +1076,7 @@ button {
   display: block;
   min-height: 0;
   object-fit: contain;
-  image-rendering: auto;
+  image-rendering: pixelated;
   filter: drop-shadow(2px 4px 0 rgba(29, 27, 24, 0.08));
 }
 
@@ -1035,7 +1120,7 @@ button {
   display: block;
   min-height: 0;
   object-fit: contain;
-  image-rendering: auto;
+  image-rendering: pixelated;
   filter: drop-shadow(2px 4px 0 rgba(29, 27, 24, 0.08));
 }
 

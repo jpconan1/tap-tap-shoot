@@ -28,15 +28,19 @@ import {
   restartMusicTrackOnce,
   STARBURST_WIPE_AUDIO,
   setMusicEnabled,
+  setMusicVolume,
   setSoundEnabled,
+  setSfxVolume,
   syncMusicTopper,
   unlockSceneAudio,
   WIN_SOUND_AUDIO,
 } from './audio.js';
 import { RankedClient } from './rankedClient.js';
 import { getResourcePresentation, shouldShowPickHistoryForVariant } from './variantPresentation.js';
+import { VARIANT_SELECT_PAGE_SIZE, VARIANT_SELECT_VARIANTS } from './variantSelectConfig.js';
 import {
   DOODLE_FRAME_RATE,
+  DOODLE_FRAME_COUNT,
   DOODLE_FRAME_HEIGHT,
   DOODLE_FRAME_WIDTH,
   getVariantStagePresentation,
@@ -83,6 +87,8 @@ const TITLE_AUDIO_BUTTON_FRAME_WIDTH = 384;
 const TITLE_AUDIO_BUTTON_FRAME_HEIGHT = 192;
 const TITLE_BOIL_TOGGLE_FRAME_WIDTH = 320;
 const TITLE_BOIL_TOGGLE_FRAME_HEIGHT = 160;
+const TITLE_VOLUME_SLIDER_FRAME_WIDTH = 320;
+const TITLE_VOLUME_SLIDER_FRAME_HEIGHT = 160;
 const VARIANT_BUTTON_FRAME_WIDTH = 325;
 const VARIANT_BUTTON_FRAME_HEIGHT = 128;
 const PICK_VARIANT_FRAME_WIDTH = 388;
@@ -97,6 +103,7 @@ const LAST_NUMBERED_TURN = 21;
 const GAME_TARGET_ROUNDS = 5;
 const FRAME_WIDTH = 960;
 const FRAME_HEIGHT = 540;
+const FRAME_BOTTOM_GUTTER = 36;
 const VARIANT_LAYOUT_URLS = Object.freeze({
   [VARIANT_IDS.shootStabDuck]: './assets/shoot-stab-duck/ssd-layout.json',
   [VARIANT_IDS.rps]: './assets/rock-paper-scissors/rps-layout.json',
@@ -131,9 +138,14 @@ const LOADING_BAR_EMPTY_URL = './assets/progress_bar_empty_sheet.webp';
 const LOADING_BAR_FULL_URL = './assets/progress_bar_full_sheet.webp';
 const LOADING_CLICK_MESSAGE_URL = './assets/click_msg_sheet.webp';
 const PAPER_BACKGROUND_URL = './assets/crumpled_paper_background.webp';
+const TITLE_MUSIC_SLIDER_URL = './assets/title/Music_slider_sheet.webp';
+const TITLE_SFX_SLIDER_URL = './assets/title/sfx_slider_sheet.webp';
+const TITLE_GRADIENT_SLIDER_URL = './assets/title/graidant_slider_sheet.webp';
 const ONLINE_STATUS_POLL_MS = 5000;
 const RANKED_DISPLAY_NAME_KEY = 'tapTapShoot.rankedDisplayName';
 const BOIL_ENABLED_KEY = 'tapTapShoot.boilEnabled';
+const MUSIC_VOLUME_KEY = 'tapTapShoot.musicVolume';
+const SFX_VOLUME_KEY = 'tapTapShoot.sfxVolume';
 const DEFAULT_RANKED_DISPLAY_NAME = 'Guest';
 const MAX_RANKED_DISPLAY_NAME_LENGTH = 50;
 const NAME_PREFIXES = Object.freeze([
@@ -358,71 +370,19 @@ const TUTORIAL_OUTCOMES = Object.freeze({
   }),
 });
 const DEFAULT_OPPONENT_ID = DEFAULT_RIVAL_ID;
-const COMPUTER_VARIANTS = Object.freeze([
-  Object.freeze({
-    id: VARIANT_IDS.chargeBlockFireball,
-    name: 'Charge Block Fireball',
-    buttonDoodle: 'cbf_button_w',
-  }),
-  Object.freeze({
-    id: VARIANT_IDS.rps,
-    name: 'Rock Paper Scissors',
-    buttonDoodle: 'rps_button_w',
-  }),
-  Object.freeze({
-    id: VARIANT_IDS.shootStabDuck,
-    name: 'Shoot Stab Duck',
-    buttonDoodle: 'ssd_button_w',
-  }),
-  Object.freeze({
-    id: VARIANT_IDS.punchStabShoot,
-    name: 'Punch Stab Shoot',
-    buttonDoodle: 'pss_button_w',
-  }),
-  Object.freeze({
-    id: VARIANT_IDS.tapTapShoot,
-    name: 'Tap Tap Shoot',
-    buttonDoodle: 'tap_tap_shoot_button_w',
-  }),
-]);
+const COMPUTER_VARIANTS = VARIANT_SELECT_VARIANTS;
 const COMPUTER_VARIANT_IDS = Object.freeze(COMPUTER_VARIANTS.map((variant) => variant.id));
-const VARIANT_DETAIL_COPY = Object.freeze({
-  [VARIANT_IDS.rps]: Object.freeze([
-    "THE ORIGINAL CLASSIC. You're probably familiar.",
-    'Rock beats Scissors.',
-    'Scissors beats Paper.',
-    'Paper beats Rock.',
-  ]),
-  [VARIANT_IDS.punchStabShoot]: Object.freeze([
-    'ROCK PAPER SCISSORS WITH HP. First to deal 3 damage wins.',
-    'Punch beats Shoot (Deals 1 damage).',
-    'Stab beats Punch (Deals 2 damage).',
-    'Shoot beats Stab (Deals a lethal 3 damage).',
-  ]),
-  [VARIANT_IDS.chargeBlockFireball]: Object.freeze([
-    'TWO WAYS TO WIN: Land a Fireball OR Charge 3 Bars.',
-    'Fireball beats Charge (Costs 1 Bar).',
-    'Block neutralizes Fireball.',
-    'Charge grants 1 Bar.',
-  ]),
-  [VARIANT_IDS.shootStabDuck]: Object.freeze([
-    'FOUR MOVES, ONE RESOURCE. Win by landing a Shoot or Stab.',
-    'Shoot beats Stab and Reload (Costs 1 Bullet).',
-    'Stab beats Duck.',
-    'Reload neutralizes Stab AND grants 1 Bullet.',
-    'Duck neutralizes Shoot.',
-  ]),
-  [VARIANT_IDS.tapTapShoot]: Object.freeze([
-    'FIVE MOVES AND LAYERED MIXUPS. Win by landing a Shoot or Stab.',
-    'Shoot beats Stab, Counter-Stab, and Charge (Costs 1 AP).',
-    'Stab beats Duck and Charge (Costs 1 AP).',
-    'Counter-Stab neutralizes Stab.',
-    'Duck neutralizes Shoot.',
-    'Charge grants 1 AP.',
-  ]),
-});
 
 const app = document.querySelector('#app');
+
+function getSharpCanvasContext(canvas) {
+  const context = canvas?.getContext('2d');
+  if (context) {
+    context.imageSmoothingEnabled = false;
+  }
+  return context;
+}
+
 const FINDING_MATCH_DOODLES = Object.freeze([
   'title/findingmatch',
   'title/findingmatch1',
@@ -434,11 +394,14 @@ let screen = 'title';
 let playMode = 'local';
 let selectedOpponentId = DEFAULT_OPPONENT_ID;
 let selectedVariantId = DEFAULT_VARIANT_ID;
+let variantSelectPage = 0;
 let isTransitioning = false;
 let variantDetailMenu = null;
 let isMusicEnabled = false;
 let isSoundEnabled = false;
 let isBoilEnabled = readStoredBoilEnabled();
+let musicVolume = readStoredVolume(MUSIC_VOLUME_KEY);
+let sfxVolume = readStoredVolume(SFX_VOLUME_KEY);
 let pauseMenu = null;
 let pauseStartedAt = null;
 const pausableTimers = new Set();
@@ -483,6 +446,8 @@ const rankedClient = new RankedClient({
 
 configureAudio({ getMusicTopperFile });
 setBoilEnabled(isBoilEnabled);
+setMusicVolume(musicVolume);
+setSfxVolume(sfxVolume);
 
 updateFrameScale();
 window.addEventListener('resize', updateFrameScale);
@@ -607,8 +572,8 @@ function drawLoadingScreen(loadingScreen, images, now) {
 
   const elapsed = Math.max(0, now - loadingScreen.startedAt);
   const progress = loadingScreen.isDone ? 1 : getLoadingProgress(elapsed);
-  const progressContext = loadingScreen.progressCanvas?.getContext('2d');
-  const clickMessageContext = loadingScreen.clickMessageCanvas?.getContext('2d');
+  const progressContext = getSharpCanvasContext(loadingScreen.progressCanvas);
+  const clickMessageContext = getSharpCanvasContext(loadingScreen.clickMessageCanvas);
   const currentBoilFrame = loadingScreen.isDone
     ? LOADING_FRAME_COUNT - 1
     : getLoadingBoilFrame(elapsed);
@@ -809,10 +774,11 @@ function getGamePreloadDoodles() {
     'new-logo-rev-2-alpha',
     'title/playvcom_button',
     'title/playonline',
-    'title/music_button',
-    'title/music_button_checked',
     'title/sound_button',
     'title/sound_button_checked',
+    'title/Music_slider',
+    'title/sfx_slider',
+    'title/graidant_slider',
     'title/boiling_toggle_on',
     'title/boiling_toggle_off',
     'variant_play_button',
@@ -1068,12 +1034,12 @@ function finiteLayoutNumber(value, fallback) {
 }
 
 function updateFrameScale() {
-  const margin = 28;
-  const availableWidth = window.innerWidth - margin;
-  const availableHeight = window.innerHeight - margin;
+  const availableWidth = window.innerWidth;
+  const availableHeight = Math.max(1, window.innerHeight - FRAME_BOTTOM_GUTTER);
   const frameWidth = gameLayout?.width ?? FRAME_WIDTH;
   const frameHeight = gameLayout?.height ?? FRAME_HEIGHT;
-  const scale = Math.min(1, availableWidth / frameWidth, availableHeight / frameHeight);
+  const fitScale = Math.min(availableWidth / frameWidth, availableHeight / frameHeight);
+  const scale = fitScale < 1 ? fitScale : Math.max(1, Math.floor(fitScale));
   app.style.setProperty('--ui-scale', scale.toFixed(4));
 }
 
@@ -1152,6 +1118,33 @@ function writeStoredBoilEnabled(value) {
   } catch {
     // Game still works for this tab; it just cannot remember the setting.
   }
+}
+
+function readStoredVolume(key) {
+  try {
+    const volume = Number(window.localStorage.getItem(key));
+    return Number.isFinite(volume) ? clampVolume(volume) : 1;
+  } catch {
+    return 1;
+  }
+}
+
+function writeStoredVolume(key, value) {
+  try {
+    window.localStorage.setItem(key, String(clampVolume(value)));
+  } catch {
+    // Game still works for this tab; it just cannot remember the setting.
+  }
+}
+
+function clampVolume(value) {
+  const volume = Number(value);
+
+  if (!Number.isFinite(volume)) {
+    return 1;
+  }
+
+  return Math.max(0, Math.min(1, volume));
 }
 
 function escapeHtml(value) {
@@ -2036,8 +2029,9 @@ function renderTitleScreen() {
       </div>
 
       <div class="title-audio-actions" aria-label="Settings">
-        ${renderTitleAudioButton('music', isMusicEnabled)}
         ${renderTitleAudioButton('sound', isSoundEnabled)}
+        ${renderTitleVolumeSlider('music', musicVolume)}
+        ${renderTitleVolumeSlider('sfx', sfxVolume)}
         ${renderTitleBoilButton()}
       </div>
     </section>
@@ -2045,10 +2039,10 @@ function renderTitleScreen() {
 
   app.querySelector('[data-action="play"]').addEventListener('click', startGameFromTitle);
   app.querySelector('[data-action="ranked"]').addEventListener('click', startRankedFromTitle);
-  app.querySelector('[data-action="toggle-music"]').addEventListener('click', toggleMusic);
   app.querySelector('[data-action="toggle-sound"]').addEventListener('click', toggleSound);
   app.querySelector('[data-action="toggle-boil"]').addEventListener('click', toggleBoil);
   mountSpriteRenderers(app.querySelectorAll('.sprite-canvas'));
+  mountTitleVolumeSliders(app.querySelectorAll('.title-volume-slider'));
 }
 
 function renderTitleAudioButton(kind, isChecked) {
@@ -2076,6 +2070,25 @@ function renderTitleAudioButton(kind, isChecked) {
   `;
 }
 
+function renderTitleVolumeSlider(kind, value) {
+  const label = kind === 'music' ? 'music volume' : 'sound effects volume';
+
+  return `
+    <canvas
+      class="title-volume-slider ${isSoundEnabled ? '' : 'is-muted'}"
+      data-volume-kind="${kind}"
+      width="${TITLE_VOLUME_SLIDER_FRAME_WIDTH}"
+      height="${TITLE_VOLUME_SLIDER_FRAME_HEIGHT}"
+      role="slider"
+      tabindex="0"
+      aria-label="${label}"
+      aria-valuemin="0"
+      aria-valuemax="100"
+      aria-valuenow="${Math.round(value * 100)}"
+    ></canvas>
+  `;
+}
+
 function renderTitleBoilButton() {
   const doodle = `title/boiling_toggle_${isBoilEnabled ? 'on' : 'off'}`;
 
@@ -2100,17 +2113,204 @@ function renderTitleBoilButton() {
   `;
 }
 
-function toggleMusic() {
-  const trackId = screen === 'title' ? 'title' : 'game';
+function mountTitleVolumeSliders(canvases) {
+  const sliders = [...canvases];
 
-  isMusicEnabled = !isMusicEnabled;
-  setMusicEnabled(isMusicEnabled, trackId);
-  playAudioToggleSound();
-  render();
+  if (!sliders.length) {
+    return;
+  }
+
+  sliders.forEach((canvas) => {
+    const updateFromPointer = (event) => {
+      setTitleVolumeFromPointer(canvas, event.clientX);
+    };
+
+    canvas.addEventListener('pointerdown', (event) => {
+      canvas.setPointerCapture(event.pointerId);
+      updateFromPointer(event);
+    });
+    canvas.addEventListener('pointermove', (event) => {
+      if (event.buttons) {
+        updateFromPointer(event);
+      }
+    });
+    canvas.addEventListener('keydown', (event) => {
+      const step = event.shiftKey ? 0.1 : 0.05;
+
+      if (event.key === 'ArrowLeft' || event.key === 'ArrowDown') {
+        event.preventDefault();
+        enableAudioFromSlider(canvas.dataset.volumeKind);
+        setTitleVolume(canvas.dataset.volumeKind, getTitleVolume(canvas.dataset.volumeKind) - step);
+      }
+
+      if (event.key === 'ArrowRight' || event.key === 'ArrowUp') {
+        event.preventDefault();
+        enableAudioFromSlider(canvas.dataset.volumeKind);
+        setTitleVolume(canvas.dataset.volumeKind, getTitleVolume(canvas.dataset.volumeKind) + step);
+      }
+    });
+  });
+
+  loadTitleVolumeSliderImages().then((images) => {
+    if (!images) {
+      return;
+    }
+
+    function tick(now) {
+      const connectedSliders = sliders.filter((canvas) => canvas.isConnected);
+
+      if (!connectedSliders.length) {
+        return;
+      }
+
+      drawTitleVolumeSliders(connectedSliders, images, now);
+      requestAnimationFrame(tick);
+    }
+
+    requestAnimationFrame(tick);
+  });
+}
+
+function setTitleVolumeFromPointer(canvas, clientX) {
+  const rect = canvas.getBoundingClientRect();
+  const value = rect.width > 0 ? (clientX - rect.left) / rect.width : 0;
+  enableAudioFromSlider(canvas.dataset.volumeKind);
+  setTitleVolume(canvas.dataset.volumeKind, value);
+}
+
+function enableAudioFromSlider(kind) {
+  if (isSoundEnabled) {
+    return;
+  }
+
+  isSoundEnabled = true;
+  isMusicEnabled = true;
+  setSoundEnabled(isSoundEnabled);
+  setMusicEnabled(isMusicEnabled, screen === 'title' ? 'title' : 'game');
+  updateTitleSoundButton();
+
+  if (kind === 'music') {
+    setTitleVolume('sfx', 0);
+  } else {
+    setTitleVolume('music', 0);
+  }
+}
+
+function updateTitleSoundButton() {
+  const button = app.querySelector('[data-action="toggle-sound"]');
+  const canvas = button?.querySelector('.sprite-canvas');
+
+  if (!button || !canvas) {
+    return;
+  }
+
+  button.setAttribute('aria-label', `sound ${isSoundEnabled ? 'on' : 'off'}`);
+  button.setAttribute('aria-pressed', isSoundEnabled ? 'true' : 'false');
+  canvas.dataset.doodle = `title/sound_button${isSoundEnabled ? '_checked' : ''}`;
+  mountSpriteRenderers(app.querySelectorAll('.sprite-canvas'));
+}
+
+function setTitleVolume(kind, value) {
+  const volume = clampVolume(value);
+
+  if (kind === 'music') {
+    musicVolume = volume;
+    writeStoredVolume(MUSIC_VOLUME_KEY, musicVolume);
+    setMusicVolume(musicVolume);
+  } else {
+    sfxVolume = volume;
+    writeStoredVolume(SFX_VOLUME_KEY, sfxVolume);
+    setSfxVolume(sfxVolume);
+  }
+}
+
+function getTitleVolume(kind) {
+  return kind === 'music' ? musicVolume : sfxVolume;
+}
+
+function drawTitleVolumeSliders(sliders, images, now) {
+  const frame = isBoilEnabled
+    ? Math.floor((now / 1000) * DOODLE_FRAME_RATE) % DOODLE_FRAME_COUNT
+    : 0;
+  const sourceY = frame * TITLE_VOLUME_SLIDER_FRAME_HEIGHT;
+
+  sliders.forEach((canvas) => {
+    const kind = canvas.dataset.volumeKind;
+    const baseImage = kind === 'music' ? images.music : images.sfx;
+    const context = getSharpCanvasContext(canvas);
+    const volume = getTitleVolume(kind);
+    const fillWidth = Math.round(TITLE_VOLUME_SLIDER_FRAME_WIDTH * volume);
+
+    if (!context || !baseImage || !images.gradient) {
+      return;
+    }
+
+    canvas.classList.toggle('is-muted', !isSoundEnabled);
+    canvas.setAttribute('aria-valuenow', String(Math.round(volume * 100)));
+    context.clearRect(0, 0, canvas.width, canvas.height);
+    context.drawImage(
+      baseImage,
+      0,
+      sourceY,
+      TITLE_VOLUME_SLIDER_FRAME_WIDTH,
+      TITLE_VOLUME_SLIDER_FRAME_HEIGHT,
+      0,
+      0,
+      canvas.width,
+      canvas.height,
+    );
+
+    if (fillWidth <= 0) {
+      return;
+    }
+
+    context.drawImage(
+      images.gradient,
+      0,
+      sourceY,
+      fillWidth,
+      TITLE_VOLUME_SLIDER_FRAME_HEIGHT,
+      0,
+      0,
+      fillWidth,
+      canvas.height,
+    );
+  });
+}
+
+function loadTitleVolumeSliderImages() {
+  if (!loadTitleVolumeSliderImages.promise) {
+    loadTitleVolumeSliderImages.promise = Promise.all([
+      loadImageAsset(TITLE_MUSIC_SLIDER_URL, { decode: false }),
+      loadImageAsset(TITLE_SFX_SLIDER_URL, { decode: false }),
+      loadImageAsset(TITLE_GRADIENT_SLIDER_URL, { decode: false }),
+    ]).then(([music, sfx, gradient]) => {
+      if (!music || !sfx || !gradient) {
+        return null;
+      }
+
+      return { music, sfx, gradient };
+    });
+  }
+
+  return loadTitleVolumeSliderImages.promise;
 }
 
 function toggleSound() {
   isSoundEnabled = !isSoundEnabled;
+  isMusicEnabled = isSoundEnabled;
+
+  if (isSoundEnabled) {
+    if (musicVolume <= 0) {
+      setTitleVolume('music', 1);
+    }
+
+    if (sfxVolume <= 0) {
+      setTitleVolume('sfx', 1);
+    }
+  }
+
+  setMusicEnabled(isMusicEnabled, screen === 'title' ? 'title' : 'game');
   setSoundEnabled(isSoundEnabled);
   playAudioToggleSound();
   render();
@@ -2381,6 +2581,7 @@ function shouldShowTutorialMoveButtons() {
 function renderOpponentSelectScreen() {
   stopFindingMatchTicker();
   requestMusicTrack('title');
+  const pageVariants = getVariantSelectPageVariants();
 
   app.innerHTML = `
     <section class="title-screen opponent-select-screen" aria-label="Choose variant">
@@ -2397,9 +2598,10 @@ function renderOpponentSelectScreen() {
       ></canvas>
 
       <div class="variant-actions">
-        ${COMPUTER_VARIANTS.map((variant) => renderVariantButton(variant)).join('')}
+        ${pageVariants.map((variant, index) => renderVariantButton(variant, index + 1)).join('')}
         ${renderBackButton()}
       </div>
+      ${renderVariantPageControls()}
     </section>
   `;
 
@@ -2413,7 +2615,31 @@ function renderOpponentSelectScreen() {
     button.addEventListener('click', () => showVariantDetail(button.dataset.variant, button));
   });
   app.querySelector('[data-action="back-title"]').addEventListener('click', returnToTitleFromOpponentSelect);
+  app.querySelector('[data-action="variant-page-prev"]')?.addEventListener('click', () => changeVariantSelectPage(-1));
+  app.querySelector('[data-action="variant-page-next"]')?.addEventListener('click', () => changeVariantSelectPage(1));
   mountSpriteRenderers(app.querySelectorAll('.sprite-canvas'));
+}
+
+function getVariantSelectPageCount() {
+  return Math.max(1, Math.ceil(COMPUTER_VARIANTS.length / VARIANT_SELECT_PAGE_SIZE));
+}
+
+function getVariantSelectPageVariants() {
+  const pageCount = getVariantSelectPageCount();
+  variantSelectPage = Math.max(0, Math.min(pageCount - 1, variantSelectPage));
+  const start = variantSelectPage * VARIANT_SELECT_PAGE_SIZE;
+  return COMPUTER_VARIANTS.slice(start, start + VARIANT_SELECT_PAGE_SIZE);
+}
+
+function getVariantSelectSlot(variantId) {
+  const pageIndex = COMPUTER_VARIANTS.findIndex((variant) => variant.id === variantId);
+  return pageIndex < 0 ? 1 : (pageIndex % VARIANT_SELECT_PAGE_SIZE) + 1;
+}
+
+function changeVariantSelectPage(direction) {
+  const pageCount = getVariantSelectPageCount();
+  variantSelectPage = (variantSelectPage + direction + pageCount) % pageCount;
+  renderOpponentSelectScreen();
 }
 
 async function showVariantDetail(variantId, sourceButton) {
@@ -2451,11 +2677,12 @@ function restoreVariantButton(button) {
 
 function renderVariantDetailOverlay(variant) {
   const overlay = document.createElement('div');
-  overlay.className = `variant-detail-overlay variant-detail-${variant.id}`;
+  const slot = getVariantSelectSlot(variant.id);
+  overlay.className = `variant-detail-overlay variant-detail-${variant.id} variant-detail-slot-${slot}`;
   overlay.innerHTML = `
 
     <div class="variant-detail-copy" role="dialog" aria-modal="true" aria-label="${escapeHtml(variant.name)} rules">
-      ${renderVariantDetailCopy(variant.id)}
+      ${renderVariantDetailCopy(variant)}
     </div>
 
     <div class="variant-detail-actions">
@@ -2492,10 +2719,26 @@ function renderVariantDetailOverlay(variant) {
   return overlay;
 }
 
-function renderVariantDetailCopy(variantId) {
-  return (VARIANT_DETAIL_COPY[variantId] ?? [])
-    .map((line, index) => `<p class="${index === 0 ? 'lead' : ''}">${escapeHtml(line)}</p>`)
+function renderVariantDetailCopy(variant) {
+  return (variant.copy ?? [])
+    .map((line, index) => `<p class="${index === 0 ? 'lead' : ''}">${renderVariantDetailCopyLine(line, index)}</p>`)
     .join('');
+}
+
+function renderVariantDetailCopyLine(line, index) {
+  if (index !== 0) {
+    return escapeHtml(line);
+  }
+
+  const sentenceEnd = String(line).indexOf('.');
+
+  if (sentenceEnd < 0) {
+    return `<span class="lead-sentence">${escapeHtml(line)}</span>`;
+  }
+
+  const leadSentence = String(line).slice(0, sentenceEnd + 1);
+  const followup = String(line).slice(sentenceEnd + 1);
+  return `<span class="lead-sentence">${escapeHtml(leadSentence)}</span>${escapeHtml(followup)}`;
 }
 
 function getComputerVariant(variantId) {
@@ -2532,9 +2775,9 @@ function renderBackButton() {
   `;
 }
 
-function renderVariantButton(variant) {
+function renderVariantButton(variant, slot) {
   return `
-    <button class="variant-button" data-variant="${variant.id}" aria-label="${variant.name}">
+    <button class="variant-button variant-slot-${slot}" data-variant="${variant.id}" data-variant-slot="${slot}" aria-label="${variant.name}">
       <canvas
         class="sprite-canvas variant-button-art"
         data-doodle="${variant.buttonDoodle}"
@@ -2545,6 +2788,39 @@ function renderVariantButton(variant) {
         aria-hidden="true"
       ></canvas>
     </button>
+  `;
+}
+
+function renderVariantPageControls() {
+  if (getVariantSelectPageCount() <= 1) {
+    return '';
+  }
+
+  return `
+    <div class="variant-page-controls">
+      <button class="variant-page-button" data-action="variant-page-prev" type="button" aria-label="Previous page">
+        <canvas
+          class="sprite-canvas variant-page-button-art"
+          data-doodle="Prev_slide_button"
+          data-frame-width="${TITLE_BUTTON_FRAME_WIDTH}"
+          data-frame-height="${TITLE_BUTTON_FRAME_HEIGHT}"
+          width="${TITLE_BUTTON_FRAME_WIDTH}"
+          height="${TITLE_BUTTON_FRAME_HEIGHT}"
+          aria-hidden="true"
+        ></canvas>
+      </button>
+      <button class="variant-page-button" data-action="variant-page-next" type="button" aria-label="Next page">
+        <canvas
+          class="sprite-canvas variant-page-button-art"
+          data-doodle="next_slide_button"
+          data-frame-width="${TITLE_BUTTON_FRAME_WIDTH}"
+          data-frame-height="${TITLE_BUTTON_FRAME_HEIGHT}"
+          width="${TITLE_BUTTON_FRAME_WIDTH}"
+          height="${TITLE_BUTTON_FRAME_HEIGHT}"
+          aria-hidden="true"
+        ></canvas>
+      </button>
+    </div>
   `;
 }
 
