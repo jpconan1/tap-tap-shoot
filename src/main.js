@@ -91,6 +91,8 @@ const TITLE_VOLUME_SLIDER_FRAME_WIDTH = 320;
 const TITLE_VOLUME_SLIDER_FRAME_HEIGHT = 160;
 const VARIANT_BUTTON_FRAME_WIDTH = 325;
 const VARIANT_BUTTON_FRAME_HEIGHT = 128;
+const VARIANT_DIFFICULTY_TOGGLE_FRAME_WIDTH = 110;
+const VARIANT_DIFFICULTY_TOGGLE_FRAME_HEIGHT = 140;
 const PICK_VARIANT_FRAME_WIDTH = 388;
 const PICK_VARIANT_FRAME_HEIGHT = 233;
 const TUTORIAL_MAIN_SLIDE_COUNT = 6;
@@ -395,6 +397,7 @@ let playMode = 'local';
 let selectedOpponentId = DEFAULT_OPPONENT_ID;
 let selectedVariantId = DEFAULT_VARIANT_ID;
 let variantSelectPage = 0;
+let variantDifficultyToggleState = 'easy';
 let isTransitioning = false;
 let variantDetailMenu = null;
 let isMusicEnabled = false;
@@ -781,6 +784,8 @@ function getGamePreloadDoodles() {
     'title/graidant_slider',
     'title/boiling_toggle_on',
     'title/boiling_toggle_off',
+    'easy_hard_toggle-easy',
+    'easy_hard_toggle-hard',
     'variant_play_button',
     ...FINDING_MATCH_DOODLES,
     ...COMPUTER_VARIANTS.map((variant) => variant.buttonDoodle),
@@ -2633,6 +2638,12 @@ function renderOpponentSelectScreen() {
     });
     button.addEventListener('click', () => showVariantDetail(button.dataset.variant, button));
   });
+  app.querySelectorAll('[data-action="variant-difficulty-toggle"]').forEach((button) => {
+    button.addEventListener('pointerdown', (event) => {
+      event.stopPropagation();
+    });
+    button.addEventListener('click', toggleVariantDifficultyVisual);
+  });
   app.querySelector('[data-action="back-title"]').addEventListener('click', returnToTitleFromOpponentSelect);
   app.querySelector('[data-action="variant-page-prev"]')?.addEventListener('click', () => changeVariantSelectPage(-1));
   app.querySelector('[data-action="variant-page-next"]')?.addEventListener('click', () => changeVariantSelectPage(1));
@@ -2806,8 +2817,36 @@ function renderVariantButton(variant, slot) {
         height="${VARIANT_BUTTON_FRAME_HEIGHT}"
         aria-hidden="true"
       ></canvas>
+      <span
+        class="variant-difficulty-toggle"
+        data-action="variant-difficulty-toggle"
+      >
+        <canvas
+          class="sprite-canvas variant-difficulty-toggle-art"
+          data-doodle="${getVariantDifficultyToggleDoodle()}"
+          data-frame-width="${VARIANT_DIFFICULTY_TOGGLE_FRAME_WIDTH}"
+          data-frame-height="${VARIANT_DIFFICULTY_TOGGLE_FRAME_HEIGHT}"
+          width="${VARIANT_DIFFICULTY_TOGGLE_FRAME_WIDTH}"
+          height="${VARIANT_DIFFICULTY_TOGGLE_FRAME_HEIGHT}"
+          aria-hidden="true"
+        ></canvas>
+      </span>
     </button>
   `;
+}
+
+function getVariantDifficultyToggleDoodle() {
+  return variantDifficultyToggleState === 'hard' ? 'easy_hard_toggle-hard' : 'easy_hard_toggle-easy';
+}
+
+function toggleVariantDifficultyVisual(event) {
+  event.preventDefault();
+  event.stopPropagation();
+  variantDifficultyToggleState = variantDifficultyToggleState === 'hard' ? 'easy' : 'hard';
+  app.querySelectorAll('.variant-difficulty-toggle-art').forEach((canvas) => {
+    canvas.dataset.doodle = getVariantDifficultyToggleDoodle();
+  });
+  mountSpriteRenderers(app.querySelectorAll('.sprite-canvas'));
 }
 
 function renderVariantPageControls() {
