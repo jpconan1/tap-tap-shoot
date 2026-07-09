@@ -133,12 +133,12 @@ const TAP_TAP_SHOOT_RESOURCE_ELEMENTS = resourceSlotElements({
 });
 
 const CHARGE_ELEMENTS = [
-  { key: "p1-charge-slot-1", name: "P1 charge slot 1", asset: "assets/charge-block-fireball/charge icon_sheet.webp" },
-  { key: "p1-charge-slot-2", name: "P1 charge slot 2", asset: "assets/charge-block-fireball/charge icon_sheet.webp" },
-  { key: "p1-charge-slot-3", name: "P1 charge slot 3", asset: "assets/charge-block-fireball/charge icon_sheet.webp" },
-  { key: "p2-charge-slot-1", name: "P2 charge slot 1", asset: "assets/charge-block-fireball/charge icon_sheet.webp" },
-  { key: "p2-charge-slot-2", name: "P2 charge slot 2", asset: "assets/charge-block-fireball/charge icon_sheet.webp" },
-  { key: "p2-charge-slot-3", name: "P2 charge slot 3", asset: "assets/charge-block-fireball/charge icon_sheet.webp" },
+  { key: "p1-charge-slot-1", name: "P1 charge slot 1", asset: "assets/charge-block-fireball/charge-icon-slot_sheet.webp" },
+  { key: "p1-charge-slot-2", name: "P1 charge slot 2", asset: "assets/charge-block-fireball/charge-icon-slot_sheet.webp" },
+  { key: "p1-charge-slot-3", name: "P1 charge slot 3", asset: "assets/charge-block-fireball/charge-icon-slot_sheet.webp" },
+  { key: "p2-charge-slot-1", name: "P2 charge slot 1", asset: "assets/charge-block-fireball/charge-icon-slot_sheet.webp" },
+  { key: "p2-charge-slot-2", name: "P2 charge slot 2", asset: "assets/charge-block-fireball/charge-icon-slot_sheet.webp" },
+  { key: "p2-charge-slot-3", name: "P2 charge slot 3", asset: "assets/charge-block-fireball/charge-icon-slot_sheet.webp" },
 ];
 
 const HEALTH_ELEMENTS = [

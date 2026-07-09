@@ -22,18 +22,14 @@ const SCENE_AUDIO = Object.freeze({
   'rock-paper-scissors/rock-scissors': 'clash.mp3',
   'rock-paper-scissors/paper-rock': 'collision.mp3',
   'rock-paper-scissors/scissors-paper': 'wiff.mp3',
-  'charge-block-fireball/cbf-standoff': 'nothing.mp3',
-  'charge-block-fireball/block-draw': 'clash.mp3',
-  'charge-block-fireball/block-charge': 'clash.mp3',
-  'charge-block-fireball/block-fireball': 'collision.mp3',
-  'charge-block-fireball/both-charge': 'reload.mp3',
-  'charge-block-fireball/charge-fireball': 'gunshot.mp3',
-  'charge-block-fireball/fireball-draw': 'gunshot.mp3',
-  'charge-block-fireball/super-blasting': 'gunshot.mp3',
-  'punch-stab-shoot/pss-standoff': 'nothing.mp3',
+  'charge-block-fireball/block-charge': 'charge.mp3',
+  'charge-block-fireball/block-fireball': 'block.m4a',
+  'charge-block-fireball/both-charge': 'charge.mp3',
+  'charge-block-fireball/fireball-draw': 'collision.mp3',
+  'charge-block-fireball/super-final-frame1': 'super.mp3',
   'punch-stab-shoot/punch-draw': 'collision.mp3',
-  'punch-stab-shoot/punch-shoot-damage': 'collision.mp3',
-  'punch-stab-shoot/punch-shoot-kill': 'collision.mp3',
+  'punch-stab-shoot/punch-shoot-damage': 'punch.mp3',
+  'punch-stab-shoot/punch-shoot-kill': 'punch-kill.mp3',
   'punch-stab-shoot/shoot-draw': 'gunshot.mp3',
   'punch-stab-shoot/shoot-stab': 'gunshot.mp3',
   'punch-stab-shoot/stab-draw': 'clash.mp3',
@@ -65,6 +61,13 @@ const MUSIC_TRACKS = Object.freeze({
   game: 'piano_loop.mp3',
   sax: 'sax_loop.mp3',
 });
+const GAME_LOOP_VARIANTS = Object.freeze([
+  'loop-var1.mp3',
+  'loop-var2.mp3',
+  'loop-var3.mp3',
+  'loop-var4.mp3',
+  'loop-var5.mp3',
+]);
 const MUSIC_TOPPERS = Object.freeze({
   tension: 'string_loop_topper.mp3',
   final: 'string_loop_topper2.mp3',
@@ -175,7 +178,7 @@ export function requestMusicTrack(trackId) {
   }
 
   unlockSceneAudio().then(() => syncMusicTrack());
-  loadSceneAudioBuffer(MUSIC_TRACKS[trackId]).then(() => syncMusicTrack());
+  loadMusicTrackBuffers(trackId).then(() => syncMusicTrack());
   syncMusicTrack();
 }
 
@@ -196,8 +199,8 @@ export function queueMusicTrackOnce(trackId, returnTrackId) {
   }
 
   queuedMusicSegment = { trackId, returnTrackId };
-  loadSceneAudioBuffer(MUSIC_TRACKS[trackId]).then(() => syncMusicTrack());
-  loadSceneAudioBuffer(MUSIC_TRACKS[returnTrackId]);
+  loadMusicTrackBuffers(trackId).then(() => syncMusicTrack());
+  loadMusicTrackBuffers(returnTrackId);
   syncMusicTrack();
 }
 
@@ -239,8 +242,8 @@ export function restartMusicTrack(trackId) {
   }
 
   stopCurrentMusicSegment();
-  loadSceneAudioBuffer(MUSIC_TRACKS[trackId]).then((buffer) => {
-    if (!buffer || context.state !== 'running') {
+  loadMusicTrackBuffers(trackId).then(() => {
+    if (context.state !== 'running') {
       return;
     }
 
@@ -269,12 +272,12 @@ export function restartMusicTrackOnce(trackId, returnTrackId) {
   }
 
   stopCurrentMusicSegment();
-  loadSceneAudioBuffer(MUSIC_TRACKS[trackId]).then((buffer) => {
-    if (!buffer || context.state !== 'running') {
+  loadMusicTrackBuffers(trackId).then(() => {
+    if (context.state !== 'running') {
       return;
     }
 
-    loadSceneAudioBuffer(MUSIC_TRACKS[returnTrackId]);
+    loadMusicTrackBuffers(returnTrackId);
     startMusicSegment(trackId, context.currentTime + 0.005, returnTrackId);
   });
 }
@@ -320,7 +323,7 @@ export function interruptMusicFileOnce(fileName, returnTrackId = desiredMusicTra
     }
 
     if (returnTrackId && MUSIC_TRACKS[returnTrackId]) {
-      loadSceneAudioBuffer(MUSIC_TRACKS[returnTrackId]);
+      loadMusicTrackBuffers(returnTrackId);
     }
 
     const resumeSegment = resumeCurrentTrack ? getInterruptedMusicResumeSegment(returnTrackId) : null;
@@ -443,7 +446,7 @@ export function unlockSceneAudio() {
     .catch((error) => {
       console.warn('Could not unlock scene audio context', error);
     })
-    .then(() => musicEnabled && desiredMusicTrack ? loadSceneAudioBuffer(MUSIC_TRACKS[desiredMusicTrack]) : null)
+    .then(() => musicEnabled && desiredMusicTrack ? loadMusicTrackBuffers(desiredMusicTrack) : null)
     .then(() => syncMusicTrack())
     .then(() => preloadSceneAudioInBackground())
     .then(() => undefined)
@@ -481,6 +484,40 @@ export function getMusicTopperId(id) {
   return MUSIC_TOPPERS[id] ?? null;
 }
 
+function getMusicTrackFiles(trackId) {
+  const fileName = MUSIC_TRACKS[trackId];
+
+  if (!fileName) {
+    return [];
+  }
+
+  return trackId === 'game'
+    ? [fileName, ...GAME_LOOP_VARIANTS]
+    : [fileName];
+}
+
+function chooseMusicTrackFile(trackId) {
+  const fileName = MUSIC_TRACKS[trackId];
+
+  if (!fileName) {
+    return '';
+  }
+
+  if (trackId !== 'game' || Math.random() >= 0.5) {
+    return fileName;
+  }
+
+  return GAME_LOOP_VARIANTS[Math.floor(Math.random() * GAME_LOOP_VARIANTS.length)] ?? fileName;
+}
+
+function loadMusicTrackBuffers(trackId) {
+  return Promise.all(getMusicTrackFiles(trackId).map((fileName) => loadSceneAudioBuffer(fileName)));
+}
+
+function hasAnyMusicTrackBuffer(trackId) {
+  return getMusicTrackFiles(trackId).some((fileName) => sceneAudioBuffers.has(fileName));
+}
+
 function getInterruptedMusicResumeSegment(fallbackTrackId) {
   const context = getSceneAudioContext();
 
@@ -488,7 +525,7 @@ function getInterruptedMusicResumeSegment(fallbackTrackId) {
     return fallbackTrackId ? { trackId: fallbackTrackId, returnTrackId: null, offset: 0 } : null;
   }
 
-  const fileName = MUSIC_TRACKS[currentMusicSegment.trackId];
+  const fileName = currentMusicSegment.fileName ?? MUSIC_TRACKS[currentMusicSegment.trackId];
   const buffer = fileName ? sceneAudioBuffers.get(fileName) : null;
 
   if (!buffer) {
@@ -558,8 +595,8 @@ function resumeInterruptedMusic(resumeSegment) {
     return;
   }
 
-  loadSceneAudioBuffer(MUSIC_TRACKS[resumeSegment.trackId]).then((buffer) => {
-    if (!buffer || context.state !== 'running' || currentMusicSegment) {
+  loadMusicTrackBuffers(resumeSegment.trackId).then(() => {
+    if (context.state !== 'running' || currentMusicSegment) {
       return;
     }
 
@@ -613,12 +650,23 @@ function startMusicSegment(trackId, startAt, returnTrackId, offset = 0) {
   }
 
   const context = getSceneAudioContext();
-  const fileName = MUSIC_TRACKS[trackId];
-  const buffer = fileName ? sceneAudioBuffers.get(fileName) : null;
+  const fileName = chooseMusicTrackFile(trackId);
+  const fallbackFileName = MUSIC_TRACKS[trackId];
+  let buffer = fileName ? sceneAudioBuffers.get(fileName) : null;
+  let segmentFileName = fileName;
+
+  if (!buffer && fileName !== fallbackFileName) {
+    const fallbackBuffer = sceneAudioBuffers.get(fallbackFileName);
+
+    if (fallbackBuffer) {
+      buffer = fallbackBuffer;
+      segmentFileName = fallbackFileName;
+    }
+  }
 
   if (!context || context.state !== 'running' || !buffer) {
-    if (fileName) {
-      loadSceneAudioBuffer(fileName).then(() => syncMusicTrack());
+    if (segmentFileName) {
+      loadSceneAudioBuffer(segmentFileName).then(() => syncMusicTrack());
     }
 
     return;
@@ -631,6 +679,7 @@ function startMusicSegment(trackId, startAt, returnTrackId, offset = 0) {
   const segment = {
     trackId,
     returnTrackId,
+    fileName: segmentFileName,
     source,
     gain,
     startTime: safeStartAt,
@@ -817,7 +866,7 @@ function scheduleNextMusicSegment() {
     return;
   }
 
-  if (!sceneAudioBuffers.has(MUSIC_TRACKS[nextTrack])) {
+  if (!hasAnyMusicTrackBuffer(nextTrack)) {
     if (nextSegment) {
       queuedMusicSegment = nextSegment;
     } else {
@@ -835,7 +884,7 @@ function startHtmlMusicTrack(trackId, returnTrackId) {
     return;
   }
 
-  const fileName = MUSIC_TRACKS[trackId];
+  const fileName = chooseMusicTrackFile(trackId);
 
   if (!fileName) {
     return;
@@ -908,6 +957,7 @@ function getAudioFiles() {
       READY_AUDIO,
       WIN_SOUND_AUDIO,
       ...Object.values(MUSIC_TRACKS),
+      ...GAME_LOOP_VARIANTS,
       ...Object.values(MUSIC_TOPPERS),
     ]),
   ];

@@ -1544,13 +1544,14 @@ function renderLayoutSlot(key, markup, extraClass = '') {
   `;
 }
 
-function renderStaticDoodle(doodle, width, height, className = '') {
+function renderStaticDoodle(doodle, width, height, className = '', { flip = false } = {}) {
   return `
     <canvas
       class="sprite-canvas ${className}"
       data-doodle="${doodle}"
       data-frame-width="${width}"
       data-frame-height="${height}"
+      data-flip="${flip}"
       width="${width}"
       height="${height}"
       aria-hidden="true"
@@ -1597,16 +1598,34 @@ function renderLayoutBulletSlots(playerId) {
   return `
     ${label}
     ${Array.from({ length: BULLET_SLOT_COUNT }, (_, index) => {
-      const slot = playerId === 'p2' ? BULLET_SLOT_COUNT - index : index + 1;
+      const slot = getResourceSlotNumber(resource, playerId, index);
+      const isPlayerTwoMirrored = playerId === 'p2' && resource.mirrorPlayerTwoSlots;
+      const iconOptions = { flip: isPlayerTwoMirrored };
       return renderLayoutSlot(
         `${playerId}-${resource.iconSlotPrefix}-slot-${index + 1}`,
         slot <= getPlayerResource(state.players[playerId])
-          ? renderStaticDoodle(resource.iconDoodle, BULLETS_ICON_FRAME_WIDTH, BULLETS_ICON_FRAME_HEIGHT, 'bullets-icon')
-          : '<span class="empty-bullet-slot" aria-hidden="true"></span>',
+          ? renderStaticDoodle(resource.iconDoodle, BULLETS_ICON_FRAME_WIDTH, BULLETS_ICON_FRAME_HEIGHT, 'bullets-icon', iconOptions)
+          : renderEmptyResourceSlot(resource, iconOptions),
         'bullet-slot',
       );
     }).join('')}
   `;
+}
+
+function getResourceSlotNumber(resource, playerId, index) {
+  if (playerId === 'p2' && !resource.mirrorPlayerTwoSlots) {
+    return BULLET_SLOT_COUNT - index;
+  }
+
+  return index + 1;
+}
+
+function renderEmptyResourceSlot(resource, iconOptions = {}) {
+  if (resource.emptyIconDoodle) {
+    return renderStaticDoodle(resource.emptyIconDoodle, BULLETS_ICON_FRAME_WIDTH, BULLETS_ICON_FRAME_HEIGHT, 'bullets-icon empty-resource-icon', iconOptions);
+  }
+
+  return '<span class="empty-bullet-slot" aria-hidden="true"></span>';
 }
 
 function renderLayoutPickHistorySlots(playerId) {
@@ -2988,17 +3007,19 @@ function renderBulletMeter(playerId, bullets) {
 }
 
 function renderBulletSlot(playerId, index, bullets) {
-  const slot = playerId === 'p2' ? BULLET_SLOT_COUNT - index : index + 1;
+  const resource = getResourcePresentation(getCurrentVariantId());
+  const slot = getResourceSlotNumber(resource, playerId, index);
   const isFilled = slot <= bullets;
+  const iconOptions = { flip: playerId === 'p2' && resource.mirrorPlayerTwoSlots };
 
   return `
     <span class="bullets-slot">
-      ${isFilled ? renderBulletIcon() : ''}
+      ${isFilled ? renderBulletIcon(iconOptions) : renderEmptyResourceSlot(resource, iconOptions)}
     </span>
   `;
 }
 
-function renderBulletIcon() {
+function renderBulletIcon({ flip = false } = {}) {
   const resource = getResourcePresentation(getCurrentVariantId());
 
   return `
@@ -3007,6 +3028,7 @@ function renderBulletIcon() {
       data-doodle="${resource.iconDoodle}"
       data-frame-width="${BULLETS_ICON_FRAME_WIDTH}"
       data-frame-height="${BULLETS_ICON_FRAME_HEIGHT}"
+      data-flip="${flip}"
       width="${BULLETS_ICON_FRAME_WIDTH}"
       height="${BULLETS_ICON_FRAME_HEIGHT}"
       aria-hidden="true"
@@ -3103,7 +3125,7 @@ function getResourceDoodlesForPreload() {
   return Object.values(VARIANT_IDS)
     .flatMap((variantId) => {
       const resource = getResourcePresentation(variantId);
-      return [resource.labelDoodle, resource.iconDoodle];
+      return [resource.labelDoodle, resource.iconDoodle, resource.emptyIconDoodle];
     })
     .filter(Boolean);
 }
@@ -3443,7 +3465,7 @@ function getReadySplitPresentation(readyPlayerId) {
     return {
       kind: 'doodle',
       name: `charge-block-fireball/split_scenes/block-fireball_${isFireballerReady ? 'fireballer' : 'blocker'}_is_ready`,
-      flip: false,
+      flip: lastMoves.p1 === 'fireball',
     };
   }
 

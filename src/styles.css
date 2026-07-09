@@ -243,8 +243,14 @@ canvas {
 .layout-slot .pick-label,
 .layout-slot .move-icon,
 .layout-slot .bullets-icon,
+.layout-slot .empty-resource-icon,
 .layout-slot .move-arrow {
   transform: none;
+}
+
+.layout-slot .empty-resource-icon {
+  width: 75%;
+  height: 75%;
 }
 
 .layout-slot .player-identity {
@@ -1236,6 +1242,11 @@ canvas {
   filter: drop-shadow(1px 2px 0 rgba(29, 27, 24, 0.08));
 }
 
+.empty-resource-icon {
+  width: 36px;
+  height: 36px;
+}
+
 .bullets-super-meters {
   position: absolute;
   right: 30px;
@@ -1274,6 +1285,11 @@ canvas {
 .bullets-super-meters .bullets-icon {
   width: 42px;
   height: 42px;
+}
+
+.bullets-super-meters .empty-resource-icon {
+  width: 32px;
+  height: 32px;
 }
 
 .win-meter {

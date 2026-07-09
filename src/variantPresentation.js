@@ -5,6 +5,8 @@ const DEFAULT_RESOURCE_PRESENTATION = Object.freeze({
   labelDoodle: '',
   iconSlotPrefix: 'bullet',
   iconDoodle: 'shoot-stab-duck/bullet_icon',
+  emptyIconDoodle: '',
+  mirrorPlayerTwoSlots: false,
   showLabel: false,
 });
 
@@ -14,16 +16,22 @@ const RESOURCE_PRESENTATIONS = Object.freeze({
     labelDoodle: '',
     iconSlotPrefix: 'bullet',
     iconDoodle: 'tap-tap-shoot/ap_icon',
+    emptyIconDoodle: '',
+    mirrorPlayerTwoSlots: false,
     showLabel: false,
   }),
   [VARIANT_IDS.chargeBlockFireball]: Object.freeze({
     iconSlotPrefix: 'charge',
     iconDoodle: 'charge-block-fireball/charge icon',
+    emptyIconDoodle: 'charge-block-fireball/charge-icon-slot',
+    mirrorPlayerTwoSlots: true,
     showLabel: false,
   }),
   [VARIANT_IDS.punchStabShoot]: Object.freeze({
     iconSlotPrefix: 'health',
     iconDoodle: 'punch-stab-shoot/health-icon',
+    emptyIconDoodle: '',
+    mirrorPlayerTwoSlots: false,
     showLabel: false,
   }),
 });
