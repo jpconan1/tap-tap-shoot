@@ -100,8 +100,8 @@ export class RankedDuelService {
       return;
     }
 
-    if (message.type === 'submitBan') {
-      this.submitBan(session, message.variantId);
+    if (message.type === 'submitBan' || message.type === 'submitVariantPick') {
+      this.submitVariantPick(session, message.variantId);
       return;
     }
 
@@ -197,7 +197,10 @@ export class RankedDuelService {
         p2: p2Session,
       },
       variants: VARIANT_ORDER,
-      bans: {},
+      variantPicks: {},
+      variantPickOrder: [],
+      bannedVariants: [],
+      variantSelectionRound: 1,
       remainingVariants: [],
       currentVariantIndex: 0,
       gameWins: createEmptyScore(),
@@ -226,21 +229,32 @@ export class RankedDuelService {
     p2Session.roomId = room.id;
     this.rooms.set(room.id, room);
     this.broadcastRoom(room);
-    this.setRoomTimer(room, () => this.beginBanning(room), this.countdownMs);
+    this.setRoomTimer(room, () => this.beginVariantSelection(room), this.countdownMs);
     return room;
   }
 
   beginBanning(room) {
+    this.beginVariantSelection(room);
+  }
+
+  beginVariantSelection(room, { tiebreaker = false } = {}) {
     if (room.phase === 'gameOver') {
       return;
     }
 
     room.phase = 'banning';
+    room.variantPicks = {};
+    room.variantPickOrder = [];
+    room.variantSelectionRound = tiebreaker ? 2 : 1;
     room.deadlineAt = null;
     this.broadcastRoom(room);
   }
 
   submitBan(session, variantId) {
+    this.submitVariantPick(session, variantId);
+  }
+
+  submitVariantPick(session, variantId) {
     const room = this.rooms.get(session.roomId);
 
     if (!room || room.phase !== 'banning') {
@@ -252,32 +266,58 @@ export class RankedDuelService {
 
     if (
       !room.variants.includes(normalizedVariantId)
-      || room.bans[playerKey]
-      || Object.values(room.bans).includes(normalizedVariantId)
+      || room.variantPicks[playerKey]
+      || room.bannedVariants.includes(normalizedVariantId)
+      || Object.values(room.variantPicks).includes(normalizedVariantId)
     ) {
-      this.send(session, 'error', { message: 'illegal ban' });
+      this.send(session, 'error', { message: 'illegal variant pick' });
       return;
     }
 
-    room.bans = {
-      ...room.bans,
+    room.variantPicks = {
+      ...room.variantPicks,
       [playerKey]: normalizedVariantId,
     };
-    this.send(session, 'banAccepted', { variantId: normalizedVariantId });
+    room.variantPickOrder = [...room.variantPickOrder, playerKey];
+    this.send(session, 'variantPickAccepted', { variantId: normalizedVariantId });
     this.broadcastRoom(room);
 
-    if (room.bans.p1 && room.bans.p2) {
+    if (room.variantPicks.p1 && room.variantPicks.p2) {
       this.beginVariantSet(room);
     }
   }
 
   beginVariantSet(room) {
-    room.remainingVariants = room.variants.filter((variantId) => !Object.values(room.bans).includes(variantId));
+    if (room.variantSelectionRound === 2) {
+      this.beginTiebreakerVariant(room);
+      return;
+    }
+
+    room.remainingVariants = room.variantPickOrder.map((playerKey) => room.variantPicks[playerKey]);
     room.currentVariantIndex = 0;
     room.gameWins = createEmptyScore();
     room.roundWins = createEmptyScore();
     room.pendingNextVariant = false;
     room.variantId = room.remainingVariants[0] ?? DEFAULT_VARIANT_ID;
+    room.roundState = createRoundState({ variantId: room.variantId });
+    this.beginChoosing(room);
+  }
+
+  beginTiebreakerVariant(room) {
+    room.bannedVariants = [...new Set([
+      ...room.bannedVariants,
+      ...Object.values(room.variantPicks),
+    ])];
+    const availableVariants = room.variants.filter((variantId) => !room.bannedVariants.includes(variantId));
+    const tiebreakerVariant = availableVariants.length > 0
+      ? availableVariants[Math.floor(Math.random() * availableVariants.length)]
+      : DEFAULT_VARIANT_ID;
+
+    room.remainingVariants = [tiebreakerVariant];
+    room.currentVariantIndex = 0;
+    room.roundWins = createEmptyScore();
+    room.pendingNextVariant = false;
+    room.variantId = tiebreakerVariant;
     room.roundState = createRoundState({ variantId: room.variantId });
     this.beginChoosing(room);
   }
@@ -552,8 +592,17 @@ export class RankedDuelService {
   finishVariantGame(room, winnerKey) {
     room.gameWins[winnerKey] += 1;
 
-    if (room.gameWins[winnerKey] >= 2 || room.currentVariantIndex >= room.remainingVariants.length - 1) {
+    if (room.gameWins[winnerKey] >= 2 || room.variantSelectionRound === 2 || room.remainingVariants.length <= 1) {
       this.finishRoom(room, winnerKey);
+      return;
+    }
+
+    if (room.currentVariantIndex >= room.remainingVariants.length - 1) {
+      room.bannedVariants = [...new Set([
+        ...room.bannedVariants,
+        ...room.remainingVariants,
+      ])];
+      this.beginVariantSelection(room, { tiebreaker: true });
       return;
     }
 
@@ -659,7 +708,11 @@ export class RankedDuelService {
         id: variantId,
         label: getVariantLabel(variantId),
       })),
-      bans: room.bans,
+      bans: room.variantPicks,
+      variantPicks: room.variantPicks,
+      variantPickOrder: room.variantPickOrder,
+      bannedVariants: room.bannedVariants,
+      variantSelectionRound: room.variantSelectionRound,
       remainingVariants: room.remainingVariants,
       gameWins: room.gameWins,
       pendingNextVariant: room.pendingNextVariant,

@@ -3,7 +3,7 @@ import { pathToFileURL } from 'node:url';
 import { extname, join, normalize, sep } from 'node:path';
 import { readFile } from 'node:fs/promises';
 
-import { JsonPlayerStore, SupabasePlayerStore } from './playerStore.js';
+import { FallbackPlayerStore, JsonPlayerStore, SupabasePlayerStore } from './playerStore.js';
 import { RankedDuelService } from './rankedDuel.js';
 import { attachWebSocketServer } from './webSocket.js';
 
@@ -71,13 +71,18 @@ export function createTapTapShootServer({
 export function createPlayerStore({ env = process.env, root = DEFAULT_ROOT } = {}) {
   const supabaseUrl = env.SUPABASE_URL;
   const supabaseSecretKey = env.SUPABASE_SECRET_KEY ?? env.SUPABASE_SERVICE_ROLE_KEY;
+  const localStore = new JsonPlayerStore(join(root, '.ranked-players.json'));
 
   return supabaseUrl && supabaseSecretKey
-    ? new SupabasePlayerStore({
+    ? new FallbackPlayerStore(new SupabasePlayerStore({
       url: supabaseUrl,
       secretKey: supabaseSecretKey,
+    }), localStore, {
+      onError(error) {
+        console.warn('Supabase player store failed; using local ranked player store:', getErrorMessage(error));
+      },
     })
-    : new JsonPlayerStore(join(root, '.ranked-players.json'));
+    : localStore;
 }
 
 export function createStaticRequestHandler({ root = DEFAULT_ROOT, rankedDuel } = {}) {

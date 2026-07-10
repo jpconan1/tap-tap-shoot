@@ -1,0 +1,48 @@
+Punch Stab Shoot Nash Report
+
+Rules modeled
+- Players start at 3 HP each.
+- Punch beats shoot and deals 1 damage.
+- Shoot beats stab and deals 3 damage.
+- Stab beats punch and deals 2 damage.
+- Damage only happens when a player wins the matchup.
+- Ties deal no damage and the game continues.
+
+Terms
+- Value: your win chance from that HP state if both players play perfectly.
+- Nash mix: the move spread a perfect player should use.
+- CPU mix: the Nash mix for the opponent in that state.
+
+Core state table
+
+State             Value    Best CPU mix
+You 1, CPU 1      50%      punch 33%, stab 33%, shoot 33%
+You 1, CPU 2      37%      punch 30%, stab 18%, shoot 52%
+You 1, CPU 3      26%      punch 44%, stab 16%, shoot 40%
+You 2, CPU 1      63%      punch 52%, stab 18%, shoot 30%
+You 2, CPU 2      50%      punch 44%, stab 11%, shoot 44%
+You 2, CPU 3      38%      punch 55%, stab 11%, shoot 35%
+You 3, CPU 1      74%      punch 57%, stab 23%, shoot 20%
+You 3, CPU 2      62%      punch 52%, stab 16%, shoot 32%
+You 3, CPU 3      50%      punch 59%, stab 14%, shoot 28%
+
+Starting state
+- Start: You 3 HP, CPU 3 HP.
+- Game value: 50%.
+- Perfect CPU mix: punch 59%, stab 14%, shoot 28%.
+
+Read
+- Perfect play makes the starting game fair.
+- Punch is the most common opening move, even though it deals the least damage.
+- Stab is used least from most states because shoot kills it for 3 damage.
+- Shoot is still common because it can instantly kill any opponent at 3 HP or less.
+- At equal 1 HP, the game collapses to plain rock-paper-scissors because any winning hit kills.
+- Having 3 HP against 1 HP is strong, worth about 74% win chance.
+- Being at 1 HP against 3 HP is weak, but still live at about 26%.
+
+Math confidence
+- Confidence is high, assuming the listed rules are correct.
+- The game is modeled as a finite zero-sum simultaneous-reveal stochastic game.
+- Each state is solved as a minimax/Nash mixed strategy.
+- Symmetry checks pass: mirrored states add to 100%, and equal states are 50%.
+- Solver converged in 33 iterations.

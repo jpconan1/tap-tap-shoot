@@ -145,6 +145,43 @@ export class SupabasePlayerStore {
   }
 }
 
+export class FallbackPlayerStore {
+  constructor(primary, fallback, { onError = () => {} } = {}) {
+    this.primary = primary;
+    this.fallback = fallback;
+    this.onError = onError;
+    this.useFallback = false;
+  }
+
+  async getPlayer(playerId) {
+    if (this.useFallback) {
+      return this.fallback.getPlayer(playerId);
+    }
+
+    try {
+      return await this.primary.getPlayer(playerId);
+    } catch (error) {
+      this.useFallback = true;
+      this.onError(error);
+      return this.fallback.getPlayer(playerId);
+    }
+  }
+
+  async savePlayer(player) {
+    if (this.useFallback) {
+      return this.fallback.savePlayer(player);
+    }
+
+    try {
+      return await this.primary.savePlayer(player);
+    } catch (error) {
+      this.useFallback = true;
+      this.onError(error);
+      return this.fallback.savePlayer(player);
+    }
+  }
+}
+
 export function createDefaultPlayer(playerId) {
   return {
     id: playerId,

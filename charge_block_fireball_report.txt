@@ -1,0 +1,62 @@
+Charge Block Fireball Nash Report
+
+Rules modeled
+- Players start at 1 bar each.
+- Charge gives +1 bar.
+- Reaching 3 bars wins.
+- If both players reach 3 bars at same time, both reset to 2 bars.
+- Fireball costs 1 bar.
+- Fireball beats charge and ends game immediately.
+- Block draws fireball and game continues.
+- Fireball always costs 1 bar when chosen, even if blocked.
+
+Terms
+- Value: your win chance from that state if both players play perfectly.
+- Nash mix: the move spread a perfect player should use.
+- CPU mix: the Nash mix for the opponent in that state.
+
+Core state table
+
+State             Value             Best CPU mix
+You 0, CPU 1      17%               charge 65%, fireball 35%
+You 0, CPU 2      checkmate loss    charge 100%
+You 1, CPU 0      83%               charge 65%, block 35%
+You 1, CPU 1      50%               charge 31%, block 47%, fireball 22%
+You 1, CPU 2      26%               charge 22%, block 53%, fireball 25%
+You 2, CPU 0      checkmate win     any non-fireball
+You 2, CPU 1      74%               charge 30%, block 44%, fireball 26%
+You 2, CPU 2      50%               charge 19%, block 40%, fireball 40%
+
+Removed state
+- 0 vs 0 is omitted because it only allows charge vs charge and returns to 1 vs 1.
+
+Starting state
+- Start: You 1, CPU 1.
+- Game value: 50%.
+- Perfect CPU mix: charge 31%, block 47%, fireball 22%.
+
+Ending type from start, with both players using Nash play
+
+Ending type              Chance
+Any 3-bar victory        47%
+Any fireball kill        53%
+You win by 3 bars        24%
+CPU wins by 3 bars       24%
+You win by fireball      26%
+CPU wins by fireball     26%
+
+Read
+- Perfect play makes the starting game fair.
+- A 2-bar lead over 1 bar is strong, worth about 74% win chance.
+- Being down 1 bar to 2 bars is bad, but still live at about 26%.
+- Being at 0 bars against 2 bars is checkmate loss.
+- Being at 2 bars against 0 bars is checkmate win.
+- Strong-player games end slightly more often by fireball kill than by 3-bar victory.
+
+Math confidence
+- Confidence is high, assuming the listed rules are correct.
+- The game is modeled as a finite zero-sum simultaneous-reveal stochastic game.
+- Each state is solved as a minimax/Nash mixed strategy.
+- Symmetry checks pass: mirrored states add to 100%, and equal states are 50%.
+- Solver converged in 25 iterations.
+- Some checkmate states have non-unique CPU mixes, but the state values are stable.

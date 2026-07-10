@@ -2,8 +2,8 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { createRoundState, getPlayerLegalMoves, playTurn } from '../src/engine/gameState.js';
-import { MAX_BULLETS, MOVE_IDS, VARIANT_IDS, getLegalMoves, getVariantMoveIds } from '../src/engine/moves.js';
-import { RIVALS, chooseRivalMove } from '../src/engine/rivalAi.js';
+import { MAX_BULLETS, VARIANT_IDS, getLegalMoves, getVariantMoveIds } from '../src/engine/moves.js';
+import { RIVAL_DIFFICULTIES, chooseRivalMove } from '../src/engine/rivalAi.js';
 import { resolveTurn } from '../src/engine/resolveTurn.js';
 import { getVariantStagePresentation } from '../src/renderer.js';
 
@@ -356,40 +356,51 @@ test('rival AI always reloads from 0-0', () => {
   assert.equal(chooseRivalMove(state, fixedRoll(0.99)), 'reload');
 });
 
-test('rival configs only use known moves with valid weights', () => {
-  for (const rival of Object.values(RIVALS)) {
-    assert.equal(typeof rival.id, 'string');
-    assert.equal(typeof rival.name, 'string');
-    assert.equal(typeof rival.buttonDoodle, 'string');
-    assert.equal(typeof rival.crossedDoodle, 'string');
+test('easy rival AI picks uniformly across legal moves', () => {
+  const state = createStateWithBullets(1, 1, VARIANT_IDS.chargeBlockFireball);
 
-    for (const [matchup, policy] of Object.entries(rival.matchups)) {
-      assert.match(matchup, /^\d-\d$/);
+  assert.equal(chooseRivalMove(state, fixedRoll(0), RIVAL_DIFFICULTIES.easy), 'charge');
+  assert.equal(chooseRivalMove(state, fixedRoll(0.34), RIVAL_DIFFICULTIES.easy), 'block');
+  assert.equal(chooseRivalMove(state, fixedRoll(0.67), RIVAL_DIFFICULTIES.easy), 'fireball');
+});
 
-      for (const [moveId, weight] of Object.entries(policy)) {
-        assert.ok(MOVE_IDS.includes(moveId), `${rival.id} ${matchup} has unknown move ${moveId}`);
-        assert.equal(Number.isFinite(weight), true, `${rival.id} ${matchup} ${moveId} weight must be finite`);
-        assert.ok(weight >= 0, `${rival.id} ${matchup} ${moveId} weight must be non-negative`);
-      }
-    }
-  }
+test('hard rival AI uses charge block fireball Nash weights', () => {
+  const state = createStateWithBullets(1, 1, VARIANT_IDS.chargeBlockFireball);
+
+  assert.equal(chooseRivalMove(state, fixedRoll(0), RIVAL_DIFFICULTIES.hard), 'charge');
+  assert.equal(chooseRivalMove(state, fixedRoll(0.4), RIVAL_DIFFICULTIES.hard), 'block');
+  assert.equal(chooseRivalMove(state, fixedRoll(0.9), RIVAL_DIFFICULTIES.hard), 'fireball');
+});
+
+test('hard rival AI uses punch stab shoot Nash weights', () => {
+  const state = createStateWithBullets(3, 3, VARIANT_IDS.punchStabShoot);
+
+  assert.equal(chooseRivalMove(state, fixedRoll(0), RIVAL_DIFFICULTIES.hard), 'punch');
+  assert.equal(chooseRivalMove(state, fixedRoll(0.6), RIVAL_DIFFICULTIES.hard), 'stab');
+  assert.equal(chooseRivalMove(state, fixedRoll(0.99), RIVAL_DIFFICULTIES.hard), 'shoot');
+});
+
+test('rps ignores difficulty and picks uniformly across legal moves', () => {
+  const state = createStateWithBullets(0, 0, VARIANT_IDS.rps);
+
+  assert.equal(chooseRivalMove(state, fixedRoll(0), RIVAL_DIFFICULTIES.hard), 'rock');
+  assert.equal(chooseRivalMove(state, fixedRoll(0.34), RIVAL_DIFFICULTIES.hard), 'paper');
+  assert.equal(chooseRivalMove(state, fixedRoll(0.67), RIVAL_DIFFICULTIES.easy), 'scissors');
 });
 
 test('rival AI only chooses legal moves across bullet matchups', () => {
   const rolls = [0, 0.25, 0.5, 0.75, 0.999];
 
-  for (const rival of Object.values(RIVALS)) {
-    for (let rivalBullets = 0; rivalBullets <= MAX_BULLETS; rivalBullets += 1) {
-      for (let playerBullets = 0; playerBullets <= MAX_BULLETS; playerBullets += 1) {
-        const legalMoves = getLegalMoves(rivalBullets, playerBullets);
+  for (let rivalBullets = 0; rivalBullets <= MAX_BULLETS; rivalBullets += 1) {
+    for (let playerBullets = 0; playerBullets <= MAX_BULLETS; playerBullets += 1) {
+      const legalMoves = getLegalMoves(rivalBullets, playerBullets);
 
-        for (const roll of rolls) {
-          const move = chooseRivalMove(createStateWithBullets(rivalBullets, playerBullets), rival.id, fixedRoll(roll));
-          assert.ok(
-            legalMoves.includes(move),
-            `${rival.id} picked illegal ${move} at ${rivalBullets}-${playerBullets}`,
-          );
-        }
+      for (const roll of rolls) {
+        const move = chooseRivalMove(createStateWithBullets(rivalBullets, playerBullets), fixedRoll(roll));
+        assert.ok(
+          legalMoves.includes(move),
+          `picked illegal ${move} at ${rivalBullets}-${playerBullets}`,
+        );
       }
     }
   }

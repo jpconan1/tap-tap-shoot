@@ -1,71 +1,59 @@
 import { VARIANT_IDS, getLegalMoves, normalizeVariantId } from './moves.js';
 import { getPlayerResource } from './gameState.js';
-import { RIVAL_CONFIG } from './rivalConfig.js';
 
-export const RIVALS = RIVAL_CONFIG.rivals;
-export const DEFAULT_RIVAL_ID = RIVAL_CONFIG.defaultRivalId;
+export const RIVAL_DIFFICULTIES = Object.freeze({
+  easy: 'easy',
+  hard: 'hard',
+});
 
-export function chooseRivalMove(state, rivalId = DEFAULT_RIVAL_ID, rng = Math.random) {
-  if (typeof rivalId === 'function') {
-    rng = rivalId;
-    rivalId = DEFAULT_RIVAL_ID;
-  }
+const HARD_VARIANT_POLICIES = Object.freeze({
+  [VARIANT_IDS.chargeBlockFireball]: freezePolicyTable({
+    '0-1': { charge: 65, fireball: 35 },
+    '0-2': { charge: 100 },
+    '1-0': { charge: 65, block: 35 },
+    '1-1': { charge: 31, block: 47, fireball: 22 },
+    '1-2': { charge: 22, block: 53, fireball: 25 },
+    '2-0': { charge: 50, block: 50 },
+    '2-1': { charge: 30, block: 44, fireball: 26 },
+    '2-2': { charge: 19, block: 40, fireball: 40 },
+  }),
+  [VARIANT_IDS.punchStabShoot]: freezePolicyTable({
+    '1-1': { punch: 33, stab: 33, shoot: 33 },
+    '1-2': { punch: 30, stab: 18, shoot: 52 },
+    '1-3': { punch: 44, stab: 16, shoot: 40 },
+    '2-1': { punch: 52, stab: 18, shoot: 30 },
+    '2-2': { punch: 44, stab: 11, shoot: 44 },
+    '2-3': { punch: 55, stab: 11, shoot: 35 },
+    '3-1': { punch: 57, stab: 23, shoot: 20 },
+    '3-2': { punch: 52, stab: 16, shoot: 32 },
+    '3-3': { punch: 59, stab: 14, shoot: 28 },
+  }),
+});
 
-  const rival = RIVALS[rivalId] ?? RIVALS[DEFAULT_RIVAL_ID];
+export function chooseRivalMove(state, rng = Math.random, difficulty = RIVAL_DIFFICULTIES.hard) {
   const ownResource = getPlayerResource(state.players.p2);
   const enemyResource = getPlayerResource(state.players.p1);
-  const variantId = state.variantId;
-  const policyKey = getPolicyKey(ownResource, enemyResource);
-  const fallbackPolicyKey = getFallbackPolicyKey(ownResource, enemyResource);
-  const policy = rival.matchups[policyKey]
-    ?? rival.matchups[fallbackPolicyKey]
-    ?? RIVALS[DEFAULT_RIVAL_ID].matchups[fallbackPolicyKey];
+  const variantId = normalizeVariantId(state.variantId);
+  const normalizedDifficulty = normalizeDifficulty(difficulty);
 
-  return chooseWeightedLegalMove(ownResource, enemyResource, getVariantPolicy(policy, variantId), rng, variantId);
+  if (normalizedDifficulty === RIVAL_DIFFICULTIES.easy || variantId === VARIANT_IDS.rps) {
+    return chooseRandomLegalMove(ownResource, enemyResource, rng, variantId);
+  }
+
+  const hardPolicy = getHardVariantPolicy(enemyResource, ownResource, variantId);
+  if (hardPolicy) {
+    return chooseWeightedLegalMove(ownResource, enemyResource, hardPolicy, rng, variantId);
+  }
+
+  return chooseRandomLegalMove(ownResource, enemyResource, rng, variantId);
 }
 
-function getVariantPolicy(policy, variantId) {
-  if (normalizeVariantId(variantId) !== VARIANT_IDS.chargeBlockFireball) {
-    return policy;
-  }
-
-  return {
-    charge: policy.reload ?? 0,
-    block: (policy.duck ?? 0) + (policy.stab ?? 0),
-    fireball: policy.shoot ?? 0,
-  };
+function normalizeDifficulty(difficulty) {
+  return difficulty === RIVAL_DIFFICULTIES.easy ? RIVAL_DIFFICULTIES.easy : RIVAL_DIFFICULTIES.hard;
 }
 
-function getPolicyKey(ownBullets, enemyBullets) {
-  if (ownBullets === 0 && enemyBullets === 0) {
-    return '0-0';
-  }
-
-  if (ownBullets === 2 && enemyBullets === 0) {
-    return '2-0';
-  }
-
-  return getFallbackPolicyKey(ownBullets, enemyBullets);
-}
-
-function getFallbackPolicyKey(ownBullets, enemyBullets) {
-  if (ownBullets > 0 && enemyBullets === 0) {
-    return '1-0';
-  }
-
-  if (ownBullets === 0 && enemyBullets > 0) {
-    return '0-1';
-  }
-
-  if (ownBullets > enemyBullets) {
-    return '2-1';
-  }
-
-  if (ownBullets < enemyBullets) {
-    return '1-2';
-  }
-
-  return '1-1';
+function getHardVariantPolicy(enemyResource, ownResource, variantId) {
+  return HARD_VARIANT_POLICIES[variantId]?.[`${enemyResource}-${ownResource}`] ?? null;
 }
 
 function chooseWeightedLegalMove(ownBullets, enemyBullets, policy, rng, variantId) {
@@ -81,6 +69,11 @@ function chooseWeightedLegalMove(ownBullets, enemyBullets, policy, rng, variantI
   return pickWeightedMove(weightedMoves, rng);
 }
 
+function chooseRandomLegalMove(ownBullets, enemyBullets, rng, variantId) {
+  const legalMoves = getLegalMoves(ownBullets, enemyBullets, variantId);
+  return legalMoves[Math.min(Math.floor(rng() * legalMoves.length), legalMoves.length - 1)];
+}
+
 function pickWeightedMove(weightedMoves, rng) {
   const totalWeight = weightedMoves.reduce((sum, move) => sum + move.weight, 0);
   let roll = rng() * totalWeight;
@@ -94,4 +87,10 @@ function pickWeightedMove(weightedMoves, rng) {
   }
 
   return weightedMoves[weightedMoves.length - 1].moveId;
+}
+
+function freezePolicyTable(table) {
+  return Object.freeze(Object.fromEntries(
+    Object.entries(table).map(([key, policy]) => [key, Object.freeze(policy)]),
+  ));
 }

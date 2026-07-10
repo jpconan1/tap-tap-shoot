@@ -7,7 +7,7 @@ import {
   getVariantResourceMax,
 } from './engine/moves.js';
 import { createRoundState, getPlayerLegalMoves, getPlayerResource, playTurn } from './engine/gameState.js';
-import { chooseRivalMove as chooseAiMove, DEFAULT_RIVAL_ID } from './engine/rivalAi.js';
+import { chooseRivalMove as chooseAiMove } from './engine/rivalAi.js';
 import {
   configureAudio,
   CURTAIN_CLOSE_AUDIO,
@@ -371,7 +371,6 @@ const TUTORIAL_OUTCOMES = Object.freeze({
     ]),
   }),
 });
-const DEFAULT_OPPONENT_ID = DEFAULT_RIVAL_ID;
 const COMPUTER_VARIANTS = VARIANT_SELECT_VARIANTS;
 const COMPUTER_VARIANT_IDS = Object.freeze(COMPUTER_VARIANTS.map((variant) => variant.id));
 
@@ -394,7 +393,6 @@ const FINDING_MATCH_DOODLES = Object.freeze([
 let state = createRoundState();
 let screen = 'title';
 let playMode = 'local';
-let selectedOpponentId = DEFAULT_OPPONENT_ID;
 let selectedVariantId = DEFAULT_VARIANT_ID;
 let variantSelectPage = 0;
 let variantDifficultyToggleState = 'easy';
@@ -419,6 +417,11 @@ let isApplyingRankedSnapshot = false;
 let rankedReadyWaiting = null;
 let rankedReadyWaitingTimer = null;
 let rankedRoundAudioKey = null;
+let rankedQueueCurtain = null;
+let rankedQueueCurtainToken = 0;
+let rankedQueueCurtainPromise = null;
+let rankedQueueCurtainPhase = null;
+let rankedQueueError = null;
 let rankedDisplayName = readStoredDisplayName();
 let onlinePlayerCount = null;
 let onlineStatusTimer = null;
@@ -445,6 +448,7 @@ const rankedClient = new RankedClient({
   onQueue: handleRankedQueue,
   onSnapshot: applyRankedSnapshot,
   onClose: handleRankedClose,
+  onError: handleRankedError,
 });
 
 configureAudio({ getMusicTopperFile });
@@ -1438,40 +1442,106 @@ function render() {
 }
 
 function renderRankedBanScreen() {
-  const bans = rankedSnapshot.bans ?? {};
-  const bannedVariants = new Set(Object.values(bans));
-  const playerBan = bans[rankedSnapshot.playerKey];
-  const opponentBan = bans[rankedSnapshot.opponentKey];
-  const variants = rankedSnapshot.variants ?? [];
+  const picks = rankedSnapshot.variantPicks ?? rankedSnapshot.bans ?? {};
+  const pickedVariants = new Set(Object.values(picks));
+  const bannedVariants = new Set(rankedSnapshot.bannedVariants ?? []);
+  const playerPick = picks[rankedSnapshot.playerKey];
+  const variants = getRankedVariantSelectVariants();
+  const firstPickedVariant = picks[rankedSnapshot.variantPickOrder?.[0]];
 
   app.innerHTML = `
-    <section class="title-screen online-name-screen variant-ban-screen" aria-label="Variant bans">
-      <div class="title-panel online-name-card">
-        <h1 class="online-name-title">Ban variant</h1>
-        <p class="online-player-count">${opponentBan ? 'Opponent banned.' : 'Opponent choosing.'}</p>
-        <div class="variant-ban-list">
-          ${variants.map((variant) => `
-            <button
-              class="ghost variant-ban-button ${bannedVariants.has(variant.id) ? 'selected' : ''}"
-              data-ban-variant="${variant.id}"
-              type="button"
-              ${playerBan || bannedVariants.has(variant.id) ? 'disabled' : ''}
-            >
-              ${escapeHtml(variant.label)}
-            </button>
-          `).join('')}
-        </div>
-        <div class="online-name-actions">
-          <button class="ghost online-name-back" data-action="quit" type="button">Back</button>
-        </div>
+    <section class="title-screen opponent-select-screen variant-ban-screen" aria-label="Pick variant">
+      ${renderOpenCurtainBorder()}
+
+      <canvas
+        class="sprite-canvas pick-variant-header"
+        data-doodle-file="pick_variant_sheet.webp"
+        data-frame-width="${PICK_VARIANT_FRAME_WIDTH}"
+        data-frame-height="${PICK_VARIANT_FRAME_HEIGHT}"
+        width="${PICK_VARIANT_FRAME_WIDTH}"
+        height="${PICK_VARIANT_FRAME_HEIGHT}"
+        aria-label="Pick variant"
+      ></canvas>
+
+      <div class="variant-actions">
+        ${variants.map((variant, index) => renderRankedVariantPickButton({
+          variant,
+          slot: index + 1,
+          disabled: Boolean(playerPick) || pickedVariants.has(variant.id) || bannedVariants.has(variant.id),
+          picked: pickedVariants.has(variant.id),
+          banned: bannedVariants.has(variant.id),
+          firstPicked: firstPickedVariant === variant.id,
+        })).join('')}
+        ${renderRankedQuitButton()}
       </div>
     </section>
   `;
 
   app.querySelector('[data-action="quit"]')?.addEventListener('click', leaveRanked);
-  app.querySelectorAll('[data-ban-variant]').forEach((button) => {
-    button.addEventListener('click', () => submitRankedBan(button.dataset.banVariant));
+  app.querySelectorAll('[data-pick-variant]').forEach((button) => {
+    button.addEventListener('click', () => submitRankedVariantPick(button.dataset.pickVariant));
   });
+  mountSpriteRenderers(app.querySelectorAll('.sprite-canvas'));
+}
+
+function getRankedVariantSelectVariants() {
+  const rankedVariants = rankedSnapshot?.variants ?? [];
+  return rankedVariants
+    .map((rankedVariant) => COMPUTER_VARIANTS.find((variant) => variant.id === rankedVariant.id) ?? {
+      id: rankedVariant.id,
+      name: rankedVariant.label,
+      buttonDoodle: getComputerVariant(rankedVariant.id).buttonDoodle,
+    })
+    .filter(Boolean);
+}
+
+function renderRankedVariantPickButton({ variant, slot, disabled, picked, banned, firstPicked }) {
+  return `
+    <button
+      class="variant-button variant-slot-${slot} ranked-variant-pick ${picked ? 'picked' : ''} ${banned ? 'banned' : ''}"
+      data-pick-variant="${variant.id}"
+      data-variant-slot="${slot}"
+      aria-label="${escapeHtml(variant.name)}"
+      ${disabled ? 'disabled' : ''}
+    >
+      <canvas
+        class="sprite-canvas variant-button-art"
+        data-doodle="${variant.buttonDoodle}"
+        data-frame-width="${VARIANT_BUTTON_FRAME_WIDTH}"
+        data-frame-height="${VARIANT_BUTTON_FRAME_HEIGHT}"
+        width="${VARIANT_BUTTON_FRAME_WIDTH}"
+        height="${VARIANT_BUTTON_FRAME_HEIGHT}"
+        aria-hidden="true"
+      ></canvas>
+      ${firstPicked ? `
+        <canvas
+          class="sprite-canvas ranked-variant-ready"
+          data-doodle="READY"
+          data-frame-width="${DOODLE_FRAME_WIDTH}"
+          data-frame-height="${DOODLE_FRAME_HEIGHT}"
+          width="${DOODLE_FRAME_WIDTH}"
+          height="${DOODLE_FRAME_HEIGHT}"
+          aria-hidden="true"
+        ></canvas>
+      ` : ''}
+    </button>
+  `;
+}
+
+function renderRankedQuitButton() {
+  return `
+    <button class="opponent-button back-button" data-action="quit" aria-label="Back">
+      <canvas
+        class="sprite-canvas opponent-button-art"
+        data-doodle="back_button_w"
+        data-frame-width="${TITLE_BUTTON_FRAME_WIDTH}"
+        data-frame-height="${TITLE_BUTTON_FRAME_HEIGHT}"
+        width="${TITLE_BUTTON_FRAME_WIDTH}"
+        height="${TITLE_BUTTON_FRAME_HEIGHT}"
+        aria-hidden="true"
+      ></canvas>
+    </button>
+  `;
 }
 
 function renderLayoutGameScreen(legalMoves) {
@@ -2806,17 +2876,9 @@ function renderBackButton() {
 }
 
 function renderVariantButton(variant, slot) {
-  return `
-    <button class="variant-button variant-slot-${slot}" data-variant="${variant.id}" data-variant-slot="${slot}" aria-label="${variant.name}">
-      <canvas
-        class="sprite-canvas variant-button-art"
-        data-doodle="${variant.buttonDoodle}"
-        data-frame-width="${VARIANT_BUTTON_FRAME_WIDTH}"
-        data-frame-height="${VARIANT_BUTTON_FRAME_HEIGHT}"
-        width="${VARIANT_BUTTON_FRAME_WIDTH}"
-        height="${VARIANT_BUTTON_FRAME_HEIGHT}"
-        aria-hidden="true"
-      ></canvas>
+  const difficultyToggle = variant.id === VARIANT_IDS.rps
+    ? ''
+    : `
       <span
         class="variant-difficulty-toggle"
         data-action="variant-difficulty-toggle"
@@ -2831,6 +2893,20 @@ function renderVariantButton(variant, slot) {
           aria-hidden="true"
         ></canvas>
       </span>
+    `;
+
+  return `
+    <button class="variant-button variant-slot-${slot}" data-variant="${variant.id}" data-variant-slot="${slot}" aria-label="${variant.name}">
+      <canvas
+        class="sprite-canvas variant-button-art"
+        data-doodle="${variant.buttonDoodle}"
+        data-frame-width="${VARIANT_BUTTON_FRAME_WIDTH}"
+        data-frame-height="${VARIANT_BUTTON_FRAME_HEIGHT}"
+        width="${VARIANT_BUTTON_FRAME_WIDTH}"
+        height="${VARIANT_BUTTON_FRAME_HEIGHT}"
+        aria-hidden="true"
+      ></canvas>
+      ${difficultyToggle}
     </button>
   `;
 }
@@ -2885,6 +2961,9 @@ function renderVariantPageControls() {
 function renderQueueScreen() {
   startFindingMatchTicker();
   requestMusicTrack('title');
+  const statusMarkup = rankedQueueError
+    ? `<p class="online-player-count" aria-live="polite">${escapeHtml(rankedQueueError)}</p>`
+    : '';
 
   app.innerHTML = `
     <section class="title-screen queue-screen" aria-label="Ranked queue">
@@ -2906,6 +2985,7 @@ function renderQueueScreen() {
         height="${TITLE_BUTTON_FRAME_HEIGHT}"
         aria-label="Finding match"
       ></canvas>
+      ${statusMarkup}
       <button class="ghost" data-action="cancel-queue">Cancel</button>
     </section>
   `;
@@ -3878,7 +3958,6 @@ async function startTutorialFromTitle() {
   loopToken += 1;
   isTransitioning = true;
   await playWipeTransition(() => {
-    selectedOpponentId = DEFAULT_OPPONENT_ID;
     state = createRoundState();
     screen = 'tutorial';
     turnPhase = 'scene';
@@ -3902,7 +3981,6 @@ async function startTestModeFromTitle() {
     return;
   }
 
-  selectedOpponentId = DEFAULT_OPPONENT_ID;
   selectedVariantId = DEFAULT_VARIANT_ID;
   await setActiveGameLayoutForVariant(selectedVariantId);
   playMode = 'test';
@@ -3922,7 +4000,6 @@ async function startLocalGame(variantId) {
     return;
   }
 
-  selectedOpponentId = DEFAULT_OPPONENT_ID;
   selectedVariantId = COMPUTER_VARIANT_IDS.includes(variantId) ? variantId : DEFAULT_VARIANT_ID;
   await setActiveGameLayoutForVariant(selectedVariantId);
   playMode = 'local';
@@ -3948,7 +4025,6 @@ async function playSelectedVariant(variantId) {
   isTransitioning = true;
   menu.overlay.remove();
   restoreVariantButton(menu.selectedButton);
-  selectedOpponentId = DEFAULT_OPPONENT_ID;
   selectedVariantId = COMPUTER_VARIANT_IDS.includes(variantId) ? variantId : DEFAULT_VARIANT_ID;
   await setActiveGameLayoutForVariant(selectedVariantId);
   playMode = 'local';
@@ -4347,20 +4423,43 @@ function beginRankedQueue() {
   pendingRankedSnapshot = null;
   rankedReadyWaiting = null;
   rankedRoundAudioKey = null;
+  rankedQueueError = null;
   findingMatchStep = 0;
-  rankedClient.connect(rankedDisplayName, DEFAULT_VARIANT_ID);
   render();
+  rankedQueueCurtainPromise = closeRankedQueueCurtain();
+  rankedClient.connect(rankedDisplayName, DEFAULT_VARIANT_ID);
 }
 
 function handleRankedQueue() {
   screen = 'queue';
+  rankedQueueError = null;
+  if (rankedQueueCurtainPhase || rankedQueueCurtainPromise || rankedQueueCurtain || rankedSnapshot) {
+    return;
+  }
   render();
+}
+
+function handleRankedError(message = 'connection failed') {
+  if (playMode !== 'online' || screen !== 'queue' || rankedSnapshot) {
+    return;
+  }
+
+  rankedQueueError = message;
+  if (!rankedQueueCurtainPhase && !rankedQueueCurtainPromise && !rankedQueueCurtain) {
+    render();
+  }
 }
 
 function handleRankedClose() {
   if (playMode === 'online' && screen !== 'title') {
+    removeRankedQueueCurtain();
     clearRankedReadyWaitingTimer();
     rankedReadyWaiting = null;
+    if (screen === 'queue' && !rankedSnapshot) {
+      rankedQueueError = rankedQueueError ?? 'connection closed';
+      render();
+      return;
+    }
     screen = 'title';
     rankedSnapshot = null;
     pendingRankedSnapshot = null;
@@ -4402,6 +4501,35 @@ async function processRankedSnapshot(snapshot) {
   const previousSnapshot = rankedSnapshot;
   const previousPhase = previousSnapshot?.phase;
 
+  if (rankedQueueCurtainPromise) {
+    await rankedQueueCurtainPromise;
+  }
+
+  if (rankedQueueCurtain && snapshot.phase === 'banning') {
+    commitRankedSnapshot(snapshot, previousPhase);
+    renderBehindRankedQueueCurtain();
+    const curtain = rankedQueueCurtain;
+    rankedQueueCurtain = null;
+    rankedQueueCurtainPhase = 'opening';
+    isTransitioning = true;
+    await openCurtainWipe(curtain, playCurtainOpenAudio);
+    rankedQueueCurtainPhase = null;
+    isTransitioning = false;
+    render();
+    return;
+  }
+
+  if (rankedQueueCurtain) {
+    commitRankedSnapshot(snapshot, previousPhase);
+    renderBehindRankedQueueCurtain();
+    return;
+  }
+
+  if (shouldCurtainToRankedSnapshot(previousSnapshot, snapshot)) {
+    await curtainToRankedSnapshot(snapshot, previousPhase);
+    return;
+  }
+
   if (shouldWipeToRankedSnapshot(previousSnapshot, snapshot)) {
     await wipeToRankedSnapshot(snapshot, previousPhase);
     return;
@@ -4424,6 +4552,27 @@ async function wipeToRankedSnapshot(snapshot, previousPhase) {
   });
   isTransitioning = false;
   render();
+}
+
+async function curtainToRankedSnapshot(snapshot, previousPhase) {
+  clearRankedReadyWaitingTimer();
+  isTransitioning = true;
+  await playCurtainMenuTransition(() => {
+    commitRankedSnapshot(snapshot, previousPhase);
+    render();
+  });
+  isTransitioning = false;
+  render();
+}
+
+function shouldCurtainToRankedSnapshot(previousSnapshot, snapshot) {
+  return playMode === 'online'
+    && !isTransitioning
+    && (
+      (previousSnapshot?.phase === 'banning' && snapshot.phase === 'choosing')
+      || (previousSnapshot?.phase === 'revealed' && snapshot.phase === 'banning')
+      || (previousSnapshot?.phase === 'roundOver' && snapshot.phase === 'banning')
+    );
 }
 
 function shouldWipeToRankedSnapshot(previousSnapshot, snapshot) {
@@ -4705,8 +4854,8 @@ function submitRankedMove(moveId) {
   render();
 }
 
-function submitRankedBan(variantId) {
-  if (!rankedClient.submitBan(rankedSnapshot, variantId)) {
+function submitRankedVariantPick(variantId) {
+  if (!rankedClient.submitVariantPick(rankedSnapshot, variantId)) {
     return;
   }
 
@@ -4732,6 +4881,7 @@ function submitRankedContinue() {
 
 function leaveRanked() {
   rankedClient.close();
+  removeRankedQueueCurtain();
   stopFindingMatchTicker();
   clearRankedReadyWaitingTimer();
   playMode = 'local';
@@ -4742,10 +4892,47 @@ function leaveRanked() {
   pendingRankedSnapshot = null;
   rankedReadyWaiting = null;
   rankedRoundAudioKey = null;
+  rankedQueueError = null;
   screen = 'title';
   turnPhase = 'idle';
   p1QueuedMove = null;
   render();
+}
+
+async function closeRankedQueueCurtain() {
+  removeRankedQueueCurtain({ keepPromise: true });
+  const token = rankedQueueCurtainToken + 1;
+  rankedQueueCurtainToken = token;
+  rankedQueueCurtainPhase = 'closing';
+  isTransitioning = true;
+  const curtain = await closeCurtainWipe(app, playCurtainCloseAudio);
+  rankedQueueCurtainPromise = null;
+  if (token !== rankedQueueCurtainToken || playMode !== 'online' || screen === 'title') {
+    curtain.remove();
+    rankedQueueCurtainPhase = null;
+    isTransitioning = false;
+    return;
+  }
+  rankedQueueCurtain = curtain;
+  rankedQueueCurtainPhase = 'closed';
+  isTransitioning = false;
+}
+
+function removeRankedQueueCurtain({ keepPromise = false } = {}) {
+  rankedQueueCurtainToken += 1;
+  if (!keepPromise) {
+    rankedQueueCurtainPromise = null;
+  }
+  rankedQueueCurtainPhase = null;
+  rankedQueueCurtain?.remove();
+  rankedQueueCurtain = null;
+}
+
+function renderBehindRankedQueueCurtain() {
+  render();
+  if (rankedQueueCurtain && !rankedQueueCurtain.isConnected) {
+    app.append(rankedQueueCurtain);
+  }
 }
 
 function startFindingMatchTicker() {
@@ -4939,7 +5126,9 @@ function resolveQueuedTurn() {
     ? p1QueuedMove
     : getFallbackMove('p1');
   const tutorialOutcome = screen === 'tutorial' ? getTutorialOutcome(p1Move) : null;
-  const p2Move = tutorialOutcome?.p2Move ?? localTurnChoice?.moves.p2 ?? chooseAiMove(state, selectedOpponentId);
+  const p2Move = tutorialOutcome?.p2Move
+    ?? localTurnChoice?.moves.p2
+    ?? chooseAiMove(state, Math.random, variantDifficultyToggleState);
   const turn = playTurn(state, p1Move, p2Move);
   clearLocalTurnChoice();
 

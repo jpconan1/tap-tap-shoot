@@ -521,6 +521,30 @@ canvas {
   opacity: 0.55;
 }
 
+.ranked-variant-pick {
+  position: relative;
+}
+
+.ranked-variant-pick.picked,
+.ranked-variant-pick.banned {
+  opacity: 0.58;
+}
+
+.ranked-variant-pick.banned {
+  filter: grayscale(1);
+}
+
+.ranked-variant-ready {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 160px;
+  height: 90px;
+  transform: translate(-50%, -50%) rotate(-3deg);
+  pointer-events: none;
+  z-index: 3;
+}
+
 .opponent-actions {
   display: grid;
   grid-template-columns: repeat(2, 256px);

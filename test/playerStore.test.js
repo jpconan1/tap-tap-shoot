@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { SupabasePlayerStore } from '../server/playerStore.js';
+import { FallbackPlayerStore, MemoryPlayerStore, SupabasePlayerStore } from '../server/playerStore.js';
 
 test('SupabasePlayerStore creates missing players', async () => {
   const rows = new Map();
@@ -78,6 +78,33 @@ test('SupabasePlayerStore requires credentials', () => {
     () => new SupabasePlayerStore({ url: '', secretKey: '' }),
     /requires a url and secret key/,
   );
+});
+
+test('FallbackPlayerStore uses fallback after primary player load fails', async () => {
+  const errors = [];
+  const primary = {
+    async getPlayer() {
+      throw new Error('primary down');
+    },
+    async savePlayer() {
+      throw new Error('primary down');
+    },
+  };
+  const store = new FallbackPlayerStore(primary, new MemoryPlayerStore(), {
+    onError(error) {
+      errors.push(error.message);
+    },
+  });
+
+  assert.equal((await store.getPlayer('p1')).id, 'p1');
+  assert.deepEqual(errors, ['primary down']);
+  assert.equal((await store.savePlayer({
+    id: 'p1',
+    rating: 1016,
+    wins: 1,
+    losses: 0,
+    lastPlayed: null,
+  })).rating, 1016);
 });
 
 function createFakeSupabaseFetch(rows, requests = []) {
