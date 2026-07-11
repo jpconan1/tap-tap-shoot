@@ -1,4 +1,5 @@
 import { MOVE_IDS } from './engine/moves.js';
+import { resolveScene } from './sceneResolver.js';
 
 export const DOODLE_FRAME_WIDTH = 512;
 export const DOODLE_FRAME_HEIGHT = 256;
@@ -284,29 +285,11 @@ export async function openCurtainWipe(overlay, playOpenAudio = null) {
 }
 
 export function getDoodlePresentation(p1Move, p2Move, { variantId = '' } = {}) {
-  const name = getDoodleForMoves(p1Move, p2Move, variantId);
-
-  return {
-    kind: 'doodle',
-    name,
-    flip: shouldFlipDoodle(name, p1Move, p2Move, variantId),
-  };
+  return resolveScene({ variantId, p1Move, p2Move });
 }
 
 export function getVariantStagePresentation(result, p1Move, p2Move, { variantId = '' } = {}) {
-  if (variantId === 'shootStabDuck' || variantId === 'shoot-stab-duck') {
-    return getShootStabDuckStagePresentation(result, p1Move, p2Move);
-  }
-
-  if (variantId === 'punchStabShoot' || variantId === 'punch-stab-shoot') {
-    return getPunchStabShootStagePresentation(result, p1Move, p2Move);
-  }
-
-  if (variantId === 'tapTapShoot' || variantId === 'tap-tap-shoot' || variantId === 'counterstab') {
-    return getTapTapShootStagePresentation(result, p1Move, p2Move);
-  }
-
-  return getDoodlePresentation(p1Move, p2Move, { variantId });
+  return resolveScene({ variantId, p1Move, p2Move, result });
 }
 
 function getShootStabDuckStagePresentation(result, p1Move, p2Move) {

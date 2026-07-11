@@ -4,9 +4,12 @@ import {
   MOVES,
   VARIANT_IDS,
   getVariantMoveIds,
+  getVariantLabel,
   getVariantResourceMax,
+  getVariantStartResource,
 } from './engine/moves.js';
 import { createRoundState, getPlayerLegalMoves, getPlayerResource, playTurn } from './engine/gameState.js';
+import { resolveTurn } from './engine/resolveTurn.js';
 import { chooseRivalMove as chooseAiMove } from './engine/rivalAi.js';
 import {
   configureAudio,
@@ -37,6 +40,7 @@ import {
 } from './audio.js';
 import { RankedClient } from './rankedClient.js';
 import { getResourcePresentation, shouldShowPickHistoryForVariant } from './variantPresentation.js';
+import { resolveReadyScene, resolveScene } from './sceneResolver.js';
 import { VARIANT_SELECT_PAGE_SIZE, VARIANT_SELECT_VARIANTS } from './variantSelectConfig.js';
 import {
   DOODLE_FRAME_RATE,
@@ -1366,6 +1370,11 @@ function render() {
     return;
   }
 
+  if (screen === 'scene-gallery') {
+    renderSceneGallery();
+    return;
+  }
+
   if (screen === 'opponent-select') {
     renderOpponentSelectScreen();
     return;
@@ -1479,7 +1488,7 @@ function renderRankedBanScreen() {
 
   app.querySelector('[data-action="quit"]')?.addEventListener('click', leaveRanked);
   app.querySelectorAll('[data-pick-variant]').forEach((button) => {
-    button.addEventListener('click', () => submitRankedVariantPick(button.dataset.pickVariant));
+    button.addEventListener('click', () => showRankedVariantDetail(button.dataset.pickVariant, button));
   });
   mountSpriteRenderers(app.querySelectorAll('.sprite-canvas'));
 }
@@ -2128,15 +2137,133 @@ function renderTitleScreen() {
         ${renderTitleVolumeSlider('sfx', sfxVolume)}
         ${renderTitleBoilButton()}
       </div>
+
+      <button class="text-link scene-gallery-link" data-action="scene-gallery" type="button">Scene gallery</button>
     </section>
   `;
 
   app.querySelector('[data-action="play"]').addEventListener('click', startGameFromTitle);
   app.querySelector('[data-action="ranked"]').addEventListener('click', startRankedFromTitle);
+  app.querySelector('[data-action="scene-gallery"]').addEventListener('click', () => {
+    screen = 'scene-gallery';
+    render();
+  });
   app.querySelector('[data-action="toggle-sound"]').addEventListener('click', toggleSound);
   app.querySelector('[data-action="toggle-boil"]').addEventListener('click', toggleBoil);
   mountSpriteRenderers(app.querySelectorAll('.sprite-canvas'));
   mountTitleVolumeSliders(app.querySelectorAll('.title-volume-slider'));
+}
+
+function renderSceneGallery() {
+  requestMusicTrack('title');
+  const groups = buildSceneGalleryGroups();
+
+  app.innerHTML = `
+    <section class="scene-gallery" aria-label="Scene gallery">
+      <header class="scene-gallery-header">
+        <button class="text-link" data-action="close-scene-gallery" type="button">Back</button>
+        <h1>Scene gallery</h1>
+        <span>Click scene for sound</span>
+      </header>
+      <div class="scene-gallery-scroll">
+        ${groups.map(({ variantId, entries }) => `
+          <section class="scene-gallery-group">
+            <h2>${getVariantLabel(variantId)}</h2>
+            <div class="scene-gallery-grid">
+              ${entries.map(renderSceneGalleryCard).join('')}
+            </div>
+          </section>
+        `).join('')}
+      </div>
+    </section>
+  `;
+
+  app.querySelector('[data-action="close-scene-gallery"]')?.addEventListener('click', () => {
+    screen = 'title';
+    render();
+  });
+  app.querySelectorAll('[data-gallery-scene]').forEach((button, index) => {
+    button.addEventListener('click', () => {
+      const presentation = {
+        kind: 'doodle',
+        name: button.dataset.galleryAudioScene,
+        flip: button.dataset.flip === 'true',
+      };
+      unlockSceneAudio();
+      playStageAudio({ isTransitioning: false, presentation, audioKey: `gallery:${index}:${performance.now()}` });
+    });
+  });
+  mountSpriteRenderers(app.querySelectorAll('.sprite-canvas'));
+}
+
+function buildSceneGalleryGroups() {
+  return Object.values(VARIANT_IDS).map((variantId) => {
+    const moveIds = getVariantMoveIds(variantId);
+    const resource = getVariantStartResource(variantId);
+    const entries = [];
+    const seen = new Set();
+
+    const add = (presentation, label, audioScene = presentation.name) => {
+      if (!presentation) return;
+      const key = `${presentation.name}:${presentation.flip}:${label}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+      entries.push({ presentation, label, audioScene });
+    };
+
+    add(getIdleStagePresentation(variantId), 'Standoff');
+
+    for (const p1Move of moveIds) {
+      for (const p2Move of moveIds) {
+        const moves = { p1: p1Move, p2: p2Move };
+        const result = resolveTurn({ variantId, p1Move, p2Move, p1Resource: resource, p2Resource: resource });
+        if (!result.ok) continue;
+        const scene = resolveScene({ variantId, p1Move, p2Move, result });
+        const matchup = `P1 ${p1Move} / P2 ${p2Move}`;
+        add(scene, matchup);
+
+        for (const readyPlayerId of ['p1', 'p2']) {
+          add(
+            resolveReadyScene({ sceneName: scene.name, readyPlayerId, moves }),
+            `${matchup} / ${readyPlayerId.toUpperCase()} ready`,
+            scene.name,
+          );
+        }
+
+        if (variantId === VARIANT_IDS.punchStabShoot) {
+          const killResult = resolveTurn({ variantId, p1Move, p2Move, p1Resource: 1, p2Resource: 1 });
+          if (killResult.ok) add(resolveScene({ variantId, p1Move, p2Move, result: killResult }), `${matchup} / low health`);
+        }
+      }
+    }
+
+    return { variantId, entries };
+  });
+}
+
+function renderSceneGalleryCard({ presentation, label, audioScene }) {
+  return `
+    <button
+      class="scene-gallery-card"
+      data-gallery-scene="${presentation.name}"
+      data-gallery-audio-scene="${audioScene}"
+      data-flip="${presentation.flip}"
+      type="button"
+    >
+      <canvas
+        class="sprite-canvas scene-gallery-art"
+        data-doodle="${presentation.name}"
+        data-flip="${presentation.flip}"
+        data-frame-width="${DOODLE_FRAME_WIDTH}"
+        data-frame-height="${DOODLE_FRAME_HEIGHT}"
+        width="${DOODLE_FRAME_WIDTH}"
+        height="${DOODLE_FRAME_HEIGHT}"
+        aria-hidden="true"
+      ></canvas>
+      <span>${label}</span>
+      <small>${presentation.name}${presentation.flip ? ' · flipped' : ''}</small>
+    </button>
+  `;
 }
 
 function renderTitleAudioButton(kind, isChecked) {
@@ -2760,8 +2887,31 @@ async function showVariantDetail(variantId, sourceButton) {
   }
 
   app.classList.add('variant-detail-open');
-  const overlay = renderVariantDetailOverlay(variant);
-  variantDetailMenu = { curtain, overlay, selectedButton };
+  const overlay = renderVariantDetailOverlay(variant, playSelectedVariant);
+  variantDetailMenu = { curtain, overlay, selectedButton, mode: 'local' };
+  isTransitioning = false;
+}
+
+async function showRankedVariantDetail(variantId, sourceButton) {
+  if (isTransitioning || variantDetailMenu || rankedSnapshot?.phase !== 'banning') {
+    return;
+  }
+
+  const variant = getComputerVariant(variantId);
+  const selectedButton = promoteVariantButton(sourceButton);
+  isTransitioning = true;
+  const curtain = await closeCurtainWipe(app, playCurtainCloseAudio);
+
+  if (playMode !== 'online' || rankedSnapshot?.phase !== 'banning') {
+    restoreVariantButton(selectedButton);
+    curtain.remove();
+    isTransitioning = false;
+    return;
+  }
+
+  app.classList.add('variant-detail-open');
+  const overlay = renderVariantDetailOverlay(variant, confirmRankedVariantPick);
+  variantDetailMenu = { curtain, overlay, selectedButton, mode: 'online' };
   isTransitioning = false;
 }
 
@@ -2775,7 +2925,7 @@ function restoreVariantButton(button) {
   button?.classList.remove('variant-button-above-curtain');
 }
 
-function renderVariantDetailOverlay(variant) {
+function renderVariantDetailOverlay(variant, onPlay) {
   const overlay = document.createElement('div');
   const slot = getVariantSelectSlot(variant.id);
   overlay.className = `variant-detail-overlay variant-detail-${variant.id} variant-detail-slot-${slot}`;
@@ -2812,7 +2962,7 @@ function renderVariantDetailOverlay(variant) {
   `;
 
   app.append(overlay);
-  overlay.querySelector('[data-action="variant-play"]').addEventListener('click', () => playSelectedVariant(variant.id));
+  overlay.querySelector('[data-action="variant-play"]').addEventListener('click', () => onPlay(variant.id));
   overlay.querySelector('[data-action="variant-back"]').addEventListener('click', closeVariantDetail);
   mountSpriteRenderers(app.querySelectorAll('.sprite-canvas'));
   overlay.querySelector('[data-action="variant-play"]').focus();
@@ -3430,13 +3580,8 @@ function queueLocalComputerMove() {
     return;
   }
 
-  choice.moves.p2 = chooseEasyComputerMove(state);
+  choice.moves.p2 = chooseAiMove(state, Math.random, variantDifficultyToggleState);
   handleLocalMoveQueued('p2');
-}
-
-function chooseEasyComputerMove(roundState, rng = Math.random) {
-  const legalMoves = getPlayerLegalMoves(roundState, 'p2');
-  return legalMoves[Math.floor(rng() * legalMoves.length)] ?? legalMoves[0];
 }
 
 function handleLocalMoveQueued(playerId) {
@@ -3526,69 +3671,7 @@ function replaceStagePresentation() {
 
 function getReadySplitPresentation(readyPlayerId) {
   const scene = stagePresentation.kind === 'doodle' ? stagePresentation.name : '';
-
-  if (!readyPlayerId || scene === 'shooting' || scene === 'stabbing') {
-    return null;
-  }
-
-  const rpsSplitScene = getRpsReadySplitScene(scene);
-
-  if (rpsSplitScene) {
-    return {
-      kind: 'doodle',
-      name: `rock-paper-scissors/split_scenes/${rpsSplitScene}_${readyPlayerId}_is_ready`,
-      flip: false,
-    };
-  }
-
-  const cbfSplitScene = getChargeBlockFireballReadySplitScene(scene);
-
-  if (cbfSplitScene) {
-    const separator = cbfSplitScene === 'charge' ? '-' : '_';
-    return {
-      kind: 'doodle',
-      name: `charge-block-fireball/split_scenes/${cbfSplitScene}${separator}${readyPlayerId}_is_ready`,
-      flip: false,
-    };
-  }
-
-  const pssSplitPresentation = getPunchStabShootReadySplitPresentation(scene, readyPlayerId);
-
-  if (pssSplitPresentation) {
-    return pssSplitPresentation;
-  }
-
-  const ssdSplitPresentation = getShootStabDuckReadySplitPresentation(scene, readyPlayerId);
-
-  if (ssdSplitPresentation) {
-    return ssdSplitPresentation;
-  }
-
-  const ttsSplitPresentation = getTapTapShootReadySplitPresentation(scene, readyPlayerId);
-
-  if (ttsSplitPresentation) {
-    return ttsSplitPresentation;
-  }
-
-  if (scene === 'charge-block-fireball/block-charge') {
-    const isChargerReady = lastMoves[readyPlayerId] === 'charge';
-    return {
-      kind: 'doodle',
-      name: `charge-block-fireball/split_scenes/block-charge_${isChargerReady ? 'charger' : 'blocker'}_is_ready`,
-      flip: lastMoves.p1 === 'charge',
-    };
-  }
-
-  if (scene === 'charge-block-fireball/block-fireball') {
-    const isFireballerReady = lastMoves[readyPlayerId] === 'fireball';
-    return {
-      kind: 'doodle',
-      name: `charge-block-fireball/split_scenes/block-fireball_${isFireballerReady ? 'fireballer' : 'blocker'}_is_ready`,
-      flip: lastMoves.p1 === 'fireball',
-    };
-  }
-
-  return null;
+  return resolveReadyScene({ sceneName: scene, readyPlayerId, moves: lastMoves });
 }
 
 function getRpsReadySplitScene(scene) {
@@ -4039,6 +4122,24 @@ async function playSelectedVariant(variantId) {
   isTransitioning = false;
   render();
   beginOpeningCues();
+}
+
+async function confirmRankedVariantPick(variantId) {
+  const menu = variantDetailMenu;
+
+  if (!menu || menu.mode !== 'online' || isTransitioning || rankedSnapshot?.phase !== 'banning') {
+    return;
+  }
+
+  variantDetailMenu = null;
+  isTransitioning = true;
+  menu.overlay.remove();
+  restoreVariantButton(menu.selectedButton);
+  submitRankedVariantPick(variantId);
+  app.append(menu.curtain);
+  await openCurtainWipe(menu.curtain, playCurtainOpenAudio);
+  isTransitioning = false;
+  render();
 }
 
 async function advanceTutorialSlide() {
