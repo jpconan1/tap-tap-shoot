@@ -629,9 +629,10 @@ canvas {
   position: absolute;
   left: 50%;
   top: 50%;
-  width: 160px;
-  height: 90px;
+  width: 150px;
+  height: 128px;
   transform: translate(-50%, -50%) rotate(-3deg);
+  image-rendering: pixelated;
   pointer-events: none;
   z-index: 3;
 }

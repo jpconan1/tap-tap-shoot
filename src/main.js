@@ -795,6 +795,7 @@ function getGamePreloadDoodles() {
     'easy_hard_toggle-easy',
     'easy_hard_toggle-hard',
     'variant_play_button',
+    'select_button',
     ...FINDING_MATCH_DOODLES,
     ...COMPUTER_VARIANTS.map((variant) => variant.buttonDoodle),
     ...getMoveButtonDoodlesForPreload(),
@@ -1491,6 +1492,7 @@ function renderRankedBanScreen() {
     button.addEventListener('click', () => showRankedVariantDetail(button.dataset.pickVariant, button));
   });
   mountSpriteRenderers(app.querySelectorAll('.sprite-canvas'));
+  mountReadyWaitingOverlays(app.querySelectorAll('.ranked-variant-ready'));
 }
 
 function getRankedVariantSelectVariants() {
@@ -1524,12 +1526,9 @@ function renderRankedVariantPickButton({ variant, slot, disabled, picked, banned
       ></canvas>
       ${firstPicked ? `
         <canvas
-          class="sprite-canvas ranked-variant-ready"
-          data-doodle="READY"
-          data-frame-width="${DOODLE_FRAME_WIDTH}"
-          data-frame-height="${DOODLE_FRAME_HEIGHT}"
-          width="${DOODLE_FRAME_WIDTH}"
-          height="${DOODLE_FRAME_HEIGHT}"
+          class="ranked-variant-ready"
+          width="300"
+          height="256"
           aria-hidden="true"
         ></canvas>
       ` : ''}
@@ -2910,7 +2909,7 @@ async function showRankedVariantDetail(variantId, sourceButton) {
   }
 
   app.classList.add('variant-detail-open');
-  const overlay = renderVariantDetailOverlay(variant, confirmRankedVariantPick);
+  const overlay = renderVariantDetailOverlay(variant, confirmRankedVariantPick, 'select_button');
   variantDetailMenu = { curtain, overlay, selectedButton, mode: 'online' };
   isTransitioning = false;
 }
@@ -2925,7 +2924,7 @@ function restoreVariantButton(button) {
   button?.classList.remove('variant-button-above-curtain');
 }
 
-function renderVariantDetailOverlay(variant, onPlay) {
+function renderVariantDetailOverlay(variant, onPlay, actionDoodle = 'variant_play_button') {
   const overlay = document.createElement('div');
   const slot = getVariantSelectSlot(variant.id);
   overlay.className = `variant-detail-overlay variant-detail-${variant.id} variant-detail-slot-${slot}`;
@@ -2950,7 +2949,7 @@ function renderVariantDetailOverlay(variant, onPlay) {
       <button class="variant-detail-action" data-action="variant-play" type="button" aria-label="Play ${escapeHtml(variant.name)}">
         <canvas
           class="sprite-canvas variant-detail-action-art"
-          data-doodle="variant_play_button"
+          data-doodle="${actionDoodle}"
           data-frame-width="${TITLE_BUTTON_FRAME_WIDTH}"
           data-frame-height="${TITLE_BUTTON_FRAME_HEIGHT}"
           width="${TITLE_BUTTON_FRAME_WIDTH}"
@@ -4139,7 +4138,6 @@ async function confirmRankedVariantPick(variantId) {
   app.append(menu.curtain);
   await openCurtainWipe(menu.curtain, playCurtainOpenAudio);
   isTransitioning = false;
-  render();
 }
 
 async function advanceTutorialSlide() {
@@ -4961,7 +4959,6 @@ function submitRankedVariantPick(variantId) {
   }
 
   playOneShotAudio(READY_AUDIO);
-  render();
 }
 
 function submitRankedContinue() {
