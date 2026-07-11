@@ -1074,7 +1074,47 @@ canvas {
   z-index: 1;
 }
 
+.stage-presentation {
+  position: relative;
+  display: grid;
+  grid-area: 1 / 1;
+  width: 100%;
+  height: 100%;
+  place-items: center;
+}
+
+.last-pick-versus {
+  position: absolute;
+  bottom: -64px;
+  left: 50%;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.last-pick-versus .last-pick-button {
+  width: 128px;
+  height: 64px;
+  flex: 0 0 auto;
+}
+
+.last-pick-versus .last-pick-vs {
+  z-index: 1;
+  width: 48px;
+  height: 48px;
+  margin: 0 -20px;
+  flex: 0 0 auto;
+}
+
 .layout-slot .stage-presentation-stack {
+  position: absolute;
+  inset: 0;
+}
+
+.layout-slot .stage-presentation {
   position: absolute;
   inset: 0;
 }
@@ -1300,7 +1340,8 @@ canvas {
 }
 
 .pick-label,
-.move-icon {
+.move-icon,
+.previous-move-button {
   display: block;
   min-height: 0;
   object-fit: contain;
@@ -1316,6 +1357,11 @@ canvas {
 .move-icon {
   width: 128px;
   height: 128px;
+}
+
+.previous-move-button {
+  width: 156px;
+  height: 78px;
 }
 
 .empty-doodle {

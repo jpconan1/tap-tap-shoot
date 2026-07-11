@@ -776,6 +776,7 @@ function getGamePreloadDoodles() {
     'wins_label',
     'you_picked',
     'they_picked',
+    'vs-sm',
     'system_scenes/game_won',
     'system_scenes/game_lost',
     'system_scenes/no_contest',
@@ -1715,10 +1716,7 @@ function renderEmptyResourceSlot(resource, iconOptions = {}) {
 }
 
 function renderLayoutPickHistorySlots(playerId) {
-  if (!shouldShowPickHistory()) {
-    return '';
-  }
-
+  if (!shouldShowPickHistory()) return '';
   const isPlayer = playerId === 'p1';
   const label = isPlayer ? 'you_picked' : 'they_picked';
   const labelWidth = isPlayer ? PICK_LABEL_FRAME_WIDTH : THEY_PICKED_LABEL_FRAME_WIDTH;
@@ -1726,7 +1724,7 @@ function renderLayoutPickHistorySlots(playerId) {
 
   return `
     ${renderLayoutSlot(`${playerId}-${isPlayer ? 'you-picked' : 'they-picked'}`, renderStaticDoodle(label, labelWidth, PICK_LABEL_FRAME_HEIGHT, 'pick-label'), 'hud-art-slot')}
-    ${renderLayoutSlot(`${playerId}-previous-move-icon`, renderStaticDoodle(MOVE_ICON_DOODLES[move], MOVE_ICON_FRAME_WIDTH, MOVE_ICON_FRAME_HEIGHT, 'move-icon'), 'hud-art-slot')}
+    ${renderLayoutSlot(`${playerId}-previous-move-icon`, renderStaticDoodle(getMoveButtonDoodle(move), BUTTON_FRAME_WIDTH, BUTTON_FRAME_HEIGHT, 'previous-move-button'), 'hud-art-slot')}
   `;
 }
 
@@ -1840,19 +1838,15 @@ function shouldSuppressStageAudio() {
 }
 
 function renderPickHistories() {
-  if (!shouldShowPickHistory()) {
-    return '';
-  }
-
-  return `
-    ${renderPickHistory('p1')}
-    ${renderPickHistory('p2')}
-  `;
+  if (!shouldShowPickHistory()) return '';
+  return `${renderPickHistory('p1')}${renderPickHistory('p2')}`;
 }
 
 function shouldShowPickHistory() {
   return state.history.length > 0
-    && shouldShowPickHistoryForVariant(getCurrentVariantId());
+    && turnPhase !== 'round-over'
+    && rankedSnapshot?.phase !== 'roundOver'
+    && rankedSnapshot?.phase !== 'gameOver';
 }
 
 function renderPickHistory(playerId) {
@@ -1873,12 +1867,12 @@ function renderPickHistory(playerId) {
         aria-hidden="true"
       ></canvas>
       <canvas
-        class="sprite-canvas move-icon"
-        data-doodle="${MOVE_ICON_DOODLES[move]}"
-        data-frame-width="${MOVE_ICON_FRAME_WIDTH}"
-        data-frame-height="${MOVE_ICON_FRAME_HEIGHT}"
-        width="${MOVE_ICON_FRAME_WIDTH}"
-        height="${MOVE_ICON_FRAME_HEIGHT}"
+        class="sprite-canvas previous-move-button"
+        data-doodle="${getMoveButtonDoodle(move)}"
+        data-frame-width="${BUTTON_FRAME_WIDTH}"
+        data-frame-height="${BUTTON_FRAME_HEIGHT}"
+        width="${BUTTON_FRAME_WIDTH}"
+        height="${BUTTON_FRAME_HEIGHT}"
         aria-hidden="true"
       ></canvas>
     </aside>
@@ -1886,6 +1880,17 @@ function renderPickHistory(playerId) {
 }
 
 function renderStagePresentation() {
+  const presentationMarkup = renderStagePresentationArt();
+
+  return `
+    <div class="stage-presentation">
+      ${presentationMarkup}
+      ${renderLastPickVersus()}
+    </div>
+  `;
+}
+
+function renderStagePresentationArt() {
   if (stagePresentation.kind === 'overlay') {
     return `
       <div class="stage-presentation-stack">
@@ -1896,6 +1901,24 @@ function renderStagePresentation() {
   }
 
   return renderSingleStagePresentation(stagePresentation);
+}
+
+function renderLastPickVersus() {
+  const isRoundResult = turnPhase === 'round-over'
+    || rankedSnapshot?.phase === 'roundOver'
+    || rankedSnapshot?.phase === 'gameOver';
+
+  if (!isRoundResult || state.history.length === 0 || !lastMoves.p1 || !lastMoves.p2) {
+    return '';
+  }
+
+  return `
+    <div class="last-pick-versus" aria-label="${lastMoves.p1} versus ${lastMoves.p2}">
+      ${renderStaticDoodle(getMoveButtonDoodle(lastMoves.p1), BUTTON_FRAME_WIDTH, BUTTON_FRAME_HEIGHT, 'last-pick-button')}
+      ${renderStaticDoodle('vs-sm', 64, 64, 'last-pick-vs')}
+      ${renderStaticDoodle(getMoveButtonDoodle(lastMoves.p2), BUTTON_FRAME_WIDTH, BUTTON_FRAME_HEIGHT, 'last-pick-button')}
+    </div>
+  `;
 }
 
 function renderSingleStagePresentation(presentation, extraClass = '') {
