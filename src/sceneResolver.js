@@ -38,6 +38,27 @@ export function resolveScene({ variantId = '', p1Move, p2Move, result = {} }) {
   return presentation(name, resolveBasicFlip(name, p1Move, p2Move, variant));
 }
 
+export function swapScenePerspective(result = {}) {
+  return {
+    ...result,
+    p1Move: result.p2Move,
+    p2Move: result.p1Move,
+    p1Hit: result.p2Hit,
+    p2Hit: result.p1Hit,
+    p1Resource: result.p2Resource,
+    p2Resource: result.p1Resource,
+    p1ResourceBefore: result.p2ResourceBefore,
+    p2ResourceBefore: result.p1ResourceBefore,
+    p1ResourceAfter: result.p2ResourceAfter,
+    p2ResourceAfter: result.p1ResourceAfter,
+    p1BulletsBefore: result.p2BulletsBefore,
+    p2BulletsBefore: result.p1BulletsBefore,
+    p1BulletsAfter: result.p2BulletsAfter,
+    p2BulletsAfter: result.p1BulletsAfter,
+    winner: result.winner === 'p1' ? 'p2' : result.winner === 'p2' ? 'p1' : result.winner,
+  };
+}
+
 export function resolveReadyScene({ sceneName, readyPlayerId, moves }) {
   if (!readyPlayerId || !sceneName || sceneName === 'shooting' || sceneName === 'stabbing') return null;
 

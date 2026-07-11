@@ -8,7 +8,30 @@ import {
   getVariantStartResource,
 } from '../src/engine/moves.js';
 import { resolveTurn } from '../src/engine/resolveTurn.js';
-import { resolveReadyScene, resolveScene } from '../src/sceneResolver.js';
+import { resolveReadyScene, resolveScene, swapScenePerspective } from '../src/sceneResolver.js';
+
+test('online player two perspective keeps moves and hit result aligned', () => {
+  const serverResult = resolveTurn({
+    variantId: 'shootStabDuck',
+    p1Move: 'shoot',
+    p2Move: 'reload',
+    p1Resource: 1,
+    p2Resource: 1,
+  });
+  const localResult = swapScenePerspective(serverResult);
+  const scene = resolveScene({
+    variantId: 'shootStabDuck',
+    p1Move: 'reload',
+    p2Move: 'shoot',
+    result: localResult,
+  });
+
+  assert.deepEqual(scene, {
+    kind: 'doodle',
+    name: 'shoot-stab-duck/shoot-kill',
+    flip: true,
+  });
+});
 
 test('every variant move pairing resolves symmetrically to an existing scene', () => {
   for (const variantId of VARIANT_ORDER) {

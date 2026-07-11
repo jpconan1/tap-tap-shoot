@@ -40,7 +40,7 @@ import {
 } from './audio.js';
 import { RankedClient } from './rankedClient.js';
 import { getResourcePresentation, shouldShowPickHistoryForVariant } from './variantPresentation.js';
-import { resolveReadyScene, resolveScene } from './sceneResolver.js';
+import { resolveReadyScene, resolveScene, swapScenePerspective } from './sceneResolver.js';
 import { VARIANT_SELECT_PAGE_SIZE, VARIANT_SELECT_VARIANTS } from './variantSelectConfig.js';
 import {
   DOODLE_FRAME_RATE,
@@ -1886,26 +1886,39 @@ function renderPickHistory(playerId) {
 }
 
 function renderStagePresentation() {
-  if (stagePresentation.kind === 'cue') {
+  if (stagePresentation.kind === 'overlay') {
+    return `
+      <div class="stage-presentation-stack">
+        ${renderSingleStagePresentation(stagePresentation.base)}
+        ${renderSingleStagePresentation(stagePresentation.overlay, 'result-overlay')}
+      </div>
+    `;
+  }
+
+  return renderSingleStagePresentation(stagePresentation);
+}
+
+function renderSingleStagePresentation(presentation, extraClass = '') {
+  if (presentation.kind === 'cue') {
     return `
       <canvas
-        class="sprite-canvas cue-canvas"
-        data-doodle="${stagePresentation.name}"
+        class="sprite-canvas cue-canvas ${extraClass}"
+        data-doodle="${presentation.name}"
         width="${DOODLE_FRAME_WIDTH}"
         height="${DOODLE_FRAME_HEIGHT}"
-        aria-label="${stagePresentation.name}"
+        aria-label="${presentation.name}"
       ></canvas>
     `;
   }
 
   return `
     <canvas
-      class="sprite-canvas doodle-canvas"
-      data-doodle="${stagePresentation.name}"
-      data-flip="${stagePresentation.flip}"
+      class="sprite-canvas doodle-canvas ${extraClass}"
+      data-doodle="${presentation.name}"
+      data-flip="${presentation.flip}"
       width="${DOODLE_FRAME_WIDTH}"
       height="${DOODLE_FRAME_HEIGHT}"
-      aria-label="${stagePresentation.name}"
+      aria-label="${presentation.name}"
     ></canvas>
   `;
 }
@@ -3367,7 +3380,7 @@ function renderMoveButton(move, isLegal) {
   ) && !p1QueuedMove;
 
   return `
-    <button class="move-card ${isQueued ? 'selected' : ''}" data-move="${move.id}" ${isLegal && canChooseMove && state.status === 'playing' && !isTransitioning ? '' : 'disabled'}>
+    <button class="move-card ${isQueued ? 'selected' : ''}" data-move="${move.id}" ${isLegal && canChooseMove && state.status === 'playing' && (!isTransitioning || playMode === 'online') ? '' : 'disabled'}>
       <canvas
         class="sprite-canvas move-button-art"
         data-doodle="${getMoveButtonDoodle(move.id)}"
@@ -4753,12 +4766,16 @@ function commitRankedSnapshot(snapshot, previousPhase = rankedSnapshot?.phase) {
     };
   } else if (snapshot.phase === 'revealed') {
     lastMoves = getLocalMovesFromRankedSnapshot(snapshot);
-    stagePresentation = getVariantStagePresentation(snapshot.round?.lastTurn ?? {}, lastMoves.p1, lastMoves.p2, { variantId: snapshot.currentVariantId ?? snapshot.variantId });
+    stagePresentation = getVariantStagePresentation(getLocalTurnResultFromRankedSnapshot(snapshot), lastMoves.p1, lastMoves.p2, { variantId: snapshot.currentVariantId ?? snapshot.variantId });
   } else if (snapshot.phase === 'roundOver') {
     stagePresentation = {
-      kind: 'doodle',
-      name: getRoundOverDoodle(getLocalRoundWinnerFromRankedSnapshot(snapshot), true),
-      flip: false,
+      kind: 'overlay',
+      base: getInteractionPresentation(stagePresentation),
+      overlay: {
+        kind: 'doodle',
+        name: getRoundOverDoodle(getLocalRoundWinnerFromRankedSnapshot(snapshot), true),
+        flip: false,
+      },
     };
   } else if (snapshot.phase === 'countdown') {
     stagePresentation = { kind: 'cue', name: 'READY' };
@@ -4771,9 +4788,13 @@ function commitRankedSnapshot(snapshot, previousPhase = rankedSnapshot?.phase) {
   } else if (snapshot.phase === 'gameOver') {
     finishMusicLoopThenStop();
     stagePresentation = {
-      kind: 'doodle',
-      name: snapshot.winner === snapshot.playerKey ? 'system_scenes/game_won' : 'system_scenes/game_lost',
-      flip: false,
+      kind: 'overlay',
+      base: getInteractionPresentation(stagePresentation),
+      overlay: {
+        kind: 'doodle',
+        name: snapshot.winner === snapshot.playerKey ? 'system_scenes/game_won' : 'system_scenes/game_lost',
+        flip: false,
+      },
     };
   }
 
@@ -4810,7 +4831,7 @@ function maybePlayRankedRoundResultAudio(snapshot) {
 function getRankedIdleChoosingPresentation(snapshot) {
   if (snapshot.round?.lastTurn) {
     const moves = getLocalMovesFromRankedSnapshot(snapshot);
-    return getVariantStagePresentation(snapshot.round?.lastTurn ?? {}, moves.p1, moves.p2, { variantId: snapshot.currentVariantId ?? snapshot.variantId });
+    return getVariantStagePresentation(getLocalTurnResultFromRankedSnapshot(snapshot), moves.p1, moves.p2, { variantId: snapshot.currentVariantId ?? snapshot.variantId });
   }
 
   return getIdleStagePresentation(snapshot.currentVariantId ?? snapshot.variantId);
@@ -4821,7 +4842,7 @@ function getRankedChoosingPresentation(snapshot) {
     return getIdleStagePresentation(snapshot.currentVariantId ?? snapshot.variantId);
   }
 
-  return getVariantStagePresentation(snapshot.round?.lastTurn ?? {}, lastMoves.p1, lastMoves.p2, { variantId: snapshot.currentVariantId ?? snapshot.variantId });
+  return getVariantStagePresentation(getLocalTurnResultFromRankedSnapshot(snapshot), lastMoves.p1, lastMoves.p2, { variantId: snapshot.currentVariantId ?? snapshot.variantId });
 }
 
 function getLocalStateFromRankedSnapshot(snapshot) {
@@ -4944,6 +4965,16 @@ function getLocalMovesFromRankedSnapshot(snapshot) {
     p1: moves[snapshot.playerKey],
     p2: moves[snapshot.opponentKey],
   };
+}
+
+function getLocalTurnResultFromRankedSnapshot(snapshot) {
+  const result = snapshot.round?.lastTurn ?? {};
+
+  if (snapshot.playerKey !== 'p2') {
+    return result;
+  }
+
+  return swapScenePerspective(result);
 }
 
 function submitRankedMove(moveId) {
@@ -5428,11 +5459,19 @@ function showRoundOverScene() {
   const isRoundOverInComputerFight = playMode === 'local' && screen !== 'tutorial' && !isGameOver();
 
   stagePresentation = {
-    kind: 'doodle',
-    name: getRoundOverDoodle(state.winner, isRoundOverInComputerFight),
-    flip: false,
+    kind: 'overlay',
+    base: getInteractionPresentation(stagePresentation),
+    overlay: {
+      kind: 'doodle',
+      name: getRoundOverDoodle(state.winner, isRoundOverInComputerFight),
+      flip: false,
+    },
   };
   render();
+}
+
+function getInteractionPresentation(presentation) {
+  return presentation?.kind === 'overlay' ? presentation.base : presentation;
 }
 
 function getRoundOverDoodle(winner, useRoundDoodle) {

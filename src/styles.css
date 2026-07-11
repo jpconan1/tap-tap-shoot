@@ -1058,6 +1058,27 @@ canvas {
   filter: drop-shadow(2px 4px 0 rgba(29, 27, 24, 0.08));
 }
 
+.stage-presentation-stack {
+  display: grid;
+  grid-area: 1 / 1;
+  width: 100%;
+  height: 100%;
+  place-items: center;
+}
+
+.stage-presentation-stack > canvas {
+  grid-area: 1 / 1;
+}
+
+.stage-presentation-stack .result-overlay {
+  z-index: 1;
+}
+
+.layout-slot .stage-presentation-stack {
+  position: absolute;
+  inset: 0;
+}
+
 .doodle-canvas {
   align-self: center;
 }
