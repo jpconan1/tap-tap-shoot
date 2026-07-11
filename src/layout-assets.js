@@ -105,8 +105,8 @@ const GENERIC_ARROWS = [
 const PREVIOUS_MOVE_ELEMENTS = [
   { key: "p1-you-picked", name: "P1 you picked", asset: "assets/you_picked_sheet.webp" },
   { key: "p2-they-picked", name: "P2 they picked", asset: "assets/they_picked_sheet.webp" },
-  { key: "p1-previous-move-icon", name: "P1 previous move icon", asset: "assets/shoot_icon_sheet.webp" },
-  { key: "p2-previous-move-icon", name: "P2 previous move icon", asset: "assets/shoot_icon_sheet.webp" },
+  { key: "p1-previous-move-icon", name: "P1 previous move button", asset: "assets/shoot-stab-duck/shoot_button_sheet.webp" },
+  { key: "p2-previous-move-icon", name: "P2 previous move button", asset: "assets/shoot-stab-duck/shoot_button_sheet.webp" },
 ];
 
 function resourceSlotElements({ iconAsset, labelAsset = "" }) {
