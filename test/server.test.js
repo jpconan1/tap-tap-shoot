@@ -432,13 +432,33 @@ test('split variant games trigger tiebreaker selection with previous variants ba
 test('disconnect forfeits active match', async () => {
   const { service, p1, p2, store } = await createMatchedService();
   const room = onlyRoom(service);
+  service.beginBanning(room);
+  service.receive(p1.session, { type: 'submitVariantPick', variantId: VARIANT_IDS.rps });
+  service.receive(p2.session, { type: 'submitVariantPick', variantId: VARIANT_IDS.chargeBlockFireball });
 
   service.disconnect(p1.session);
   await wait(0);
 
   assert.equal(room.phase, 'gameOver');
   assert.equal(room.winner, 'p2');
+  assert.equal(lastMessage(p2).disconnectedPlayerKey, 'p1');
+  assert.equal(lastMessage(p2).aborted, false);
   assert.equal((await store.getPlayer('p2')).wins, 1);
+});
+
+test('disconnect during initial variant picks aborts without Elo', async () => {
+  const { service, p1, p2, store } = await createMatchedService();
+  const room = onlyRoom(service);
+  service.beginBanning(room);
+
+  service.disconnect(p1.session);
+  await wait(0);
+
+  assert.equal(room.phase, 'gameOver');
+  assert.equal(room.winner, null);
+  assert.equal(lastMessage(p2).disconnectedPlayerKey, 'p1');
+  assert.equal(lastMessage(p2).aborted, true);
+  assert.equal((await store.getPlayer('p2')).wins, 0);
 });
 
 test('finished matches are removed from active rooms', async () => {

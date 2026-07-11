@@ -14,7 +14,7 @@ import { MemoryPlayerStore } from './playerStore.js';
 const GAME_TARGET_ROUNDS = 5;
 const MAX_TIMEOUT_STRIKES = 3;
 const DEFAULT_COUNTDOWN_MS = 3000;
-const NO_SELECTION_GRACE_MS = 5000;
+const NO_SELECTION_GRACE_MS = 90 * 1000;
 const NO_CONTEST_WAITING_MS = 3000;
 const READY_WAITING_SAFE_MS = (7 * 58) + 750 + (3 * 1000);
 const READY_WAITING_COUNTDOWN_MS = 5000;
@@ -676,6 +676,19 @@ export class RankedDuelService {
 
     const forfeitingKey = this.getPlayerKey(room, forfeitingSession);
     const winnerKey = forfeitingKey === 'p1' ? 'p2' : 'p1';
+    room.disconnectedPlayerKey = forfeitingKey;
+
+    if (room.remainingVariants.length === 0) {
+      this.clearRoomTimer(room);
+      room.phase = 'gameOver';
+      room.winner = null;
+      room.ratings = null;
+      room.aborted = true;
+      this.broadcastRoom(room);
+      this.releaseRoom(room);
+      return;
+    }
+
     this.finishRoom(room, winnerKey);
   }
 
@@ -729,6 +742,8 @@ export class RankedDuelService {
       timeoutStrikes: room.timeoutStrikes,
       winner: room.winner,
       ratings: room.ratings,
+      disconnectedPlayerKey: room.disconnectedPlayerKey ?? null,
+      aborted: room.aborted ?? false,
       players: {
         p1: {
           displayName: room.players.p1.displayName,

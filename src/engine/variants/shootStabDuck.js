@@ -3,7 +3,7 @@ import { freezeHitTable, resolveHitTableTurn } from './shared.js';
 export function createShootStabDuckVariant({ id, moves, maxResource }) {
   const variant = {
     id,
-    label: 'Shoot Stab Duck',
+    label: 'Tap Tap Shoot Y',
     isRanked: true,
     moveIds: Object.freeze(['reload', 'shoot', 'stab', 'duck']),
     moves,

@@ -426,6 +426,7 @@ let rankedQueueCurtainToken = 0;
 let rankedQueueCurtainPromise = null;
 let rankedQueueCurtainPhase = null;
 let rankedQueueError = null;
+let rankedDisconnectReturnTimer = null;
 let rankedDisplayName = readStoredDisplayName();
 let onlinePlayerCount = null;
 let onlineStatusTimer = null;
@@ -930,7 +931,7 @@ function normalizeGameLayout(payload) {
     ]);
 
   return {
-    variant: 'Shoot Stab Duck',
+    variant: 'Tap Tap Shoot Y',
     width: Math.max(1, finiteLayoutNumber(frame.width, FRAME_WIDTH)),
     height: Math.max(1, finiteLayoutNumber(frame.height, FRAME_HEIGHT)),
     states: new Map([[DEFAULT_LAYOUT_STATE_ID, {
@@ -973,7 +974,7 @@ function normalizeStatefulGameLayout(payload) {
   }
 
   return {
-    variant: String(payload.variant || 'Shoot Stab Duck'),
+    variant: String(payload.variant || 'Tap Tap Shoot Y'),
     width,
     height,
     states: resolveGameLayoutStates(normalizedStates),
@@ -1427,6 +1428,7 @@ function render() {
     <section class="controls">
       <button class="ghost" data-action="reset">Reset</button>
     </section>
+    ${renderRankedDisconnectNotice()}
   `;
 
   installMoveButtonHandlers();
@@ -1582,6 +1584,7 @@ function renderLayoutGameScreen(legalMoves) {
         </section>
       </div>
     </section>
+    ${renderRankedDisconnectNotice()}
   `;
 
   installMoveButtonHandlers();
@@ -4735,6 +4738,13 @@ function commitRankedSnapshot(snapshot, previousPhase = rankedSnapshot?.phase) {
   }
   scheduleRankedReadyWaitingRender();
 
+  if (snapshot.disconnectedPlayerKey && !rankedDisconnectReturnTimer) {
+    rankedDisconnectReturnTimer = setTimeout(() => {
+      rankedDisconnectReturnTimer = null;
+      leaveRanked();
+    }, 3000);
+  }
+
   if (snapshot.phase === 'gameOver' && snapshot.noContest) {
     stagePresentation = {
       kind: 'doodle',
@@ -4978,6 +4988,10 @@ function submitRankedContinue() {
 }
 
 function leaveRanked() {
+  if (rankedDisconnectReturnTimer) {
+    clearTimeout(rankedDisconnectReturnTimer);
+    rankedDisconnectReturnTimer = null;
+  }
   rankedClient.close();
   removeRankedQueueCurtain();
   stopFindingMatchTicker();
@@ -4995,6 +5009,18 @@ function leaveRanked() {
   turnPhase = 'idle';
   p1QueuedMove = null;
   render();
+}
+
+function renderRankedDisconnectNotice() {
+  if (!rankedSnapshot?.disconnectedPlayerKey) {
+    return '';
+  }
+
+  const message = rankedSnapshot.aborted
+    ? 'Opponent disconnected. Match aborted.'
+    : 'Opponent disconnected. You win.';
+
+  return `<div class="ranked-disconnect-notice" role="alert">${message}</div>`;
 }
 
 async function closeRankedQueueCurtain() {

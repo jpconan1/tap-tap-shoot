@@ -10,7 +10,7 @@ export function createTapTapShootVariant({ id, moves, maxResource }) {
   });
   const variant = {
     id,
-    label: 'Tap Tap Shoot',
+    label: 'Tap Tap Shoot X',
     isRanked: true,
     moveIds: Object.freeze(['reload', 'shoot', 'stab', 'duck', 'counterstab']),
     moves: variantMoves,

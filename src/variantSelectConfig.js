@@ -5,8 +5,8 @@ export const VARIANT_SELECT_PAGE_SIZE = 6;
 export const VARIANT_SELECT_VARIANTS = Object.freeze([
   Object.freeze({
     id: VARIANT_IDS.chargeBlockFireball,
-    name: 'Charge Block Fireball',
-    buttonDoodle: 'cbf_button_w',
+    name: 'Fireball War',
+    buttonDoodle: 'fireball-war_button',
     copy: Object.freeze([
       'TWO WAYS TO WIN: Land a Fireball OR Charge 3 Bars.',
       'Fireball beats Charge (Costs 1 Bar).',
@@ -27,8 +27,8 @@ export const VARIANT_SELECT_VARIANTS = Object.freeze([
   }),
   Object.freeze({
     id: VARIANT_IDS.shootStabDuck,
-    name: 'Shoot Stab Duck',
-    buttonDoodle: 'ssd_button_w',
+    name: 'Tap Tap Shoot Y',
+    buttonDoodle: 'tts-y_button',
     copy: Object.freeze([
       'FOUR MOVES, ONE RESOURCE. Win by landing a Shoot or Stab.',
       'Shoot beats Stab and Reload (Costs 1 Bullet).',
@@ -39,8 +39,8 @@ export const VARIANT_SELECT_VARIANTS = Object.freeze([
   }),
   Object.freeze({
     id: VARIANT_IDS.punchStabShoot,
-    name: 'Punch Stab Shoot',
-    buttonDoodle: 'pss_button_w',
+    name: 'Gun Knife Fist',
+    buttonDoodle: 'gkf_button',
     copy: Object.freeze([
       'ROCK PAPER SCISSORS WITH HP. First to deal 3 damage wins.',
       'Punch beats Shoot (Deals 1 damage).',
@@ -50,8 +50,8 @@ export const VARIANT_SELECT_VARIANTS = Object.freeze([
   }),
   Object.freeze({
     id: VARIANT_IDS.tapTapShoot,
-    name: 'Tap Tap Shoot',
-    buttonDoodle: 'tap_tap_shoot_button_w',
+    name: 'Tap Tap Shoot X',
+    buttonDoodle: 'tts-x_button',
     copy: Object.freeze([
       'FIVE MOVES AND LAYERED MIXUPS. Win by landing a Shoot or Stab.',
       'Shoot beats Stab, Counter-Stab, and Charge (Costs 1 AP).',

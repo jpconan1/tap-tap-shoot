@@ -9,7 +9,7 @@ import {
 export function createChargeBlockFireballVariant({ id, moves, maxResource }) {
   const variant = {
     id,
-    label: 'Charge Block Fireball',
+    label: 'Fireball War',
     isRanked: true,
     moveIds: Object.freeze(['charge', 'block', 'fireball']),
     moves,

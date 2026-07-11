@@ -318,6 +318,20 @@ canvas {
   padding-bottom: 0;
 }
 
+.ranked-disconnect-notice {
+  position: absolute;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  padding: 32px;
+  color: #211d19;
+  font-size: 30px;
+  font-weight: 700;
+  text-align: center;
+  background: rgba(242, 233, 207, 0.94);
+}
+
 .opponent-select-screen {
   position: relative;
 }

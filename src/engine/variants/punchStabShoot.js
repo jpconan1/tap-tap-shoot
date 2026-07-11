@@ -21,7 +21,7 @@ export function createPunchStabShootVariant({ id, moves, startHealth }) {
   });
   const variant = {
     id,
-    label: 'Punch Stab Shoot',
+    label: 'Gun Knife Fist',
     isRanked: true,
     moveIds: Object.freeze(['punch', 'stab', 'shoot']),
     moves: variantMoves,

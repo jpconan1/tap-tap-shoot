@@ -4,7 +4,7 @@ const FRAME_SIZES = Object.freeze({
 });
 const STORAGE_KEY = 'tapTapShoot.layoutTool.v2';
 const DEFAULT_VARIANT_ID = 'shoot-stab-duck';
-const VARIANT_NAME = 'Shoot Stab Duck';
+const VARIANT_NAME = 'Tap Tap Shoot Y';
 const DEFAULT_LAYOUT_STATE_ID = 'playing.default';
 const LAYOUT_STATES = Object.freeze([
   Object.freeze({ id: 'playing.default', name: 'Playing' }),

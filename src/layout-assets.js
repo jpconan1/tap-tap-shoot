@@ -71,10 +71,10 @@ const VARIANT_SCENES = {
 
 window.LAYOUT_VARIANTS = [
   { id: "rock-paper-scissors", name: "Rock Paper Scissors", folder: "assets/rock-paper-scissors" },
-  { id: "charge-block-fireball", name: "Charge Block Fireball", folder: "assets/charge-block-fireball" },
-  { id: "punch-stab-shoot", name: "Punch Stab Shoot", folder: "assets/punch-stab-shoot" },
-  { id: "shoot-stab-duck", name: "Shoot Stab Duck", folder: "assets/shoot-stab-duck" },
-  { id: "tap-tap-shoot", name: "Tap Tap Shoot", folder: "assets/tap-tap-shoot" },
+  { id: "charge-block-fireball", name: "Fireball War", folder: "assets/charge-block-fireball" },
+  { id: "punch-stab-shoot", name: "Gun Knife Fist", folder: "assets/punch-stab-shoot" },
+  { id: "shoot-stab-duck", name: "Tap Tap Shoot Y", folder: "assets/shoot-stab-duck" },
+  { id: "tap-tap-shoot", name: "Tap Tap Shoot X", folder: "assets/tap-tap-shoot" },
 ];
 
 window.LAYOUT_PARENT_ELEMENTS = [
