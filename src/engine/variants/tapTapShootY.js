@@ -1,6 +1,6 @@
 import { freezeHitTable, resolveHitTableTurn } from './shared.js';
 
-export function createShootStabDuckVariant({ id, moves, maxResource }) {
+export function createTapTapShootYVariant({ id, moves, maxResource }) {
   const variant = {
     id,
     label: 'Tap Tap Shoot Y',

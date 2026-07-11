@@ -1,6 +1,6 @@
 import { VARIANT_IDS, getLegalMoves, normalizeVariantId } from './moves.js';
 import { getPlayerResource } from './gameState.js';
-import tapTapShootPolicy from './tap_tap_shoot_policy.json' with { type: 'json' };
+import tapTapShootXPolicy from './tap_tap_shoot_policy.json' with { type: 'json' };
 
 export const RIVAL_DIFFICULTIES = Object.freeze({
   easy: 'easy',
@@ -8,9 +8,9 @@ export const RIVAL_DIFFICULTIES = Object.freeze({
 });
 
 const HARD_VARIANT_POLICIES = Object.freeze({
-  [VARIANT_IDS.shootStabDuck]: getTapTapShootPolicy('Tap Tap Shoot Y'),
-  [VARIANT_IDS.tapTapShoot]: getTapTapShootPolicy('Tap Tap Shoot X'),
-  [VARIANT_IDS.chargeBlockFireball]: freezePolicyTable({
+  [VARIANT_IDS.tapTapShootY]: getTapTapShootPolicy('Tap Tap Shoot Y'),
+  [VARIANT_IDS.tapTapShootX]: getTapTapShootPolicy('Tap Tap Shoot X'),
+  [VARIANT_IDS.fireballWar]: freezePolicyTable({
     '0-1': { charge: 65, fireball: 35 },
     '0-2': { charge: 100 },
     '1-0': { charge: 65, block: 35 },
@@ -20,7 +20,7 @@ const HARD_VARIANT_POLICIES = Object.freeze({
     '2-1': { charge: 30, block: 44, fireball: 26 },
     '2-2': { charge: 19, block: 40, fireball: 40 },
   }),
-  [VARIANT_IDS.punchStabShoot]: freezePolicyTable({
+  [VARIANT_IDS.gunKnifeFist]: freezePolicyTable({
     '1-1': { punch: 33, stab: 33, shoot: 33 },
     '1-2': { punch: 30, stab: 18, shoot: 52 },
     '1-3': { punch: 44, stab: 16, shoot: 40 },
@@ -39,7 +39,7 @@ export function chooseRivalMove(state, rng = Math.random, difficulty = RIVAL_DIF
   const variantId = normalizeVariantId(state.variantId);
   const normalizedDifficulty = normalizeDifficulty(difficulty);
 
-  if (normalizedDifficulty === RIVAL_DIFFICULTIES.easy || variantId === VARIANT_IDS.rps) {
+  if (normalizedDifficulty === RIVAL_DIFFICULTIES.easy || variantId === VARIANT_IDS.rockPaperScissors) {
     return chooseRandomLegalMove(ownResource, enemyResource, rng, variantId);
   }
 
@@ -99,7 +99,7 @@ function freezePolicyTable(table) {
 }
 
 function getTapTapShootPolicy(variantName) {
-  const policy = tapTapShootPolicy.find(({ variant }) => variant === variantName);
+  const policy = tapTapShootXPolicy.find(({ variant }) => variant === variantName);
 
   if (!policy) {
     throw new Error(`Missing rival policy for ${variantName}`);

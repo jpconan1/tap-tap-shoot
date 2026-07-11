@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-test('tap tap shoot scene audio starts through WebAudio', async () => {
+test('Tap Tap Shoot X scene audio starts through WebAudio', async () => {
   let starts = 0;
 
   class MockAudioContext {
@@ -65,7 +65,7 @@ test('tap tap shoot scene audio starts through WebAudio', async () => {
   await audio.unlockSceneAudio();
   audio.playStageAudio({
     isTransitioning: false,
-    presentation: { kind: 'doodle', name: 'tap-tap-shoot/shoot-kill' },
+    presentation: { kind: 'doodle', name: 'tap-tap-shoot-x/shoot-kill' },
     audioKey: 'turn:shoot-kill',
   });
 
@@ -74,7 +74,7 @@ test('tap tap shoot scene audio starts through WebAudio', async () => {
   assert.equal(starts, 1);
 });
 
-test('tap tap shoot standoff is silent', async () => {
+test('Tap Tap Shoot X standoff uses reload sound', async () => {
   const played = [];
 
   globalThis.window = {
@@ -97,14 +97,54 @@ test('tap tap shoot standoff is silent', async () => {
   audio.setSoundEnabled(true);
   audio.playStageAudio({
     isTransitioning: false,
-    presentation: { kind: 'doodle', name: 'tap-tap-shoot/standoff-tts' },
+    presentation: { kind: 'doodle', name: 'tap-tap-shoot-x/standoff-tts' },
     audioKey: 'tts:standoff',
   });
 
-  assert.deepEqual(played, []);
+  assert.deepEqual(played, ['./assets/audio/reload.mp3']);
 });
 
-test('charge block fireball uses intentional scene sounds only', async () => {
+test('Tap Tap Shoot Y standoff and stab versus reload use assigned sounds', async () => {
+  const played = [];
+
+  globalThis.window = {
+    addEventListener() {},
+  };
+  globalThis.Audio = class {
+    constructor(src) {
+      this.src = src;
+      this.volume = 1;
+      this.currentTime = 0;
+    }
+
+    load() {}
+
+    play() {
+      played.push(this.src);
+      return Promise.resolve();
+    }
+  };
+
+  const audio = await import(`../src/audio.js?ssd-stab-reload-test=${Date.now()}`);
+  audio.setSoundEnabled(true);
+  audio.playStageAudio({
+    isTransitioning: false,
+    presentation: { kind: 'doodle', name: 'tap-tap-shoot-y/standoff-ssd' },
+    audioKey: 'ssd:standoff',
+  });
+  audio.playStageAudio({
+    isTransitioning: false,
+    presentation: { kind: 'doodle', name: 'tap-tap-shoot-y/stab-reload' },
+    audioKey: 'ssd:stab-reload',
+  });
+
+  assert.deepEqual(played, [
+    './assets/audio/reload.mp3',
+    './assets/audio/counterstab.mp3',
+  ]);
+});
+
+test('Fireball War uses intentional scene sounds only', async () => {
   const played = [];
 
   globalThis.window = {
@@ -131,37 +171,37 @@ test('charge block fireball uses intentional scene sounds only', async () => {
 
   audio.playStageAudio({
     isTransitioning: false,
-    presentation: { kind: 'doodle', name: 'charge-block-fireball/cbf-standoff' },
+    presentation: { kind: 'doodle', name: 'fireball-war/cbf-standoff' },
     audioKey: 'cbf:standoff',
   });
   audio.playStageAudio({
     isTransitioning: false,
-    presentation: { kind: 'doodle', name: 'charge-block-fireball/block-draw' },
+    presentation: { kind: 'doodle', name: 'fireball-war/block-draw' },
     audioKey: 'cbf:block-block',
   });
   audio.playStageAudio({
     isTransitioning: false,
-    presentation: { kind: 'doodle', name: 'charge-block-fireball/block-charge' },
+    presentation: { kind: 'doodle', name: 'fireball-war/block-charge' },
     audioKey: 'cbf:block-charge',
   });
   audio.playStageAudio({
     isTransitioning: false,
-    presentation: { kind: 'doodle', name: 'charge-block-fireball/block-fireball' },
+    presentation: { kind: 'doodle', name: 'fireball-war/block-fireball' },
     audioKey: 'cbf:block-fireball',
   });
   audio.playStageAudio({
     isTransitioning: false,
-    presentation: { kind: 'doodle', name: 'charge-block-fireball/fireball-draw' },
+    presentation: { kind: 'doodle', name: 'fireball-war/fireball-draw' },
     audioKey: 'cbf:fireball-fireball',
   });
   audio.playStageAudio({
     isTransitioning: false,
-    presentation: { kind: 'doodle', name: 'charge-block-fireball/charge-fireball' },
+    presentation: { kind: 'doodle', name: 'fireball-war/charge-fireball' },
     audioKey: 'cbf:fireball-kill',
   });
   audio.playStageAudio({
     isTransitioning: false,
-    presentation: { kind: 'doodle', name: 'charge-block-fireball/super-final-frame1' },
+    presentation: { kind: 'doodle', name: 'fireball-war/super-final-frame1' },
     audioKey: 'cbf:super',
   });
 
@@ -221,7 +261,7 @@ test('rock paper scissors only sounds on rock and scissors ties', async () => {
   ]);
 });
 
-test('punch stab shoot uses punch sounds without silence file', async () => {
+test('Gun Knife Fist uses punch sounds without silence file', async () => {
   const played = [];
 
   globalThis.window = {
@@ -248,26 +288,27 @@ test('punch stab shoot uses punch sounds without silence file', async () => {
 
   audio.playStageAudio({
     isTransitioning: false,
-    presentation: { kind: 'doodle', name: 'punch-stab-shoot/pss-standoff' },
+    presentation: { kind: 'doodle', name: 'gun-knife-fist/pss-standoff' },
     audioKey: 'pss:standoff',
   });
   audio.playStageAudio({
     isTransitioning: false,
-    presentation: { kind: 'doodle', name: 'punch-stab-shoot/punch-draw' },
+    presentation: { kind: 'doodle', name: 'gun-knife-fist/punch-draw' },
     audioKey: 'pss:punch-collision',
   });
   audio.playStageAudio({
     isTransitioning: false,
-    presentation: { kind: 'doodle', name: 'punch-stab-shoot/punch-shoot-damage' },
+    presentation: { kind: 'doodle', name: 'gun-knife-fist/punch-shoot-damage' },
     audioKey: 'pss:punch-damage',
   });
   audio.playStageAudio({
     isTransitioning: false,
-    presentation: { kind: 'doodle', name: 'punch-stab-shoot/punch-shoot-kill' },
+    presentation: { kind: 'doodle', name: 'gun-knife-fist/punch-shoot-kill' },
     audioKey: 'pss:punch-kill',
   });
 
   assert.deepEqual(played, [
+    './assets/audio/reload.mp3',
     './assets/audio/collision.mp3',
     './assets/audio/punch.mp3',
     './assets/audio/punch-kill.mp3',

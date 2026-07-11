@@ -1,4 +1,4 @@
-const RANKED_PLAYER_ID_KEY = 'tapTapShoot.rankedPlayerId';
+const RANKED_PLAYER_ID_KEY = 'tapTapShootX.rankedPlayerId';
 
 export class RankedClient {
   constructor({ onQueue, onSnapshot, onClose, onError = () => {} }) {
@@ -10,7 +10,7 @@ export class RankedClient {
     this.playerId = readLocalStorage(RANKED_PLAYER_ID_KEY);
   }
 
-  connect(displayName = '', variantId = 'shootStabDuck') {
+  connect(displayName = '', variantId = 'tapTapShootY') {
     this.close();
     this.displayName = displayName;
     this.variantId = variantId;

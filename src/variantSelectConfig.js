@@ -4,7 +4,7 @@ export const VARIANT_SELECT_PAGE_SIZE = 6;
 
 export const VARIANT_SELECT_VARIANTS = Object.freeze([
   Object.freeze({
-    id: VARIANT_IDS.chargeBlockFireball,
+    id: VARIANT_IDS.fireballWar,
     name: 'Fireball War',
     buttonDoodle: 'fireball-war_button_w',
     copy: Object.freeze([
@@ -15,7 +15,7 @@ export const VARIANT_SELECT_VARIANTS = Object.freeze([
     ]),
   }),
   Object.freeze({
-    id: VARIANT_IDS.rps,
+    id: VARIANT_IDS.rockPaperScissors,
     name: 'Rock Paper Scissors',
     buttonDoodle: 'rps_button_w',
     copy: Object.freeze([
@@ -26,7 +26,7 @@ export const VARIANT_SELECT_VARIANTS = Object.freeze([
     ]),
   }),
   Object.freeze({
-    id: VARIANT_IDS.shootStabDuck,
+    id: VARIANT_IDS.tapTapShootY,
     name: 'Tap Tap Shoot Y',
     buttonDoodle: 'tts-y_button_w',
     copy: Object.freeze([
@@ -38,7 +38,7 @@ export const VARIANT_SELECT_VARIANTS = Object.freeze([
     ]),
   }),
   Object.freeze({
-    id: VARIANT_IDS.punchStabShoot,
+    id: VARIANT_IDS.gunKnifeFist,
     name: 'Gun Knife Fist',
     buttonDoodle: 'gkf_button_w',
     copy: Object.freeze([
@@ -49,7 +49,7 @@ export const VARIANT_SELECT_VARIANTS = Object.freeze([
     ]),
   }),
   Object.freeze({
-    id: VARIANT_IDS.tapTapShoot,
+    id: VARIANT_IDS.tapTapShootX,
     name: 'Tap Tap Shoot X',
     buttonDoodle: 'tts-x_button_w',
     copy: Object.freeze([

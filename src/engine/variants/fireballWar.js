@@ -6,7 +6,7 @@ import {
   validateChoice,
 } from './shared.js';
 
-export function createChargeBlockFireballVariant({ id, moves, maxResource }) {
+export function createFireballWarVariant({ id, moves, maxResource }) {
   const variant = {
     id,
     label: 'Fireball War',
@@ -25,11 +25,11 @@ export function createChargeBlockFireballVariant({ id, moves, maxResource }) {
 
   return Object.freeze({
     ...variant,
-    resolveTurn: (turn) => resolveChargeBlockFireballTurn(variant, turn),
+    resolveTurn: (turn) => resolveFireballWarTurn(variant, turn),
   });
 }
 
-function resolveChargeBlockFireballTurn(variant, { p1Move, p2Move, p1Resource, p2Resource }) {
+function resolveFireballWarTurn(variant, { p1Move, p2Move, p1Resource, p2Resource }) {
   const p1 = validateChoice(variant, 'p1', p1Move, p1Resource, p2Resource);
   const p2 = validateChoice(variant, 'p2', p2Move, p2Resource, p1Resource);
 

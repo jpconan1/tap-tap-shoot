@@ -1,27 +1,36 @@
 import { getForcedMove as getVariantForcedMove, getMove as getVariantMove, isBlockedByResourceCap } from './variants/shared.js';
-import { createChargeBlockFireballVariant } from './variants/chargeBlockFireball.js';
-import { createPunchStabShootVariant } from './variants/punchStabShoot.js';
-import { createRpsVariant } from './variants/rps.js';
-import { createShootStabDuckVariant } from './variants/shootStabDuck.js';
-import { createTapTapShootVariant } from './variants/tapTapShoot.js';
+import { createFireballWarVariant } from './variants/fireballWar.js';
+import { createGunKnifeFistVariant } from './variants/gunKnifeFist.js';
+import { createRockPaperScissorsVariant } from './variants/rockPaperScissors.js';
+import { createTapTapShootYVariant } from './variants/tapTapShootY.js';
+import { createTapTapShootXVariant } from './variants/tapTapShootX.js';
 
 export const VARIANT_IDS = Object.freeze({
-  rps: 'rps',
-  chargeBlockFireball: 'chargeBlockFireball',
-  shootStabDuck: 'shootStabDuck',
-  punchStabShoot: 'punchStabShoot',
-  tapTapShoot: 'tapTapShoot',
+  rockPaperScissors: 'rockPaperScissors',
+  fireballWar: 'fireballWar',
+  tapTapShootY: 'tapTapShootY',
+  gunKnifeFist: 'gunKnifeFist',
+  tapTapShootX: 'tapTapShootX',
 });
 
-export const DEFAULT_VARIANT_ID = VARIANT_IDS.shootStabDuck;
+export const DEFAULT_VARIANT_ID = VARIANT_IDS.tapTapShootY;
 export const LEGACY_VARIANT_IDS = Object.freeze({
   fourMove: DEFAULT_VARIANT_ID,
-  counterstab: VARIANT_IDS.tapTapShoot,
-  'rock-paper-scissors': VARIANT_IDS.rps,
-  'charge-block-fireball': VARIANT_IDS.chargeBlockFireball,
-  'shoot-stab-duck': VARIANT_IDS.shootStabDuck,
-  'punch-stab-shoot': VARIANT_IDS.punchStabShoot,
-  'tap-tap-shoot': VARIANT_IDS.tapTapShoot,
+  counterstab: VARIANT_IDS.tapTapShootX,
+  rps: VARIANT_IDS.rockPaperScissors,
+  chargeBlockFireball: VARIANT_IDS.fireballWar,
+  shootStabDuck: VARIANT_IDS.tapTapShootY,
+  punchStabShoot: VARIANT_IDS.gunKnifeFist,
+  tapTapShoot: VARIANT_IDS.tapTapShootX,
+  'rock-paper-scissors': VARIANT_IDS.rockPaperScissors,
+  'charge-block-fireball': VARIANT_IDS.fireballWar,
+  'fireball-war': VARIANT_IDS.fireballWar,
+  'shoot-stab-duck': VARIANT_IDS.tapTapShootY,
+  'tap-tap-shoot-y': VARIANT_IDS.tapTapShootY,
+  'punch-stab-shoot': VARIANT_IDS.gunKnifeFist,
+  'gun-knife-fist': VARIANT_IDS.gunKnifeFist,
+  'tap-tap-shoot': VARIANT_IDS.tapTapShootX,
+  'tap-tap-shoot-x': VARIANT_IDS.tapTapShootX,
 });
 
 export const MOVES = Object.freeze({
@@ -103,34 +112,34 @@ export const MOVE_IDS = Object.freeze(Object.keys(MOVES));
 export const MAX_BULLETS = 3;
 export const MAX_RESOURCE = MAX_BULLETS;
 export const VARIANT_ORDER = Object.freeze([
-  VARIANT_IDS.rps,
-  VARIANT_IDS.chargeBlockFireball,
-  VARIANT_IDS.shootStabDuck,
-  VARIANT_IDS.punchStabShoot,
-  VARIANT_IDS.tapTapShoot,
+  VARIANT_IDS.rockPaperScissors,
+  VARIANT_IDS.fireballWar,
+  VARIANT_IDS.tapTapShootY,
+  VARIANT_IDS.gunKnifeFist,
+  VARIANT_IDS.tapTapShootX,
 ]);
 
 const HEALTH_START = 3;
 
 export const VARIANTS = Object.freeze({
-  [VARIANT_IDS.rps]: createRpsVariant({ id: VARIANT_IDS.rps, moves: MOVES }),
-  [VARIANT_IDS.chargeBlockFireball]: createChargeBlockFireballVariant({
-    id: VARIANT_IDS.chargeBlockFireball,
+  [VARIANT_IDS.rockPaperScissors]: createRockPaperScissorsVariant({ id: VARIANT_IDS.rockPaperScissors, moves: MOVES }),
+  [VARIANT_IDS.fireballWar]: createFireballWarVariant({
+    id: VARIANT_IDS.fireballWar,
     moves: MOVES,
     maxResource: MAX_RESOURCE,
   }),
-  [VARIANT_IDS.shootStabDuck]: createShootStabDuckVariant({
-    id: VARIANT_IDS.shootStabDuck,
+  [VARIANT_IDS.tapTapShootY]: createTapTapShootYVariant({
+    id: VARIANT_IDS.tapTapShootY,
     moves: MOVES,
     maxResource: MAX_RESOURCE,
   }),
-  [VARIANT_IDS.punchStabShoot]: createPunchStabShootVariant({
-    id: VARIANT_IDS.punchStabShoot,
+  [VARIANT_IDS.gunKnifeFist]: createGunKnifeFistVariant({
+    id: VARIANT_IDS.gunKnifeFist,
     moves: MOVES,
     startHealth: HEALTH_START,
   }),
-  [VARIANT_IDS.tapTapShoot]: createTapTapShootVariant({
-    id: VARIANT_IDS.tapTapShoot,
+  [VARIANT_IDS.tapTapShootX]: createTapTapShootXVariant({
+    id: VARIANT_IDS.tapTapShootX,
     moves: MOVES,
     maxResource: MAX_RESOURCE,
   }),

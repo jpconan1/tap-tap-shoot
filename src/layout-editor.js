@@ -3,7 +3,7 @@ const FRAME_SIZES = Object.freeze({
   portrait: Object.freeze({ width: 540, height: 960 }),
 });
 const STORAGE_KEY = 'tapTapShoot.layoutTool.v2';
-const DEFAULT_VARIANT_ID = 'shoot-stab-duck';
+const DEFAULT_VARIANT_ID = 'tap-tap-shoot-y';
 const VARIANT_NAME = 'Tap Tap Shoot Y';
 const DEFAULT_LAYOUT_STATE_ID = 'playing.default';
 const LAYOUT_STATES = Object.freeze([
@@ -15,11 +15,11 @@ const LAYOUT_STATES = Object.freeze([
 const DEFAULT_FRAME_COUNT = 3;
 const DEFAULT_ELEMENT_SCALE = 0.5;
 const VARIANT_LAYOUT_FILE_NAMES = Object.freeze({
-  'rock-paper-scissors': 'rps-layout.json',
-  'charge-block-fireball': 'cbf-layout.json',
-  'punch-stab-shoot': 'pss-layout.json',
-  'shoot-stab-duck': 'ssd-layout.json',
-  'tap-tap-shoot': 'tts-layout.json',
+  'rock-paper-scissors': 'rock-paper-scissors-layout.json',
+  'fireball-war': 'fireball-war-layout.json',
+  'gun-knife-fist': 'gun-knife-fist-layout.json',
+  'tap-tap-shoot-y': 'tap-tap-shoot-y-layout.json',
+  'tap-tap-shoot-x': 'tap-tap-shoot-x-layout.json',
 });
 
 const stage = document.querySelector('[data-stage]');
@@ -860,33 +860,33 @@ function normalizeElement(element) {
 
 function migrateAssetPath(path) {
   return {
-    'assets/action_points_sheet.webp': 'assets/tap-tap-shoot/ap_icon_sheet.webp',
-    'assets/ap_icon_sheet.webp': 'assets/tap-tap-shoot/ap_icon_sheet.webp',
-    'assets/bullet_icon_sheet.webp': 'assets/shoot-stab-duck/bullet_icon_sheet.webp',
-    'assets/dodge_button_sheet.webp': 'assets/shoot-stab-duck/duck_button_sheet.webp',
-    'assets/duck_button_sheet.webp': 'assets/shoot-stab-duck/duck_button_sheet.webp',
-    'assets/reload_button_sheet.webp': 'assets/shoot-stab-duck/reload_button_sheet.webp',
-    'assets/shoot_button_sheet.webp': 'assets/shoot-stab-duck/shoot_button_sheet.webp',
-    'assets/stab_button_sheet.webp': 'assets/shoot-stab-duck/stab_button_sheet.webp',
-    'assets/punch-stab-shoot/punch_button_sheet.webp': 'assets/punch-stab-shoot/fist_button_sheet.webp',
+    'assets/action_points_sheet.webp': 'assets/tap-tap-shoot-x/ap_icon_sheet.webp',
+    'assets/ap_icon_sheet.webp': 'assets/tap-tap-shoot-x/ap_icon_sheet.webp',
+    'assets/bullet_icon_sheet.webp': 'assets/tap-tap-shoot-y/bullet_icon_sheet.webp',
+    'assets/dodge_button_sheet.webp': 'assets/tap-tap-shoot-y/duck_button_sheet.webp',
+    'assets/duck_button_sheet.webp': 'assets/tap-tap-shoot-y/duck_button_sheet.webp',
+    'assets/reload_button_sheet.webp': 'assets/tap-tap-shoot-y/reload_button_sheet.webp',
+    'assets/shoot_button_sheet.webp': 'assets/tap-tap-shoot-y/shoot_button_sheet.webp',
+    'assets/stab_button_sheet.webp': 'assets/tap-tap-shoot-y/stab_button_sheet.webp',
+    'assets/gun-knife-fist/punch_button_sheet.webp': 'assets/gun-knife-fist/fist_button_sheet.webp',
   }[path] ?? path;
 }
 
 const NEW_ASSET_SOURCE_SIZES = Object.freeze({
-  'assets/shoot-stab-duck/bullet_icon_sheet.webp': Object.freeze({ width: 64, height: 64 }),
-  'assets/tap-tap-shoot/ap_icon_sheet.webp': Object.freeze({ width: 64, height: 64 }),
-  'assets/punch-stab-shoot/fist_button_sheet.webp': Object.freeze({ width: 256, height: 128 }),
-  'assets/punch-stab-shoot/knife_button_sheet.webp': Object.freeze({ width: 256, height: 128 }),
-  'assets/punch-stab-shoot/gun_button_sheet.webp': Object.freeze({ width: 256, height: 128 }),
-  'assets/shoot-stab-duck/duck_button_sheet.webp': Object.freeze({ width: 256, height: 128 }),
-  'assets/shoot-stab-duck/reload_button_sheet.webp': Object.freeze({ width: 256, height: 128 }),
-  'assets/shoot-stab-duck/shoot_button_sheet.webp': Object.freeze({ width: 256, height: 128 }),
-  'assets/shoot-stab-duck/stab_button_sheet.webp': Object.freeze({ width: 256, height: 128 }),
-  'assets/tap-tap-shoot/charge_ap_button_sheet.webp': Object.freeze({ width: 256, height: 128 }),
-  'assets/tap-tap-shoot/counterstab_button_sheet.webp': Object.freeze({ width: 256, height: 384 }),
-  'assets/tap-tap-shoot/duck_button_sheet.webp': Object.freeze({ width: 256, height: 128 }),
-  'assets/tap-tap-shoot/shoot_ap_button_sheet.webp': Object.freeze({ width: 256, height: 128 }),
-  'assets/tap-tap-shoot/stab_ap_button_sheet.webp': Object.freeze({ width: 256, height: 128 }),
+  'assets/tap-tap-shoot-y/bullet_icon_sheet.webp': Object.freeze({ width: 64, height: 64 }),
+  'assets/tap-tap-shoot-x/ap_icon_sheet.webp': Object.freeze({ width: 64, height: 64 }),
+  'assets/gun-knife-fist/fist_button_sheet.webp': Object.freeze({ width: 256, height: 128 }),
+  'assets/gun-knife-fist/knife_button_sheet.webp': Object.freeze({ width: 256, height: 128 }),
+  'assets/gun-knife-fist/gun_button_sheet.webp': Object.freeze({ width: 256, height: 128 }),
+  'assets/tap-tap-shoot-y/duck_button_sheet.webp': Object.freeze({ width: 256, height: 128 }),
+  'assets/tap-tap-shoot-y/reload_button_sheet.webp': Object.freeze({ width: 256, height: 128 }),
+  'assets/tap-tap-shoot-y/shoot_button_sheet.webp': Object.freeze({ width: 256, height: 128 }),
+  'assets/tap-tap-shoot-y/stab_button_sheet.webp': Object.freeze({ width: 256, height: 128 }),
+  'assets/tap-tap-shoot-x/charge_ap_button_sheet.webp': Object.freeze({ width: 256, height: 128 }),
+  'assets/tap-tap-shoot-x/counterstab_button_sheet.webp': Object.freeze({ width: 256, height: 384 }),
+  'assets/tap-tap-shoot-x/duck_button_sheet.webp': Object.freeze({ width: 256, height: 128 }),
+  'assets/tap-tap-shoot-x/shoot_ap_button_sheet.webp': Object.freeze({ width: 256, height: 128 }),
+  'assets/tap-tap-shoot-x/stab_ap_button_sheet.webp': Object.freeze({ width: 256, height: 128 }),
 });
 
 function createEmptyLayouts() {
@@ -1043,7 +1043,7 @@ function getLayoutVariant(id = variantId) {
 function getLayoutVariants() {
   return Array.isArray(window.LAYOUT_VARIANTS) && window.LAYOUT_VARIANTS.length
     ? window.LAYOUT_VARIANTS
-    : [{ id: DEFAULT_VARIANT_ID, name: VARIANT_NAME, folder: 'assets/shoot-stab-duck' }];
+    : [{ id: DEFAULT_VARIANT_ID, name: VARIANT_NAME, folder: 'assets/tap-tap-shoot-y' }];
 }
 
 function commit() {

@@ -111,11 +111,11 @@ const FRAME_WIDTH = 960;
 const FRAME_HEIGHT = 540;
 const FRAME_BOTTOM_GUTTER = 36;
 const VARIANT_LAYOUT_URLS = Object.freeze({
-  [VARIANT_IDS.shootStabDuck]: './assets/shoot-stab-duck/ssd-layout.json',
-  [VARIANT_IDS.rps]: './assets/rock-paper-scissors/rps-layout.json',
-  [VARIANT_IDS.chargeBlockFireball]: './assets/charge-block-fireball/cbf-layout.json',
-  [VARIANT_IDS.punchStabShoot]: './assets/punch-stab-shoot/pss-layout.json',
-  [VARIANT_IDS.tapTapShoot]: './assets/tap-tap-shoot/tts-layout.json',
+  [VARIANT_IDS.tapTapShootY]: './assets/tap-tap-shoot-y/tap-tap-shoot-y-layout.json',
+  [VARIANT_IDS.rockPaperScissors]: './assets/rock-paper-scissors/rock-paper-scissors-layout.json',
+  [VARIANT_IDS.fireballWar]: './assets/fireball-war/fireball-war-layout.json',
+  [VARIANT_IDS.gunKnifeFist]: './assets/gun-knife-fist/gun-knife-fist-layout.json',
+  [VARIANT_IDS.tapTapShootX]: './assets/tap-tap-shoot-x/tap-tap-shoot-x-layout.json',
 });
 const DEFAULT_LAYOUT_STATE_ID = 'playing.default';
 const DISADVANTAGED_LAYOUT_STATE_ID = 'playing.disadvantaged';
@@ -148,10 +148,10 @@ const TITLE_MUSIC_SLIDER_URL = './assets/title/Music_slider_sheet.webp';
 const TITLE_SFX_SLIDER_URL = './assets/title/sfx_slider_sheet.webp';
 const TITLE_GRADIENT_SLIDER_URL = './assets/title/graidant_slider_sheet.webp';
 const ONLINE_STATUS_POLL_MS = 5000;
-const RANKED_DISPLAY_NAME_KEY = 'tapTapShoot.rankedDisplayName';
-const BOIL_ENABLED_KEY = 'tapTapShoot.boilEnabled';
-const MUSIC_VOLUME_KEY = 'tapTapShoot.musicVolume';
-const SFX_VOLUME_KEY = 'tapTapShoot.sfxVolume';
+const RANKED_DISPLAY_NAME_KEY = 'tapTapShootX.rankedDisplayName';
+const BOIL_ENABLED_KEY = 'tapTapShootX.boilEnabled';
+const MUSIC_VOLUME_KEY = 'tapTapShootX.musicVolume';
+const SFX_VOLUME_KEY = 'tapTapShootX.sfxVolume';
 const DEFAULT_RANKED_DISPLAY_NAME = 'Guest';
 const MAX_RANKED_DISPLAY_NAME_LENGTH = 50;
 const NAME_PREFIXES = Object.freeze([
@@ -214,43 +214,43 @@ const DEFAULT_MOVE_BUTTON_DOODLES = Object.freeze({
   rock: 'rock-paper-scissors/rock_button',
   paper: 'rock-paper-scissors/paper_button',
   scissors: 'rock-paper-scissors/scissors_button',
-  charge: 'charge-block-fireball/charge_button',
-  block: 'charge-block-fireball/block_button',
-  fireball: 'charge-block-fireball/fireball_button',
-  punch: 'punch-stab-shoot/fist_button',
-  reload: 'shoot-stab-duck/reload_button',
-  shoot: 'shoot-stab-duck/shoot_button',
-  stab: 'shoot-stab-duck/stab_button',
-  duck: 'shoot-stab-duck/duck_button',
-  counterstab: 'tap-tap-shoot/counterstab_button',
+  charge: 'fireball-war/charge_button',
+  block: 'fireball-war/block_button',
+  fireball: 'fireball-war/fireball_button',
+  punch: 'gun-knife-fist/fist_button',
+  reload: 'tap-tap-shoot-y/reload_button',
+  shoot: 'tap-tap-shoot-y/shoot_button',
+  stab: 'tap-tap-shoot-y/stab_button',
+  duck: 'tap-tap-shoot-y/duck_button',
+  counterstab: 'tap-tap-shoot-x/counterstab_button',
 });
 const VARIANT_MOVE_BUTTON_DOODLES = Object.freeze({
-  [VARIANT_IDS.punchStabShoot]: Object.freeze({
-    punch: 'punch-stab-shoot/fist_button',
-    stab: 'punch-stab-shoot/knife_button',
-    shoot: 'punch-stab-shoot/gun_button',
+  [VARIANT_IDS.gunKnifeFist]: Object.freeze({
+    punch: 'gun-knife-fist/fist_button',
+    stab: 'gun-knife-fist/knife_button',
+    shoot: 'gun-knife-fist/gun_button',
   }),
-  [VARIANT_IDS.shootStabDuck]: Object.freeze({
-    reload: 'shoot-stab-duck/reload_button',
-    shoot: 'shoot-stab-duck/shoot_button',
-    stab: 'shoot-stab-duck/stab_button',
-    duck: 'shoot-stab-duck/duck_button',
+  [VARIANT_IDS.tapTapShootY]: Object.freeze({
+    reload: 'tap-tap-shoot-y/reload_button',
+    shoot: 'tap-tap-shoot-y/shoot_button',
+    stab: 'tap-tap-shoot-y/stab_button',
+    duck: 'tap-tap-shoot-y/duck_button',
   }),
-  [VARIANT_IDS.tapTapShoot]: Object.freeze({
-    reload: 'tap-tap-shoot/charge_ap_button',
-    shoot: 'tap-tap-shoot/shoot_ap_button',
-    stab: 'tap-tap-shoot/stab_ap_button',
-    duck: 'tap-tap-shoot/duck_button',
-    counterstab: 'tap-tap-shoot/counterstab_button',
+  [VARIANT_IDS.tapTapShootX]: Object.freeze({
+    reload: 'tap-tap-shoot-x/charge_ap_button',
+    shoot: 'tap-tap-shoot-x/shoot_ap_button',
+    stab: 'tap-tap-shoot-x/stab_ap_button',
+    duck: 'tap-tap-shoot-x/duck_button',
+    counterstab: 'tap-tap-shoot-x/counterstab_button',
   }),
 });
 const MOVE_ICON_DOODLES = Object.freeze({
   rock: 'rock-paper-scissors/rock_button',
   paper: 'rock-paper-scissors/paper_button',
   scissors: 'rock-paper-scissors/scissors_button',
-  charge: 'charge-block-fireball/charge icon',
-  block: 'charge-block-fireball/block_button',
-  fireball: 'charge-block-fireball/fireball_button',
+  charge: 'fireball-war/charge icon',
+  block: 'fireball-war/block_button',
+  fireball: 'fireball-war/fireball_button',
   punch: 'stab_icon',
   reload: 'reload_icon',
   shoot: 'shoot_icon',
@@ -1512,33 +1512,19 @@ function getRankedVariantSelectVariants() {
 }
 
 function renderRankedVariantPickButton({ variant, slot, disabled, picked, banned, firstPicked }) {
-  return `
-    <button
-      class="variant-button variant-slot-${slot} ranked-variant-pick ${picked ? 'picked' : ''} ${banned ? 'banned' : ''}"
-      data-pick-variant="${variant.id}"
-      data-variant-slot="${slot}"
-      aria-label="${escapeHtml(variant.name)}"
-      ${disabled ? 'disabled' : ''}
-    >
-      <canvas
-        class="sprite-canvas variant-button-art"
-        data-doodle="${variant.buttonDoodle}"
-        data-frame-width="${VARIANT_BUTTON_FRAME_WIDTH}"
-        data-frame-height="${VARIANT_BUTTON_FRAME_HEIGHT}"
-        width="${VARIANT_BUTTON_FRAME_WIDTH}"
-        height="${VARIANT_BUTTON_FRAME_HEIGHT}"
-        aria-hidden="true"
-      ></canvas>
-      ${firstPicked ? `
+  return renderVariantButton(variant, slot, {
+    className: `ranked-variant-pick ${picked ? 'picked' : ''} ${banned ? 'banned' : ''}`,
+    dataAttribute: 'data-pick-variant',
+    disabled,
+    content: firstPicked ? `
         <canvas
           class="ranked-variant-ready"
           width="300"
           height="256"
           aria-hidden="true"
         ></canvas>
-      ` : ''}
-    </button>
-  `;
+      ` : '',
+  });
 }
 
 function renderRankedQuitButton() {
@@ -1827,8 +1813,8 @@ function getLayoutStateId(legalMoves) {
 
 function isDisadvantagedLayoutState(legalMoves) {
   return state.status === 'playing'
-    && getCurrentVariantId() !== VARIANT_IDS.chargeBlockFireball
-    && getCurrentVariantId() !== VARIANT_IDS.tapTapShoot
+    && getCurrentVariantId() !== VARIANT_IDS.fireballWar
+    && getCurrentVariantId() !== VARIANT_IDS.tapTapShootX
     && getPlayerResource(state.players.p1) === 0
     && getPlayerResource(state.players.p2) > 0
     && !legalMoves.has('shoot');
@@ -2284,7 +2270,7 @@ function buildSceneGalleryGroups() {
           );
         }
 
-        if (variantId === VARIANT_IDS.punchStabShoot) {
+        if (variantId === VARIANT_IDS.gunKnifeFist) {
           const killResult = resolveTurn({ variantId, p1Move, p2Move, p1Resource: 1, p2Resource: 1 });
           if (killResult.ok) add(resolveScene({ variantId, p1Move, p2Move, result: killResult }), `${matchup} / low health`);
         }
@@ -2941,7 +2927,9 @@ async function showVariantDetail(variantId, sourceButton) {
   }
 
   app.classList.add('variant-detail-open');
-  const overlay = renderVariantDetailOverlay(variant, playSelectedVariant);
+  const overlay = renderVariantDetailOverlay(variant, playSelectedVariant, {
+    slot: Number(selectedButton.dataset.variantSlot),
+  });
   variantDetailMenu = { curtain, overlay, selectedButton, mode: 'local' };
   isTransitioning = false;
 }
@@ -2964,7 +2952,10 @@ async function showRankedVariantDetail(variantId, sourceButton) {
   }
 
   app.classList.add('variant-detail-open');
-  const overlay = renderVariantDetailOverlay(variant, confirmRankedVariantPick, 'select_button');
+  const overlay = renderVariantDetailOverlay(variant, confirmRankedVariantPick, {
+    actionDoodle: 'select_button',
+    slot: Number(selectedButton.dataset.variantSlot),
+  });
   variantDetailMenu = { curtain, overlay, selectedButton, mode: 'online' };
   isTransitioning = false;
 }
@@ -2979,9 +2970,11 @@ function restoreVariantButton(button) {
   button?.classList.remove('variant-button-above-curtain');
 }
 
-function renderVariantDetailOverlay(variant, onPlay, actionDoodle = 'variant_play_button') {
+function renderVariantDetailOverlay(variant, onPlay, {
+  actionDoodle = 'variant_play_button',
+  slot = getVariantSelectSlot(variant.id),
+} = {}) {
   const overlay = document.createElement('div');
-  const slot = getVariantSelectSlot(variant.id);
   overlay.className = `variant-detail-overlay variant-detail-${variant.id} variant-detail-slot-${slot}`;
   overlay.innerHTML = `
 
@@ -3079,8 +3072,13 @@ function renderBackButton() {
   `;
 }
 
-function renderVariantButton(variant, slot) {
-  const difficultyToggle = variant.id === VARIANT_IDS.rps
+function renderVariantButton(variant, slot, {
+  className = '',
+  dataAttribute = 'data-variant',
+  disabled = false,
+  content = null,
+} = {}) {
+  const difficultyToggle = content ?? (variant.id === VARIANT_IDS.rockPaperScissors
     ? ''
     : `
       <span
@@ -3097,10 +3095,16 @@ function renderVariantButton(variant, slot) {
           aria-hidden="true"
         ></canvas>
       </span>
-    `;
+    `);
 
   return `
-    <button class="variant-button variant-slot-${slot}" data-variant="${variant.id}" data-variant-slot="${slot}" aria-label="${variant.name}">
+    <button
+      class="variant-button variant-slot-${slot} ${className}"
+      ${dataAttribute}="${variant.id}"
+      data-variant-slot="${slot}"
+      aria-label="${escapeHtml(variant.name)}"
+      ${disabled ? 'disabled' : ''}
+    >
       <canvas
         class="sprite-canvas variant-button-art"
         data-doodle="${variant.buttonDoodle}"
@@ -3231,7 +3235,7 @@ function renderPlayerIdentity(playerId) {
 }
 
 function renderComputerDebugLine(playerId) {
-  if (playerId !== 'p2' || playMode !== 'local' || getCurrentVariantId() !== VARIANT_IDS.chargeBlockFireball) {
+  if (playerId !== 'p2' || playMode !== 'local' || getCurrentVariantId() !== VARIANT_IDS.fireballWar) {
     return '';
   }
 
@@ -3742,8 +3746,8 @@ function getRpsReadySplitScene(scene) {
     : null;
 }
 
-function getChargeBlockFireballReadySplitScene(scene) {
-  const prefix = 'charge-block-fireball/';
+function getFireballWarReadySplitScene(scene) {
+  const prefix = 'fireball-war/';
 
   if (!scene.startsWith(prefix)) {
     return null;
@@ -3762,8 +3766,8 @@ function getChargeBlockFireballReadySplitScene(scene) {
   return ['block-draw', 'fireball-draw'].includes(sceneName) ? sceneName : null;
 }
 
-function getPunchStabShootReadySplitPresentation(scene, readyPlayerId) {
-  const prefix = 'punch-stab-shoot/';
+function getGunKnifeFistReadySplitPresentation(scene, readyPlayerId) {
+  const prefix = 'gun-knife-fist/';
 
   if (!scene.startsWith(prefix)) {
     return null;
@@ -3774,7 +3778,7 @@ function getPunchStabShootReadySplitPresentation(scene, readyPlayerId) {
   if (sceneName === 'pss-standoff' || ['punch-draw', 'shoot-draw', 'stab-draw'].includes(sceneName)) {
     return {
       kind: 'doodle',
-      name: `punch-stab-shoot/split_scenes/${sceneName}_${readyPlayerId}_is_ready`,
+      name: `gun-knife-fist/split_scenes/${sceneName}_${readyPlayerId}_is_ready`,
       flip: false,
     };
   }
@@ -3783,7 +3787,7 @@ function getPunchStabShootReadySplitPresentation(scene, readyPlayerId) {
     const isPuncherReady = lastMoves[readyPlayerId] === 'punch';
     return {
       kind: 'doodle',
-      name: `punch-stab-shoot/split_scenes/punch-shoot_${isPuncherReady ? 'puncher' : 'shooter'}_is_ready`,
+      name: `gun-knife-fist/split_scenes/punch-shoot_${isPuncherReady ? 'puncher' : 'shooter'}_is_ready`,
       flip: lastMoves.p2 === 'punch',
     };
   }
@@ -3792,7 +3796,7 @@ function getPunchStabShootReadySplitPresentation(scene, readyPlayerId) {
     const isStabberReady = lastMoves[readyPlayerId] === 'stab';
     return {
       kind: 'doodle',
-      name: `punch-stab-shoot/split_scenes/stab-punch_${isStabberReady ? 'stabber' : 'puncher'}_is_ready`,
+      name: `gun-knife-fist/split_scenes/stab-punch_${isStabberReady ? 'stabber' : 'puncher'}_is_ready`,
       flip: lastMoves.p2 === 'stab',
     };
   }
@@ -3800,8 +3804,8 @@ function getPunchStabShootReadySplitPresentation(scene, readyPlayerId) {
   return null;
 }
 
-function getShootStabDuckReadySplitPresentation(scene, readyPlayerId) {
-  const prefix = 'shoot-stab-duck/';
+function getTapTapShootYReadySplitPresentation(scene, readyPlayerId) {
+  const prefix = 'tap-tap-shoot-y/';
 
   if (!scene.startsWith(prefix)) {
     return null;
@@ -3812,7 +3816,7 @@ function getShootStabDuckReadySplitPresentation(scene, readyPlayerId) {
   if (sceneName === 'standoff-ssd') {
     return {
       kind: 'doodle',
-      name: `shoot-stab-duck/split_scenes/ssd-standoff_${readyPlayerId}_is_ready`,
+      name: `tap-tap-shoot-y/split_scenes/ssd-standoff_${readyPlayerId}_is_ready`,
       flip: false,
     };
   }
@@ -3820,7 +3824,7 @@ function getShootStabDuckReadySplitPresentation(scene, readyPlayerId) {
   if (sceneName === 'reload-draw') {
     return {
       kind: 'doodle',
-      name: `shoot-stab-duck/split_scenes/reloading_${readyPlayerId}_is_ready`,
+      name: `tap-tap-shoot-y/split_scenes/reloading_${readyPlayerId}_is_ready`,
       flip: false,
     };
   }
@@ -3828,7 +3832,7 @@ function getShootStabDuckReadySplitPresentation(scene, readyPlayerId) {
   if (['shoot-draw', 'stab-draw', 'duck-draw'].includes(sceneName)) {
     return {
       kind: 'doodle',
-      name: `shoot-stab-duck/split_scenes/${sceneName}_${readyPlayerId}_is_ready`,
+      name: `tap-tap-shoot-y/split_scenes/${sceneName}_${readyPlayerId}_is_ready`,
       flip: false,
     };
   }
@@ -3837,7 +3841,7 @@ function getShootStabDuckReadySplitPresentation(scene, readyPlayerId) {
     const isReloaderReady = lastMoves[readyPlayerId] === 'reload';
     return {
       kind: 'doodle',
-      name: `shoot-stab-duck/split_scenes/reload-duck_${isReloaderReady ? 'reloader' : 'ducker'}_is_ready`,
+      name: `tap-tap-shoot-y/split_scenes/reload-duck_${isReloaderReady ? 'reloader' : 'ducker'}_is_ready`,
       flip: lastMoves.p1 === 'duck',
     };
   }
@@ -3846,7 +3850,7 @@ function getShootStabDuckReadySplitPresentation(scene, readyPlayerId) {
     const isShooterReady = lastMoves[readyPlayerId] === 'shoot';
     return {
       kind: 'doodle',
-      name: `shoot-stab-duck/split_scenes/shoot-duck_${isShooterReady ? 'shooter' : 'ducker'}_is_ready`,
+      name: `tap-tap-shoot-y/split_scenes/shoot-duck_${isShooterReady ? 'shooter' : 'ducker'}_is_ready`,
       flip: lastMoves.p2 === 'shoot',
     };
   }
@@ -3855,7 +3859,7 @@ function getShootStabDuckReadySplitPresentation(scene, readyPlayerId) {
     const isStabberReady = lastMoves[readyPlayerId] === 'stab';
     return {
       kind: 'doodle',
-      name: `shoot-stab-duck/split_scenes/stab-reload_${isStabberReady ? 'stabber' : 'reloader'}_is_ready`,
+      name: `tap-tap-shoot-y/split_scenes/stab-reload_${isStabberReady ? 'stabber' : 'reloader'}_is_ready`,
       flip: lastMoves.p2 === 'stab',
     };
   }
@@ -3863,8 +3867,8 @@ function getShootStabDuckReadySplitPresentation(scene, readyPlayerId) {
   return null;
 }
 
-function getTapTapShootReadySplitPresentation(scene, readyPlayerId) {
-  const prefix = 'tap-tap-shoot/';
+function getTapTapShootXReadySplitPresentation(scene, readyPlayerId) {
+  const prefix = 'tap-tap-shoot-x/';
 
   if (!scene.startsWith(prefix)) {
     return null;
@@ -3875,7 +3879,7 @@ function getTapTapShootReadySplitPresentation(scene, readyPlayerId) {
   if (sceneName === 'standoff-tts') {
     return {
       kind: 'doodle',
-      name: `tap-tap-shoot/split_scenes/tts-standoff_${readyPlayerId}_is_ready`,
+      name: `tap-tap-shoot-x/split_scenes/tts-standoff_${readyPlayerId}_is_ready`,
       flip: false,
     };
   }
@@ -3883,7 +3887,7 @@ function getTapTapShootReadySplitPresentation(scene, readyPlayerId) {
   if (sceneName === 'reload-draw') {
     return {
       kind: 'doodle',
-      name: `tap-tap-shoot/split_scenes/reloading_${readyPlayerId}_is_ready`,
+      name: `tap-tap-shoot-x/split_scenes/reloading_${readyPlayerId}_is_ready`,
       flip: false,
     };
   }
@@ -3891,7 +3895,7 @@ function getTapTapShootReadySplitPresentation(scene, readyPlayerId) {
   if (['shoot-draw', 'stab-draw', 'defense-draw'].includes(sceneName)) {
     return {
       kind: 'doodle',
-      name: `tap-tap-shoot/split_scenes/${sceneName}_${readyPlayerId}_is_ready`,
+      name: `tap-tap-shoot-x/split_scenes/${sceneName}_${readyPlayerId}_is_ready`,
       flip: false,
     };
   }
@@ -3900,7 +3904,7 @@ function getTapTapShootReadySplitPresentation(scene, readyPlayerId) {
     const isReloaderReady = lastMoves[readyPlayerId] === 'reload';
     return {
       kind: 'doodle',
-      name: `tap-tap-shoot/split_scenes/reload-defense_${isReloaderReady ? 'reloader' : 'defender'}_is_ready`,
+      name: `tap-tap-shoot-x/split_scenes/reload-defense_${isReloaderReady ? 'reloader' : 'defender'}_is_ready`,
       flip: lastMoves.p1 === 'duck',
     };
   }
@@ -3909,7 +3913,7 @@ function getTapTapShootReadySplitPresentation(scene, readyPlayerId) {
     const isShooterReady = lastMoves[readyPlayerId] === 'shoot';
     return {
       kind: 'doodle',
-      name: `tap-tap-shoot/split_scenes/shoot-duck_${isShooterReady ? 'shooter' : 'ducker'}_is_ready`,
+      name: `tap-tap-shoot-x/split_scenes/shoot-duck_${isShooterReady ? 'shooter' : 'ducker'}_is_ready`,
       flip: lastMoves.p2 === 'shoot',
     };
   }
@@ -3918,7 +3922,7 @@ function getTapTapShootReadySplitPresentation(scene, readyPlayerId) {
     const isStabberReady = lastMoves[readyPlayerId] === 'stab';
     return {
       kind: 'doodle',
-      name: `tap-tap-shoot/split_scenes/stab-counterstab_${isStabberReady ? 'stabber' : 'counterstabber'}_is_ready`,
+      name: `tap-tap-shoot-x/split_scenes/stab-counterstab_${isStabberReady ? 'stabber' : 'counterstabber'}_is_ready`,
       flip: lastMoves.p2 === 'stab',
     };
   }
@@ -4462,33 +4466,33 @@ function setNewRoundAtReloadScene() {
 }
 
 function getIdleStagePresentation(variantId = getCurrentVariantId()) {
-  if (variantId === VARIANT_IDS.chargeBlockFireball) {
+  if (variantId === VARIANT_IDS.fireballWar) {
     return {
       kind: 'doodle',
-      name: 'charge-block-fireball/cbf-standoff',
+      name: 'fireball-war/cbf-standoff',
       flip: false,
     };
   }
 
-  if (variantId === VARIANT_IDS.punchStabShoot) {
+  if (variantId === VARIANT_IDS.gunKnifeFist) {
     return {
       kind: 'doodle',
-      name: 'punch-stab-shoot/pss-standoff',
+      name: 'gun-knife-fist/pss-standoff',
       flip: false,
     };
   }
 
-  if (variantId === VARIANT_IDS.tapTapShoot) {
+  if (variantId === VARIANT_IDS.tapTapShootX) {
     return {
       kind: 'doodle',
-      name: 'tap-tap-shoot/standoff-tts',
+      name: 'tap-tap-shoot-x/standoff-tts',
       flip: false,
     };
   }
 
   return {
     kind: 'doodle',
-    name: variantId === VARIANT_IDS.rps ? 'rock-paper-scissors/rps-standoff' : 'shoot-stab-duck/standoff-ssd',
+    name: variantId === VARIANT_IDS.rockPaperScissors ? 'rock-paper-scissors/rps-standoff' : 'tap-tap-shoot-y/standoff-ssd',
     flip: false,
   };
 }

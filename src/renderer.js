@@ -50,99 +50,99 @@ const INTERACTION_DOODLES = Object.freeze({
   'duck|duck': 'hiding',
 });
 
-const CHARGE_BLOCK_FIREBALL_DOODLES = Object.freeze({
-  'block|block': 'charge-block-fireball/block-draw',
-  'charge|block': 'charge-block-fireball/block-charge',
-  'block|fireball': 'charge-block-fireball/block-fireball',
-  'charge|charge': 'charge-block-fireball/both-charge',
-  'charge|fireball': 'charge-block-fireball/charge-fireball',
-  'fireball|fireball': 'charge-block-fireball/fireball-draw',
+const FIREBALL_WAR_DOODLES = Object.freeze({
+  'block|block': 'fireball-war/block-draw',
+  'charge|block': 'fireball-war/block-charge',
+  'block|fireball': 'fireball-war/block-fireball',
+  'charge|charge': 'fireball-war/both-charge',
+  'charge|fireball': 'fireball-war/charge-fireball',
+  'fireball|fireball': 'fireball-war/fireball-draw',
 });
 
-const PUNCH_STAB_SHOOT_DOODLES = Object.freeze([
-  'punch-stab-shoot/pss-standoff',
-  'punch-stab-shoot/punch-draw',
-  'punch-stab-shoot/punch-shoot-damage',
-  'punch-stab-shoot/punch-shoot-kill',
-  'punch-stab-shoot/shoot-draw',
-  'punch-stab-shoot/shoot-stab',
-  'punch-stab-shoot/stab-draw',
-  'punch-stab-shoot/stab-punch-damage',
-  'punch-stab-shoot/stab-punch-kill',
+const GUN_KNIFE_FIST_DOODLES = Object.freeze([
+  'gun-knife-fist/pss-standoff',
+  'gun-knife-fist/punch-draw',
+  'gun-knife-fist/punch-shoot-damage',
+  'gun-knife-fist/punch-shoot-kill',
+  'gun-knife-fist/shoot-draw',
+  'gun-knife-fist/shoot-stab',
+  'gun-knife-fist/stab-draw',
+  'gun-knife-fist/stab-punch-damage',
+  'gun-knife-fist/stab-punch-kill',
 ]);
-const PUNCH_STAB_SHOOT_SPLIT_DOODLES = Object.freeze([
-  'punch-stab-shoot/split_scenes/pss-standoff_p1_is_ready',
-  'punch-stab-shoot/split_scenes/pss-standoff_p2_is_ready',
-  'punch-stab-shoot/split_scenes/punch-draw_p1_is_ready',
-  'punch-stab-shoot/split_scenes/punch-draw_p2_is_ready',
-  'punch-stab-shoot/split_scenes/punch-shoot_puncher_is_ready',
-  'punch-stab-shoot/split_scenes/punch-shoot_shooter_is_ready',
-  'punch-stab-shoot/split_scenes/shoot-draw_p1_is_ready',
-  'punch-stab-shoot/split_scenes/shoot-draw_p2_is_ready',
-  'punch-stab-shoot/split_scenes/stab-draw_p1_is_ready',
-  'punch-stab-shoot/split_scenes/stab-draw_p2_is_ready',
-  'punch-stab-shoot/split_scenes/stab-punch_puncher_is_ready',
-  'punch-stab-shoot/split_scenes/stab-punch_stabber_is_ready',
+const GUN_KNIFE_FIST_SPLIT_DOODLES = Object.freeze([
+  'gun-knife-fist/split_scenes/pss-standoff_p1_is_ready',
+  'gun-knife-fist/split_scenes/pss-standoff_p2_is_ready',
+  'gun-knife-fist/split_scenes/punch-draw_p1_is_ready',
+  'gun-knife-fist/split_scenes/punch-draw_p2_is_ready',
+  'gun-knife-fist/split_scenes/punch-shoot_puncher_is_ready',
+  'gun-knife-fist/split_scenes/punch-shoot_shooter_is_ready',
+  'gun-knife-fist/split_scenes/shoot-draw_p1_is_ready',
+  'gun-knife-fist/split_scenes/shoot-draw_p2_is_ready',
+  'gun-knife-fist/split_scenes/stab-draw_p1_is_ready',
+  'gun-knife-fist/split_scenes/stab-draw_p2_is_ready',
+  'gun-knife-fist/split_scenes/stab-punch_puncher_is_ready',
+  'gun-knife-fist/split_scenes/stab-punch_stabber_is_ready',
 ]);
-const SHOOT_STAB_DUCK_DOODLES = Object.freeze([
-  'shoot-stab-duck/standoff-ssd',
-  'shoot-stab-duck/reload-draw',
-  'shoot-stab-duck/reload-duck',
-  'shoot-stab-duck/shoot-draw',
-  'shoot-stab-duck/shoot-duck',
-  'shoot-stab-duck/shoot-kill',
-  'shoot-stab-duck/stab-draw',
-  'shoot-stab-duck/stab-kill',
-  'shoot-stab-duck/stab-reload',
-  'shoot-stab-duck/duck-draw',
+const TAP_TAP_SHOOT_Y_DOODLES = Object.freeze([
+  'tap-tap-shoot-y/standoff-ssd',
+  'tap-tap-shoot-y/reload-draw',
+  'tap-tap-shoot-y/reload-duck',
+  'tap-tap-shoot-y/shoot-draw',
+  'tap-tap-shoot-y/shoot-duck',
+  'tap-tap-shoot-y/shoot-kill',
+  'tap-tap-shoot-y/stab-draw',
+  'tap-tap-shoot-y/stab-kill',
+  'tap-tap-shoot-y/stab-reload',
+  'tap-tap-shoot-y/duck-draw',
 ]);
-const SHOOT_STAB_DUCK_SPLIT_DOODLES = Object.freeze([
-  'shoot-stab-duck/split_scenes/ssd-standoff_p1_is_ready',
-  'shoot-stab-duck/split_scenes/ssd-standoff_p2_is_ready',
-  'shoot-stab-duck/split_scenes/reloading_p1_is_ready',
-  'shoot-stab-duck/split_scenes/reloading_p2_is_ready',
-  'shoot-stab-duck/split_scenes/shoot-draw_p1_is_ready',
-  'shoot-stab-duck/split_scenes/shoot-draw_p2_is_ready',
-  'shoot-stab-duck/split_scenes/stab-draw_p1_is_ready',
-  'shoot-stab-duck/split_scenes/stab-draw_p2_is_ready',
-  'shoot-stab-duck/split_scenes/duck-draw_p1_is_ready',
-  'shoot-stab-duck/split_scenes/duck-draw_p2_is_ready',
-  'shoot-stab-duck/split_scenes/reload-duck_reloader_is_ready',
-  'shoot-stab-duck/split_scenes/reload-duck_ducker_is_ready',
-  'shoot-stab-duck/split_scenes/shoot-duck_shooter_is_ready',
-  'shoot-stab-duck/split_scenes/shoot-duck_ducker_is_ready',
-  'shoot-stab-duck/split_scenes/stab-reload_stabber_is_ready',
-  'shoot-stab-duck/split_scenes/stab-reload_reloader_is_ready',
+const TAP_TAP_SHOOT_Y_SPLIT_DOODLES = Object.freeze([
+  'tap-tap-shoot-y/split_scenes/ssd-standoff_p1_is_ready',
+  'tap-tap-shoot-y/split_scenes/ssd-standoff_p2_is_ready',
+  'tap-tap-shoot-y/split_scenes/reloading_p1_is_ready',
+  'tap-tap-shoot-y/split_scenes/reloading_p2_is_ready',
+  'tap-tap-shoot-y/split_scenes/shoot-draw_p1_is_ready',
+  'tap-tap-shoot-y/split_scenes/shoot-draw_p2_is_ready',
+  'tap-tap-shoot-y/split_scenes/stab-draw_p1_is_ready',
+  'tap-tap-shoot-y/split_scenes/stab-draw_p2_is_ready',
+  'tap-tap-shoot-y/split_scenes/duck-draw_p1_is_ready',
+  'tap-tap-shoot-y/split_scenes/duck-draw_p2_is_ready',
+  'tap-tap-shoot-y/split_scenes/reload-duck_reloader_is_ready',
+  'tap-tap-shoot-y/split_scenes/reload-duck_ducker_is_ready',
+  'tap-tap-shoot-y/split_scenes/shoot-duck_shooter_is_ready',
+  'tap-tap-shoot-y/split_scenes/shoot-duck_ducker_is_ready',
+  'tap-tap-shoot-y/split_scenes/stab-reload_stabber_is_ready',
+  'tap-tap-shoot-y/split_scenes/stab-reload_reloader_is_ready',
 ]);
-const TAP_TAP_SHOOT_DOODLES = Object.freeze([
-  'tap-tap-shoot/standoff-tts',
-  'tap-tap-shoot/defense-draw',
-  'tap-tap-shoot/reload-draw',
-  'tap-tap-shoot/reload-duck',
-  'tap-tap-shoot/shoot-draw',
-  'tap-tap-shoot/shoot-duck',
-  'tap-tap-shoot/shoot-kill',
-  'tap-tap-shoot/stab-counterstab',
-  'tap-tap-shoot/stab-draw',
-  'tap-tap-shoot/stab-kill',
+const TAP_TAP_SHOOT_X_DOODLES = Object.freeze([
+  'tap-tap-shoot-x/standoff-tts',
+  'tap-tap-shoot-x/defense-draw',
+  'tap-tap-shoot-x/reload-draw',
+  'tap-tap-shoot-x/reload-duck',
+  'tap-tap-shoot-x/shoot-draw',
+  'tap-tap-shoot-x/shoot-duck',
+  'tap-tap-shoot-x/shoot-kill',
+  'tap-tap-shoot-x/stab-counterstab',
+  'tap-tap-shoot-x/stab-draw',
+  'tap-tap-shoot-x/stab-kill',
 ]);
-const TAP_TAP_SHOOT_SPLIT_DOODLES = Object.freeze([
-  'tap-tap-shoot/split_scenes/tts-standoff_p1_is_ready',
-  'tap-tap-shoot/split_scenes/tts-standoff_p2_is_ready',
-  'tap-tap-shoot/split_scenes/reloading_p1_is_ready',
-  'tap-tap-shoot/split_scenes/reloading_p2_is_ready',
-  'tap-tap-shoot/split_scenes/shoot-draw_p1_is_ready',
-  'tap-tap-shoot/split_scenes/shoot-draw_p2_is_ready',
-  'tap-tap-shoot/split_scenes/shoot-duck_shooter_is_ready',
-  'tap-tap-shoot/split_scenes/shoot-duck_ducker_is_ready',
-  'tap-tap-shoot/split_scenes/stab-draw_p1_is_ready',
-  'tap-tap-shoot/split_scenes/stab-draw_p2_is_ready',
-  'tap-tap-shoot/split_scenes/defense-draw_p1_is_ready',
-  'tap-tap-shoot/split_scenes/defense-draw_p2_is_ready',
-  'tap-tap-shoot/split_scenes/reload-defense_reloader_is_ready',
-  'tap-tap-shoot/split_scenes/reload-defense_defender_is_ready',
-  'tap-tap-shoot/split_scenes/stab-counterstab_stabber_is_ready',
-  'tap-tap-shoot/split_scenes/stab-counterstab_counterstabber_is_ready',
+const TAP_TAP_SHOOT_X_SPLIT_DOODLES = Object.freeze([
+  'tap-tap-shoot-x/split_scenes/tts-standoff_p1_is_ready',
+  'tap-tap-shoot-x/split_scenes/tts-standoff_p2_is_ready',
+  'tap-tap-shoot-x/split_scenes/reloading_p1_is_ready',
+  'tap-tap-shoot-x/split_scenes/reloading_p2_is_ready',
+  'tap-tap-shoot-x/split_scenes/shoot-draw_p1_is_ready',
+  'tap-tap-shoot-x/split_scenes/shoot-draw_p2_is_ready',
+  'tap-tap-shoot-x/split_scenes/shoot-duck_shooter_is_ready',
+  'tap-tap-shoot-x/split_scenes/shoot-duck_ducker_is_ready',
+  'tap-tap-shoot-x/split_scenes/stab-draw_p1_is_ready',
+  'tap-tap-shoot-x/split_scenes/stab-draw_p2_is_ready',
+  'tap-tap-shoot-x/split_scenes/defense-draw_p1_is_ready',
+  'tap-tap-shoot-x/split_scenes/defense-draw_p2_is_ready',
+  'tap-tap-shoot-x/split_scenes/reload-defense_reloader_is_ready',
+  'tap-tap-shoot-x/split_scenes/reload-defense_defender_is_ready',
+  'tap-tap-shoot-x/split_scenes/stab-counterstab_stabber_is_ready',
+  'tap-tap-shoot-x/split_scenes/stab-counterstab_counterstabber_is_ready',
 ]);
 
 const STARBURST_WIPE_STEPS = Object.freeze([
@@ -185,15 +185,15 @@ export function preloadDoodleSheets(doodles) {
 
 export function getRendererPreloadDoodles() {
   return [
-    ...Object.values(CHARGE_BLOCK_FIREBALL_DOODLES),
-    'charge-block-fireball/super-blasting',
-    ...Array.from({ length: 4 }, (_, index) => `charge-block-fireball/super-final-frame${index + 1}`),
-    ...SHOOT_STAB_DUCK_DOODLES,
-    ...SHOOT_STAB_DUCK_SPLIT_DOODLES,
-    ...PUNCH_STAB_SHOOT_DOODLES,
-    ...PUNCH_STAB_SHOOT_SPLIT_DOODLES,
-    ...TAP_TAP_SHOOT_DOODLES,
-    ...TAP_TAP_SHOOT_SPLIT_DOODLES,
+    ...Object.values(FIREBALL_WAR_DOODLES),
+    'fireball-war/super-blasting',
+    ...Array.from({ length: 4 }, (_, index) => `fireball-war/super-final-frame${index + 1}`),
+    ...TAP_TAP_SHOOT_Y_DOODLES,
+    ...TAP_TAP_SHOOT_Y_SPLIT_DOODLES,
+    ...GUN_KNIFE_FIST_DOODLES,
+    ...GUN_KNIFE_FIST_SPLIT_DOODLES,
+    ...TAP_TAP_SHOOT_X_DOODLES,
+    ...TAP_TAP_SHOOT_X_SPLIT_DOODLES,
     ...STARBURST_WIPE_STEPS.flat().map((name) => `starburst_wipe/${name}`),
     ...CURTAIN_WIPE_STEPS.map((name) => `curtains/${name}`),
     ...READY_WAITING_READY_STEPS.map((name) => `ready_waiting/${name}`),
@@ -292,11 +292,11 @@ export function getVariantStagePresentation(result, p1Move, p2Move, { variantId 
   return resolveScene({ variantId, p1Move, p2Move, result });
 }
 
-function getShootStabDuckStagePresentation(result, p1Move, p2Move) {
+function getTapTapShootYStagePresentation(result, p1Move, p2Move) {
   if (p1Move === p2Move) {
     return {
       kind: 'doodle',
-      name: `shoot-stab-duck/${p1Move === 'reload' ? 'reload' : p1Move}-draw`,
+      name: `tap-tap-shoot-y/${p1Move === 'reload' ? 'reload' : p1Move}-draw`,
       flip: false,
     };
   }
@@ -306,7 +306,7 @@ function getShootStabDuckStagePresentation(result, p1Move, p2Move) {
   if (hitMove === 'shoot') {
     return {
       kind: 'doodle',
-      name: 'shoot-stab-duck/shoot-kill',
+      name: 'tap-tap-shoot-y/shoot-kill',
       flip: p2Move === 'shoot',
     };
   }
@@ -314,7 +314,7 @@ function getShootStabDuckStagePresentation(result, p1Move, p2Move) {
   if (hitMove === 'stab') {
     return {
       kind: 'doodle',
-      name: 'shoot-stab-duck/stab-kill',
+      name: 'tap-tap-shoot-y/stab-kill',
       flip: p2Move === 'stab',
     };
   }
@@ -322,7 +322,7 @@ function getShootStabDuckStagePresentation(result, p1Move, p2Move) {
   if ((p1Move === 'reload' && p2Move === 'duck') || (p1Move === 'duck' && p2Move === 'reload')) {
     return {
       kind: 'doodle',
-      name: 'shoot-stab-duck/reload-duck',
+      name: 'tap-tap-shoot-y/reload-duck',
       flip: p1Move === 'duck',
     };
   }
@@ -330,7 +330,7 @@ function getShootStabDuckStagePresentation(result, p1Move, p2Move) {
   if ((p1Move === 'shoot' && p2Move === 'duck') || (p1Move === 'duck' && p2Move === 'shoot')) {
     return {
       kind: 'doodle',
-      name: 'shoot-stab-duck/shoot-duck',
+      name: 'tap-tap-shoot-y/shoot-duck',
       flip: p2Move === 'shoot',
     };
   }
@@ -338,21 +338,21 @@ function getShootStabDuckStagePresentation(result, p1Move, p2Move) {
   if ((p1Move === 'stab' && p2Move === 'reload') || (p1Move === 'reload' && p2Move === 'stab')) {
     return {
       kind: 'doodle',
-      name: 'shoot-stab-duck/stab-reload',
+      name: 'tap-tap-shoot-y/stab-reload',
       flip: p2Move === 'stab',
     };
   }
 
   return {
     kind: 'doodle',
-    name: 'shoot-stab-duck/duck-draw',
+    name: 'tap-tap-shoot-y/duck-draw',
     flip: p1Move === 'duck',
   };
 }
 
 export function getVariantSuperAnimation(result, { variantId = '', resourceMax = 0, frameCount = 4 } = {}) {
   if (
-    (variantId === 'chargeBlockFireball' || variantId === 'charge-block-fireball')
+    (variantId === 'fireballWar' || variantId === 'fireball-war')
     && result?.winner
     && result[`${result.winner}Move`] === 'charge'
     && result.resources?.[result.winner] >= resourceMax
@@ -361,12 +361,12 @@ export function getVariantSuperAnimation(result, { variantId = '', resourceMax =
     return {
       frames: Array.from({ length: frameCount }, (_, index) => ({
         kind: 'doodle',
-        name: `charge-block-fireball/super-final-frame${index + 1}`,
+        name: `fireball-war/super-final-frame${index + 1}`,
         flip,
       })),
       finalFrame: {
         kind: 'doodle',
-        name: 'charge-block-fireball/super-blasting',
+        name: 'fireball-war/super-blasting',
         flip,
       },
     };
@@ -820,8 +820,8 @@ function getDoodleForMoves(p1Move, p2Move, variantId = '') {
     return getRpsDoodleForMoves(p1Move, p2Move);
   }
 
-  if (variantId === 'chargeBlockFireball' || variantId === 'charge-block-fireball') {
-    return getChargeBlockFireballDoodleForMoves(p1Move, p2Move);
+  if (variantId === 'fireballWar' || variantId === 'fireball-war') {
+    return getFireballWarDoodleForMoves(p1Move, p2Move);
   }
 
   const sortedMoves = [p1Move, p2Move].sort((a, b) => MOVE_IDS.indexOf(a) - MOVE_IDS.indexOf(b));
@@ -829,10 +829,10 @@ function getDoodleForMoves(p1Move, p2Move, variantId = '') {
   return INTERACTION_DOODLES[key] ?? 'hiding';
 }
 
-function getChargeBlockFireballDoodleForMoves(p1Move, p2Move) {
+function getFireballWarDoodleForMoves(p1Move, p2Move) {
   const sortedMoves = [p1Move, p2Move].sort((a, b) => MOVE_IDS.indexOf(a) - MOVE_IDS.indexOf(b));
   const key = sortedMoves.join('|');
-  return CHARGE_BLOCK_FIREBALL_DOODLES[key] ?? 'charge-block-fireball/cbf-standoff';
+  return FIREBALL_WAR_DOODLES[key] ?? 'fireball-war/cbf-standoff';
 }
 
 function getRpsDoodleForMoves(p1Move, p2Move) {
@@ -855,11 +855,11 @@ function getRpsDoodleForMoves(p1Move, p2Move) {
   return 'rock-paper-scissors/rps-standoff';
 }
 
-function getPunchStabShootStagePresentation(result, p1Move, p2Move) {
+function getGunKnifeFistStagePresentation(result, p1Move, p2Move) {
   if (p1Move === p2Move) {
     return {
       kind: 'doodle',
-      name: `punch-stab-shoot/${p1Move}-draw`,
+      name: `gun-knife-fist/${p1Move}-draw`,
       flip: false,
     };
   }
@@ -871,7 +871,7 @@ function getPunchStabShootStagePresentation(result, p1Move, p2Move) {
   if (hitMove === 'punch' && targetMove === 'shoot') {
     return {
       kind: 'doodle',
-      name: `punch-stab-shoot/punch-shoot-${isKill ? 'kill' : 'damage'}`,
+      name: `gun-knife-fist/punch-shoot-${isKill ? 'kill' : 'damage'}`,
       flip: p2Move === 'punch',
     };
   }
@@ -879,19 +879,19 @@ function getPunchStabShootStagePresentation(result, p1Move, p2Move) {
   if (hitMove === 'stab' && targetMove === 'punch') {
     return {
       kind: 'doodle',
-      name: `punch-stab-shoot/stab-punch-${isKill ? 'kill' : 'damage'}`,
+      name: `gun-knife-fist/stab-punch-${isKill ? 'kill' : 'damage'}`,
       flip: p2Move === 'stab',
     };
   }
 
   return {
     kind: 'doodle',
-    name: 'punch-stab-shoot/shoot-stab',
+    name: 'gun-knife-fist/shoot-stab',
     flip: p2Move === 'shoot',
   };
 }
 
-function getTapTapShootStagePresentation(result, p1Move, p2Move) {
+function getTapTapShootXStagePresentation(result, p1Move, p2Move) {
   if (p1Move === p2Move) {
     const drawName = p1Move === 'duck' || p1Move === 'counterstab'
       ? 'defense-draw'
@@ -899,7 +899,7 @@ function getTapTapShootStagePresentation(result, p1Move, p2Move) {
 
     return {
       kind: 'doodle',
-      name: `tap-tap-shoot/${drawName}`,
+      name: `tap-tap-shoot-x/${drawName}`,
       flip: false,
     };
   }
@@ -909,7 +909,7 @@ function getTapTapShootStagePresentation(result, p1Move, p2Move) {
   if (hitMove === 'shoot') {
     return {
       kind: 'doodle',
-      name: 'tap-tap-shoot/shoot-kill',
+      name: 'tap-tap-shoot-x/shoot-kill',
       flip: p2Move === 'shoot',
     };
   }
@@ -917,7 +917,7 @@ function getTapTapShootStagePresentation(result, p1Move, p2Move) {
   if (hitMove === 'stab') {
     return {
       kind: 'doodle',
-      name: 'tap-tap-shoot/stab-kill',
+      name: 'tap-tap-shoot-x/stab-kill',
       flip: p2Move === 'stab',
     };
   }
@@ -925,7 +925,7 @@ function getTapTapShootStagePresentation(result, p1Move, p2Move) {
   if ((p1Move === 'stab' && p2Move === 'counterstab') || (p1Move === 'counterstab' && p2Move === 'stab')) {
     return {
       kind: 'doodle',
-      name: 'tap-tap-shoot/stab-counterstab',
+      name: 'tap-tap-shoot-x/stab-counterstab',
       flip: p2Move === 'stab',
     };
   }
@@ -933,7 +933,7 @@ function getTapTapShootStagePresentation(result, p1Move, p2Move) {
   if ((p1Move === 'stab' && p2Move === 'duck') || (p1Move === 'duck' && p2Move === 'stab')) {
     return {
       kind: 'doodle',
-      name: 'tap-tap-shoot/defense-draw',
+      name: 'tap-tap-shoot-x/defense-draw',
       flip: p1Move === 'duck',
     };
   }
@@ -941,7 +941,7 @@ function getTapTapShootStagePresentation(result, p1Move, p2Move) {
   if ((p1Move === 'reload' && p2Move === 'duck') || (p1Move === 'duck' && p2Move === 'reload')) {
     return {
       kind: 'doodle',
-      name: 'tap-tap-shoot/reload-duck',
+      name: 'tap-tap-shoot-x/reload-duck',
       flip: p1Move === 'duck',
     };
   }
@@ -949,14 +949,14 @@ function getTapTapShootStagePresentation(result, p1Move, p2Move) {
   if ((p1Move === 'shoot' && p2Move === 'duck') || (p1Move === 'duck' && p2Move === 'shoot')) {
     return {
       kind: 'doodle',
-      name: 'tap-tap-shoot/shoot-duck',
+      name: 'tap-tap-shoot-x/shoot-duck',
       flip: p2Move === 'shoot',
     };
   }
 
   return {
     kind: 'doodle',
-    name: 'tap-tap-shoot/defense-draw',
+    name: 'tap-tap-shoot-x/defense-draw',
     flip: p2Move === 'duck' || p2Move === 'counterstab',
   };
 }
@@ -968,10 +968,10 @@ function shouldFlipDoodle(doodle, p1Move, p2Move, variantId = '') {
       || (doodle === 'rock-paper-scissors/scissors-paper' && p2Move === 'scissors');
   }
 
-  if (variantId === 'chargeBlockFireball' || variantId === 'charge-block-fireball') {
-    return (doodle === 'charge-block-fireball/block-charge' && p1Move === 'charge')
-      || (doodle === 'charge-block-fireball/block-fireball' && p1Move === 'fireball')
-      || (doodle === 'charge-block-fireball/charge-fireball' && p1Move === 'fireball');
+  if (variantId === 'fireballWar' || variantId === 'fireball-war') {
+    return (doodle === 'fireball-war/block-charge' && p1Move === 'charge')
+      || (doodle === 'fireball-war/block-fireball' && p1Move === 'fireball')
+      || (doodle === 'fireball-war/charge-fireball' && p1Move === 'fireball');
   }
 
   if (doodle === 'shooting') {

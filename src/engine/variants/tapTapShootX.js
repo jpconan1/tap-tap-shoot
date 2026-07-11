@@ -1,6 +1,6 @@
 import { freezeHitTable, resolveHitTableTurn } from './shared.js';
 
-export function createTapTapShootVariant({ id, moves, maxResource }) {
+export function createTapTapShootXVariant({ id, moves, maxResource }) {
   const variantMoves = Object.freeze({
     ...moves,
     stab: Object.freeze({

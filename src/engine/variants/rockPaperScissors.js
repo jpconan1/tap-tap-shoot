@@ -1,6 +1,6 @@
 import { freezeHitTable, resolveHitTableTurn } from './shared.js';
 
-export function createRpsVariant({ id, moves }) {
+export function createRockPaperScissorsVariant({ id, moves }) {
   const variant = {
     id,
     label: 'Rock Paper Scissors',

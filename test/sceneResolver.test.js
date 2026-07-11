@@ -12,7 +12,7 @@ import { resolveReadyScene, resolveScene, swapScenePerspective } from '../src/sc
 
 test('online player two perspective keeps moves and hit result aligned', () => {
   const serverResult = resolveTurn({
-    variantId: 'shootStabDuck',
+    variantId: 'tapTapShootY',
     p1Move: 'shoot',
     p2Move: 'reload',
     p1Resource: 1,
@@ -20,7 +20,7 @@ test('online player two perspective keeps moves and hit result aligned', () => {
   });
   const localResult = swapScenePerspective(serverResult);
   const scene = resolveScene({
-    variantId: 'shootStabDuck',
+    variantId: 'tapTapShootY',
     p1Move: 'reload',
     p2Move: 'shoot',
     result: localResult,
@@ -28,7 +28,7 @@ test('online player two perspective keeps moves and hit result aligned', () => {
 
   assert.deepEqual(scene, {
     kind: 'doodle',
-    name: 'shoot-stab-duck/shoot-kill',
+    name: 'tap-tap-shoot-y/shoot-kill',
     flip: true,
   });
 });
