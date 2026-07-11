@@ -8,11 +8,11 @@ import { resolveTurn } from '../src/engine/resolveTurn.js';
 import { getVariantStagePresentation } from '../src/renderer.js';
 
 test('reload grants bullets and ties with defense', () => {
-  const result = resolveTurn({ p1Move: 'reload', p2Move: 'duck', p1Bullets: 0, p2Bullets: 1 });
+  const result = resolveTurn({ p1Move: 'reload', p2Move: 'duck', p1Bullets: 1, p2Bullets: 1 });
 
   assert.equal(result.ok, true);
   assert.equal(result.isTie, true);
-  assert.equal(result.p1Bullets, 1);
+  assert.equal(result.p1Bullets, 2);
   assert.equal(result.p2Bullets, 1);
 });
 
@@ -37,12 +37,12 @@ test('shoot beats stab and reload', () => {
 });
 
 test('stab beats duck but not reload', () => {
-  const duck = resolveTurn({ p1Move: 'stab', p2Move: 'duck', p1Bullets: 0, p2Bullets: 1 });
+  const duck = resolveTurn({ p1Move: 'stab', p2Move: 'duck', p1Bullets: 1, p2Bullets: 1 });
   assert.equal(duck.ok, true);
   assert.equal(duck.winner, 'p1');
   assert.equal(duck.p1Hit, 'stabbed');
 
-  const reload = resolveTurn({ p1Move: 'stab', p2Move: 'reload', p1Bullets: 0, p2Bullets: 1 });
+  const reload = resolveTurn({ p1Move: 'stab', p2Move: 'reload', p1Bullets: 1, p2Bullets: 1 });
   assert.equal(reload.ok, true);
   assert.equal(reload.winner, null);
   assert.equal(reload.isRoundOver, false);
@@ -54,8 +54,8 @@ test('listed ties do not end game', () => {
     ['shoot', 'shoot', 1, 1],
     ['shoot', 'duck', 1, 0],
     ['stab', 'stab', 1, 1],
-    ['reload', 'stab', 1, 0],
-    ['duck', 'duck', 0, 1],
+    ['reload', 'stab', 1, 1],
+    ['duck', 'duck', 1, 1],
   ];
 
   for (const [p1Move, p2Move, p1Bullets, p2Bullets] of ties) {
@@ -90,7 +90,7 @@ test('shoot stab duck uses four button moves', () => {
   const state = createStateWithBullets(0, 1, VARIANT_IDS.shootStabDuck);
 
   assert.deepEqual(getVariantMoveIds(VARIANT_IDS.shootStabDuck), ['reload', 'shoot', 'stab', 'duck']);
-  assert.equal(getLegalMoves(0, 1, VARIANT_IDS.shootStabDuck).includes('stab'), true);
+  assert.equal(getLegalMoves(0, 1, VARIANT_IDS.shootStabDuck).includes('stab'), false);
   assert.equal(getPlayerLegalMoves(state, 'p1').includes('counterstab'), false);
 
   const result = resolveTurn({
@@ -102,6 +102,23 @@ test('shoot stab duck uses four button moves', () => {
   });
   assert.equal(result.ok, false);
   assert.deepEqual(result.errors, ['p1 picked unknown move: counterstab']);
+});
+
+test('manual resource-state rules disable pointless defensive moves', () => {
+  assert.equal(getLegalMoves(1, 0, VARIANT_IDS.chargeBlockFireball).includes('block'), false);
+  assert.equal(getLegalMoves(1, 1, VARIANT_IDS.chargeBlockFireball).includes('block'), true);
+
+  const tapTapShootMoves = getLegalMoves(1, 0, VARIANT_IDS.tapTapShoot);
+  assert.equal(tapTapShootMoves.includes('duck'), false);
+  assert.equal(tapTapShootMoves.includes('counterstab'), false);
+  assert.equal(getLegalMoves(1, 1, VARIANT_IDS.tapTapShoot).includes('duck'), true);
+
+  const armedMoves = getLegalMoves(1, 0, VARIANT_IDS.shootStabDuck);
+  const unarmedMoves = getLegalMoves(0, 1, VARIANT_IDS.shootStabDuck);
+  assert.equal(armedMoves.includes('duck'), false);
+  assert.equal(armedMoves.includes('stab'), true);
+  assert.equal(unarmedMoves.includes('duck'), true);
+  assert.equal(unarmedMoves.includes('stab'), false);
 });
 
 test('shoot stab duck shows shoot-duck dodge scene', () => {
@@ -149,27 +166,27 @@ test('charge block fireball starts at one bar and fireball beats charge', () => 
   const state = createRoundState({ variantId: VARIANT_IDS.chargeBlockFireball });
   assert.equal(state.players.p1.bullets, 1);
   assert.equal(state.players.p2.bullets, 1);
-  assert.deepEqual(getLegalMoves(0, 0, VARIANT_IDS.chargeBlockFireball), ['charge', 'block']);
+  assert.deepEqual(getLegalMoves(0, 0, VARIANT_IDS.chargeBlockFireball), ['charge']);
 
   const blockAtZero = resolveTurn({
     p1Move: 'block',
     p2Move: 'charge',
-    p1Bullets: 0,
+    p1Bullets: 1,
     p2Bullets: 0,
     variantId: VARIANT_IDS.chargeBlockFireball,
   });
-  assert.equal(blockAtZero.ok, true);
-  assert.equal(blockAtZero.winner, null);
+  assert.equal(blockAtZero.ok, false);
+  assert.deepEqual(blockAtZero.errors, ['p1 cannot block in this resource state']);
 
   const charge = resolveTurn({
     p1Move: 'charge',
     p2Move: 'block',
-    p1Bullets: 0,
+    p1Bullets: 1,
     p2Bullets: 1,
     variantId: VARIANT_IDS.chargeBlockFireball,
   });
   assert.equal(charge.ok, true);
-  assert.equal(charge.p1Bullets, 1);
+  assert.equal(charge.p1Bullets, 2);
   assert.equal(charge.winner, null);
 
   const fireball = resolveTurn({
@@ -372,12 +389,42 @@ test('hard rival AI uses charge block fireball Nash weights', () => {
   assert.equal(chooseRivalMove(state, fixedRoll(0.9), RIVAL_DIFFICULTIES.hard), 'fireball');
 });
 
+test('hard Fireball War policy indexes player charge before bot charge', () => {
+  const botNearWin = createStateWithBullets(2, 1, VARIANT_IDS.chargeBlockFireball);
+  const playerNearWin = createStateWithBullets(1, 2, VARIANT_IDS.chargeBlockFireball);
+
+  assert.equal(chooseRivalMove(botNearWin, fixedRoll(0.23), RIVAL_DIFFICULTIES.hard), 'block');
+  assert.equal(chooseRivalMove(playerNearWin, fixedRoll(0.23), RIVAL_DIFFICULTIES.hard), 'charge');
+});
+
 test('hard rival AI uses punch stab shoot Nash weights', () => {
   const state = createStateWithBullets(3, 3, VARIANT_IDS.punchStabShoot);
 
   assert.equal(chooseRivalMove(state, fixedRoll(0), RIVAL_DIFFICULTIES.hard), 'punch');
   assert.equal(chooseRivalMove(state, fixedRoll(0.6), RIVAL_DIFFICULTIES.hard), 'stab');
   assert.equal(chooseRivalMove(state, fixedRoll(0.99), RIVAL_DIFFICULTIES.hard), 'shoot');
+});
+
+test('hard rival AI uses Tap Tap Shoot X Nash mix for the bot player', () => {
+  const state = createStateWithBullets(1, 1, VARIANT_IDS.tapTapShoot);
+
+  assert.equal(chooseRivalMove(state, fixedRoll(0), RIVAL_DIFFICULTIES.hard), 'shoot');
+  assert.equal(chooseRivalMove(state, fixedRoll(0.5), RIVAL_DIFFICULTIES.hard), 'stab');
+  assert.equal(chooseRivalMove(state, fixedRoll(0.9), RIVAL_DIFFICULTIES.hard), 'duck');
+});
+
+test('hard Tap Tap Shoot policy indexes player AP before bot AP', () => {
+  const state = createStateWithBullets(2, 1, VARIANT_IDS.tapTapShoot);
+
+  assert.equal(chooseRivalMove(state, fixedRoll(0.4), RIVAL_DIFFICULTIES.hard), 'shoot');
+});
+
+test('hard rival AI uses Tap Tap Shoot Y Nash mix for the bot player', () => {
+  const state = createStateWithBullets(1, 1, VARIANT_IDS.shootStabDuck);
+
+  assert.equal(chooseRivalMove(state, fixedRoll(0), RIVAL_DIFFICULTIES.hard), 'shoot');
+  assert.equal(chooseRivalMove(state, fixedRoll(0.5), RIVAL_DIFFICULTIES.hard), 'stab');
+  assert.equal(chooseRivalMove(state, fixedRoll(0.9), RIVAL_DIFFICULTIES.hard), 'duck');
 });
 
 test('rps ignores difficulty and picks uniformly across legal moves', () => {

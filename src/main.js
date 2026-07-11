@@ -414,6 +414,7 @@ let loopToken = 0;
 let turnPhase = 'idle';
 let p1QueuedMove = null;
 let localTurnChoice = null;
+let localRoundTimedOutPlayer = null;
 let rankedSnapshot = null;
 let pendingRankedSnapshot = null;
 let pendingSuperAnimation = null;
@@ -777,6 +778,7 @@ function getGamePreloadDoodles() {
     'you_picked',
     'they_picked',
     'vs-sm',
+    'timeout_button',
     'system_scenes/game_won',
     'system_scenes/game_lost',
     'system_scenes/no_contest',
@@ -1908,17 +1910,31 @@ function renderLastPickVersus() {
     || rankedSnapshot?.phase === 'roundOver'
     || rankedSnapshot?.phase === 'gameOver';
 
-  if (!isRoundResult || state.history.length === 0 || !lastMoves.p1 || !lastMoves.p2) {
+  const hasResultMoves = state.history.length > 0 || Boolean(localRoundTimedOutPlayer) || Boolean(rankedSnapshot?.timeout);
+
+  if (!isRoundResult || !hasResultMoves || !lastMoves.p1 || !lastMoves.p2) {
     return '';
   }
 
   return `
     <div class="last-pick-versus" aria-label="${lastMoves.p1} versus ${lastMoves.p2}">
-      ${renderStaticDoodle(getMoveButtonDoodle(lastMoves.p1), BUTTON_FRAME_WIDTH, BUTTON_FRAME_HEIGHT, 'last-pick-button')}
+      ${renderResultMoveButton('p1')}
       ${renderStaticDoodle('vs-sm', 64, 64, 'last-pick-vs')}
-      ${renderStaticDoodle(getMoveButtonDoodle(lastMoves.p2), BUTTON_FRAME_WIDTH, BUTTON_FRAME_HEIGHT, 'last-pick-button')}
+      ${renderResultMoveButton('p2')}
     </div>
   `;
+}
+
+function renderResultMoveButton(playerId) {
+  const rankedTimedOutPlayer = playMode === 'online' && rankedSnapshot?.timeout?.loser === rankedSnapshot?.playerKey ? 'p1'
+    : playMode === 'online' && rankedSnapshot?.timeout?.loser === rankedSnapshot?.opponentKey ? 'p2'
+      : null;
+  const timedOutPlayer = playMode === 'online' ? rankedTimedOutPlayer : localRoundTimedOutPlayer;
+  const doodle = timedOutPlayer === playerId
+    ? 'timeout_button'
+    : getMoveButtonDoodle(lastMoves[playerId]);
+
+  return renderStaticDoodle(doodle, timedOutPlayer === playerId ? 258 : BUTTON_FRAME_WIDTH, BUTTON_FRAME_HEIGHT, 'last-pick-button');
 }
 
 function renderSingleStagePresentation(presentation, extraClass = '') {
@@ -3954,6 +3970,12 @@ async function loseLocalRoundOnTimeout(playerId) {
     return;
   }
 
+  const chosenMoves = { ...localTurnChoice.moves };
+  localRoundTimedOutPlayer = playerId;
+  lastMoves = {
+    p1: chosenMoves.p1 ?? lastMoves.p1,
+    p2: chosenMoves.p2 ?? lastMoves.p2,
+  };
   clearLocalTurnChoice();
   p1QueuedMove = null;
   state = {
@@ -4416,6 +4438,7 @@ function isLocalChoiceMode() {
 
 function setNewRound() {
   clearLocalTurnChoice();
+  localRoundTimedOutPlayer = null;
   pendingSuperAnimation = null;
   state = createRoundState({ variantId: selectedVariantId });
   screen = 'playing';

@@ -43,6 +43,10 @@ export function validateChoice(variant, player, moveId, resource, opponentResour
     return { ok: false, error: `${player} must ${forcedMove} at 0-0` };
   }
 
+  if (variant.isMoveDisabled?.(moveId, resource, opponentResource)) {
+    return { ok: false, error: `${player} cannot ${moveId} in this resource state` };
+  }
+
   if (isBlockedByResourceCap(variant, moveId, resource)) {
     return { ok: false, error: `${player} cannot ${moveId} at ${variant.resourceMax}` };
   }

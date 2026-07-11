@@ -17,6 +17,9 @@ export function createTapTapShootVariant({ id, moves, maxResource }) {
     resourceMax: maxResource,
     startResource: 1,
     forcedMoveAtNoResource: 'reload',
+    isMoveDisabled: (moveId, _resource, opponentResource) => (
+      opponentResource === 0 && (moveId === 'duck' || moveId === 'counterstab')
+    ),
     hitTable: freezeHitTable({
       shoot: { stab: 'shot', reload: 'shot', counterstab: 'shot' },
       stab: { duck: 'stabbed', reload: 'stabbed' },

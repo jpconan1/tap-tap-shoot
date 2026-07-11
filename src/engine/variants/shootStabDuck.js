@@ -10,6 +10,10 @@ export function createShootStabDuckVariant({ id, moves, maxResource }) {
     resourceMax: maxResource,
     startResource: 1,
     forcedMoveAtNoResource: 'reload',
+    isMoveDisabled: (moveId, resource, opponentResource) => (
+      (moveId === 'duck' && resource > 0 && opponentResource === 0)
+      || (moveId === 'stab' && resource === 0 && opponentResource > 0)
+    ),
     hitTable: freezeHitTable({
       shoot: { stab: 'shot', reload: 'shot' },
       stab: { duck: 'stabbed' },

@@ -503,6 +503,7 @@ export class RankedDuelService {
 
   beginNextRound(room) {
     this.clearRoomTimer(room);
+    room.roundTimeout = null;
     if (room.pendingNextVariant) {
       this.beginNextVariant(room);
       return;
@@ -547,6 +548,11 @@ export class RankedDuelService {
     this.clearRoomTimer(room);
 
     const winnerKey = loserKey === 'p1' ? 'p2' : 'p1';
+    room.roundTimeout = {
+      loser: loserKey,
+      winner: winnerKey,
+      strikes: room.timeoutStrikes[loserKey] + 1,
+    };
     this.applyTimeoutStrike(room, loserKey);
     room.readyPlayerKey = null;
     room.waitingPlayerKey = null;
@@ -740,6 +746,7 @@ export class RankedDuelService {
       noContest: room.noContest,
       roundWins: room.roundWins,
       timeoutStrikes: room.timeoutStrikes,
+      timeout: room.roundTimeout ?? null,
       winner: room.winner,
       ratings: room.ratings,
       disconnectedPlayerKey: room.disconnectedPlayerKey ?? null,

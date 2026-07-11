@@ -15,6 +15,9 @@ export function createChargeBlockFireballVariant({ id, moves, maxResource }) {
     moves,
     resourceMax: maxResource,
     startResource: 1,
+    isMoveDisabled: (moveId, _resource, opponentResource) => (
+      moveId === 'block' && opponentResource === 0
+    ),
     hitTable: freezeHitTable({
       fireball: { charge: 'fireballed' },
     }),

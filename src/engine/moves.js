@@ -181,7 +181,11 @@ export function getLegalMoves(resource, opponentResource = null, variantId = DEF
   }
 
   return getVariantMoveIds(variantId)
-    .filter((moveId) => canAfford(moveId, resource, variantId) && !isBlockedByResourceCap(getVariant(variantId), moveId, resource));
+    .filter((moveId) => (
+      canAfford(moveId, resource, variantId)
+      && !isBlockedByResourceCap(getVariant(variantId), moveId, resource)
+      && !getVariant(variantId).isMoveDisabled?.(moveId, resource, opponentResource)
+    ));
 }
 
 export function getForcedMove(resource, opponentResource, variantId = DEFAULT_VARIANT_ID) {

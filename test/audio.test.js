@@ -74,6 +74,36 @@ test('tap tap shoot scene audio starts through WebAudio', async () => {
   assert.equal(starts, 1);
 });
 
+test('tap tap shoot standoff is silent', async () => {
+  const played = [];
+
+  globalThis.window = {
+    addEventListener() {},
+  };
+  globalThis.Audio = class {
+    constructor(src) {
+      this.src = src;
+    }
+
+    load() {}
+
+    play() {
+      played.push(this.src);
+      return Promise.resolve();
+    }
+  };
+
+  const audio = await import(`../src/audio.js?tts-standoff-test=${Date.now()}`);
+  audio.setSoundEnabled(true);
+  audio.playStageAudio({
+    isTransitioning: false,
+    presentation: { kind: 'doodle', name: 'tap-tap-shoot/standoff-tts' },
+    audioKey: 'tts:standoff',
+  });
+
+  assert.deepEqual(played, []);
+});
+
 test('charge block fireball uses intentional scene sounds only', async () => {
   const played = [];
 
@@ -140,6 +170,54 @@ test('charge block fireball uses intentional scene sounds only', async () => {
     './assets/audio/block.m4a',
     './assets/audio/collision.mp3',
     './assets/audio/super.mp3',
+  ]);
+});
+
+test('rock paper scissors only sounds on rock and scissors ties', async () => {
+  const played = [];
+
+  globalThis.window = {
+    addEventListener() {},
+  };
+  globalThis.Audio = class {
+    constructor(src) {
+      this.src = src;
+      this.volume = 1;
+      this.currentTime = 0;
+    }
+
+    load() {}
+
+    play() {
+      played.push(this.src);
+      return Promise.resolve();
+    }
+  };
+
+  const audio = await import(`../src/audio.js?rps-audio-test=${Date.now()}`);
+  audio.setSoundEnabled(true);
+
+  const scenes = [
+    'rps-standoff',
+    'rock-draw',
+    'paper-draw',
+    'scissors-tie',
+    'rock-scissors',
+    'paper-rock',
+    'scissors-paper',
+  ];
+
+  scenes.forEach((scene) => {
+    audio.playStageAudio({
+      isTransitioning: false,
+      presentation: { kind: 'doodle', name: `rock-paper-scissors/${scene}` },
+      audioKey: `rps:${scene}`,
+    });
+  });
+
+  assert.deepEqual(played, [
+    './assets/audio/collision.mp3',
+    './assets/audio/clash.mp3',
   ]);
 });
 

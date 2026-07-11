@@ -1,5 +1,6 @@
 import { VARIANT_IDS, getLegalMoves, normalizeVariantId } from './moves.js';
 import { getPlayerResource } from './gameState.js';
+import tapTapShootPolicy from './tap_tap_shoot_policy.json' with { type: 'json' };
 
 export const RIVAL_DIFFICULTIES = Object.freeze({
   easy: 'easy',
@@ -7,6 +8,8 @@ export const RIVAL_DIFFICULTIES = Object.freeze({
 });
 
 const HARD_VARIANT_POLICIES = Object.freeze({
+  [VARIANT_IDS.shootStabDuck]: getTapTapShootPolicy('Tap Tap Shoot Y'),
+  [VARIANT_IDS.tapTapShoot]: getTapTapShootPolicy('Tap Tap Shoot X'),
   [VARIANT_IDS.chargeBlockFireball]: freezePolicyTable({
     '0-1': { charge: 65, fireball: 35 },
     '0-2': { charge: 100 },
@@ -92,5 +95,20 @@ function pickWeightedMove(weightedMoves, rng) {
 function freezePolicyTable(table) {
   return Object.freeze(Object.fromEntries(
     Object.entries(table).map(([key, policy]) => [key, Object.freeze(policy)]),
+  ));
+}
+
+function getTapTapShootPolicy(variantName) {
+  const policy = tapTapShootPolicy.find(({ variant }) => variant === variantName);
+
+  if (!policy) {
+    throw new Error(`Missing rival policy for ${variantName}`);
+  }
+
+  return freezePolicyTable(Object.fromEntries(
+    Object.entries(policy.states).map(([state, analysis]) => [
+      state.replace(',', '-'),
+      analysis.opponent_mix,
+    ]),
   ));
 }
