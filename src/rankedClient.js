@@ -126,6 +126,7 @@ export class RankedClient {
       this.socket.readyState !== WebSocket.OPEN ||
       !snapshot ||
       snapshot.pendingNextVariant ||
+      snapshot.pendingTiebreaker ||
       !['choosing', 'revealed', 'roundOver'].includes(snapshot.phase)
     ) {
       return false;

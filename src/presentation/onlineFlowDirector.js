@@ -1,8 +1,8 @@
 import { ONLINE_FLOW_SEQUENCE } from './onlineFlowSequences.js';
 
 export class OnlineFlowDirector {
-  constructor({ closeCurtains, openCurtains, reattachCurtain, spikeWipe, waitBeats, commit, show, openingCues, disconnect, exitRanked }) {
-    this.effects = { closeCurtains, openCurtains, reattachCurtain, spikeWipe, waitBeats, commit, show, openingCues, disconnect, exitRanked };
+  constructor({ closeCurtains, openCurtains, reattachCurtain, spikeWipe, waitBeats, waitBanAnimation, revealTiebreaker, commit, show, openingCues, disconnect, exitRanked }) {
+    this.effects = { closeCurtains, openCurtains, reattachCurtain, spikeWipe, waitBeats, waitBanAnimation, revealTiebreaker, commit, show, openingCues, disconnect, exitRanked };
     this.curtain = null;
     this.mailbox = new Map();
     this.runId = 0;
@@ -60,6 +60,8 @@ export class OnlineFlowDirector {
     else if (step.type === 'closeCurtains') await this.cover();
     else if (step.type === 'openCurtains') await this.reveal();
     else if (step.type === 'waitBeats') await this.effects.waitBeats(step.beats);
+    else if (step.type === 'waitBanAnimation') await this.effects.waitBanAnimation?.();
+    else if (step.type === 'revealTiebreaker') this.effects.revealTiebreaker?.(context.snapshot);
     else if (step.type === 'cancelMailbox') this.mailbox.clear();
     else if (step.type === 'spikeWipe') await this.effects.spikeWipe(step.stage);
     else if (step.type === 'openingCues') this.effects.openingCues();

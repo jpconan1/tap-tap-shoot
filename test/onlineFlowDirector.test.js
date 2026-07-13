@@ -12,6 +12,8 @@ function createDirector(log) {
     reattachCurtain: () => log.push('reattach'),
     spikeWipe: async (stage) => log.push(`spike:${stage}`),
     waitBeats: async (beats) => log.push(`wait:${beats}`),
+    waitBanAnimation: async () => log.push('wait:ban-animation'),
+    revealTiebreaker: (snapshot) => log.push(`reveal:${snapshot.remainingVariants[0]}`),
     commit: () => log.push('commit'),
     show: (stage) => log.push(`show:${stage}`),
     openingCues: () => log.push('cues'),
@@ -88,22 +90,15 @@ test('finished variant holds the result before opening the scoreboard', async ()
   ]);
 });
 
-test('split second game visits scoreboard before opening tiebreaker bans', async () => {
+test('both scoreboard continues curtain-wipe into tiebreaker bans', async () => {
   const log = [];
   const director = createDirector(log);
 
-  await director.play('TIEBREAKER_SELECTION_STARTED', { snapshot: {}, previousPhase: 'revealed' });
+  await director.play('TIEBREAKER_SELECTION_STARTED', { snapshot: {}, previousPhase: 'roundOver' });
 
   assert.deepEqual(log, [
+    'close',
     'commit',
-    'show:playing',
-    'wait:2',
-    'close',
-    'show:scoreboard',
-    'reattach',
-    'open',
-    'wait:5',
-    'close',
     'show:variant-select',
     'reattach',
     'open',
@@ -114,9 +109,21 @@ test('finished bans hold for animation then spike wipe into tiebreaker', async (
   const log = [];
   const director = createDirector(log);
 
-  await director.play('TIEBREAKER_CHOSEN', { snapshot: {}, previousPhase: 'variantSelection' });
+  await director.play('TIEBREAKER_CHOSEN', {
+    snapshot: { remainingVariants: ['final-variant'] },
+    previousPhase: 'variantSelection',
+  });
 
-  assert.deepEqual(log, ['wait:1', 'commit', 'spike:playing', 'cues']);
+  assert.deepEqual(log, [
+    'wait:ban-animation',
+    'wait:1',
+    'reveal:final-variant',
+    'close',
+    'wait:1',
+    'commit',
+    'spike:playing',
+    'cues',
+  ]);
 });
 
 test('snapshot interpreter separates server facts from presentation events', () => {
@@ -124,7 +131,23 @@ test('snapshot interpreter separates server facts from presentation events', () 
   assert.equal(
     interpretOnlineSnapshot(
       { phase: 'revealed' },
+      { phase: 'roundOver', pendingTiebreaker: true },
+      'round-ended',
+    ),
+    'VARIANT_GAME_FINISHED',
+  );
+  assert.equal(
+    interpretOnlineSnapshot(
+      { phase: 'revealed' },
       { phase: 'gameOver', winner: 'p1', gameWins: { p1: 2, p2: 0 }, gameResults: [{}, {}] },
+      'match-ended',
+    ),
+    'MATCH_FINISHED',
+  );
+  assert.equal(
+    interpretOnlineSnapshot(
+      { phase: 'revealed' },
+      { phase: 'gameOver', winner: 'p2', gameWins: { p1: 1, p2: 2 }, gameResults: [{}, {}, {}] },
       'match-ended',
     ),
     'MATCH_FINISHED',
@@ -171,7 +194,7 @@ test('snapshot interpreter separates server facts from presentation events', () 
   );
 });
 
-test('straight-set match disconnects after showing the match result', async () => {
+test('completed match disconnects after showing the match result', async () => {
   const log = [];
   const director = createDirector(log);
 

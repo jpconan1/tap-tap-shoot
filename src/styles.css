@@ -864,6 +864,10 @@ canvas {
   filter: none;
 }
 
+.ranked-variant-pick.tiebreaker-reveal {
+  z-index: 201;
+}
+
 .ranked-ban-animation,
 .ranked-ban-mark {
   position: absolute;
@@ -875,6 +879,18 @@ canvas {
   image-rendering: pixelated;
   pointer-events: none;
   transform: translate(-50%, -50%) rotate(-3deg);
+}
+
+.tiebreaker-ban-waiting {
+  position: absolute;
+  bottom: 16px;
+  left: 50%;
+  z-index: 8;
+  width: 100%;
+  font-size: 24px;
+  font-weight: 800;
+  text-align: center;
+  transform: translateX(-50%);
 }
 
 .ranked-variant-ready {

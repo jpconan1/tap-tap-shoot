@@ -220,6 +220,7 @@ export class RankedDuelService {
       pendingMoves: new Map(),
       pendingContinues: new Set(),
       pendingNextVariant: false,
+      pendingTiebreaker: false,
       readyPlayerKey: null,
       waitingPlayerKey: null,
       noContestWaitingAt: null,
@@ -254,6 +255,7 @@ export class RankedDuelService {
     room.variantPicks = {};
     room.variantPickOrder = [];
     room.variantSelectionRound = tiebreaker ? 2 : 1;
+    room.pendingTiebreaker = false;
     room.deadlineAt = null;
     const transitionId = ['revealed', 'roundOver'].includes(previousPhase)
       ? 'variant-selection-started'
@@ -526,6 +528,11 @@ export class RankedDuelService {
       return;
     }
 
+    if (room.pendingTiebreaker) {
+      this.beginVariantSelection(room, { tiebreaker: true });
+      return;
+    }
+
     room.roundState = createRoundState({ variantId: room.variantId });
     this.beginChoosing(room);
   }
@@ -631,7 +638,8 @@ export class RankedDuelService {
         ...room.bannedVariants,
         ...room.remainingVariants,
       ])];
-      this.beginVariantSelection(room, { tiebreaker: true });
+      room.pendingTiebreaker = true;
+      this.beginRoundOver(room);
       return;
     }
 
@@ -642,7 +650,7 @@ export class RankedDuelService {
   skipGame(session) {
     const room = this.rooms.get(session.roomId);
 
-    if (!room || room.pendingNextVariant || !['choosing', 'revealed', 'roundOver'].includes(room.phase)) {
+    if (!room || room.pendingNextVariant || room.pendingTiebreaker || !['choosing', 'revealed', 'roundOver'].includes(room.phase)) {
       return;
     }
 
@@ -786,6 +794,7 @@ export class RankedDuelService {
       gameWins: room.gameWins,
       gameResults: room.gameResults,
       pendingNextVariant: room.pendingNextVariant,
+      pendingTiebreaker: room.pendingTiebreaker,
       playerKey,
       opponentKey,
       phase: room.phase,

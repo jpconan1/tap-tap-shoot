@@ -471,9 +471,16 @@ test('split variant games trigger tiebreaker selection with previous variants ba
   service.receive(p2.session, { type: 'submitMove', moveId: 'fireball' });
   await wait(10);
 
-  assert.equal(room.phase, 'variantSelection');
+  assert.equal(room.phase, 'roundOver');
+  assert.equal(room.pendingTiebreaker, true);
   assert.deepEqual(room.gameWins, { p1: 1, p2: 1 });
   assert.deepEqual(room.bannedVariants, [VARIANT_IDS.rockPaperScissors, VARIANT_IDS.fireballWar]);
+
+  service.receive(p1.session, { type: 'submitContinue' });
+  assert.equal(room.phase, 'roundOver');
+  service.receive(p2.session, { type: 'submitContinue' });
+  assert.equal(room.phase, 'variantSelection');
+  assert.equal(room.pendingTiebreaker, false);
 
   service.receive(p1.session, { type: 'submitVariantPick', variantId: VARIANT_IDS.tapTapShootY });
   service.receive(p2.session, { type: 'submitVariantPick', variantId: VARIANT_IDS.gunKnifeFist });

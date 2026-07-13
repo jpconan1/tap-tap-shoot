@@ -45,7 +45,6 @@ const BAN_ANIMATION_STEPS = Object.freeze([
   'frame-6',
   'frame-7',
 ]);
-
 const INTERACTION_DOODLES = Object.freeze({
   'reload|reload': 'reloading',
   'reload|shoot': 'shooting',
@@ -588,6 +587,7 @@ async function startBanAnimation(canvas) {
         didFinish = true;
         canvas.dispatchEvent(new CustomEvent('ban-animation-complete', { bubbles: true }));
       }
+      requestAnimationFrame(tick);
       return;
     }
     requestAnimationFrame(tick);
