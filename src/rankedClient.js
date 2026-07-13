@@ -8,6 +8,7 @@ export class RankedClient {
     this.onError = onError;
     this.socket = null;
     this.playerId = readLocalStorage(RANKED_PLAYER_ID_KEY);
+    this.transitionsByRevision = new Map();
   }
 
   connect(displayName = '', variantId = 'tapTapShootY') {
@@ -16,6 +17,7 @@ export class RankedClient {
     this.variantId = variantId;
     this.hasHello = false;
     this.didTryLocalFallback = false;
+    this.transitionsByRevision.clear();
 
     const socketUrl = this.getSocketUrl();
     this.openSocket(socketUrl);
@@ -79,7 +81,7 @@ export class RankedClient {
       !this.socket ||
       this.socket.readyState !== WebSocket.OPEN ||
       !snapshot ||
-      snapshot.phase !== 'banning' ||
+      snapshot.phase !== 'variantSelection' ||
       snapshot.variantPicks?.[snapshot.playerKey] ||
       Object.values(snapshot.variantPicks ?? snapshot.bans ?? {}).includes(variantId) ||
       (snapshot.bannedVariants ?? []).includes(variantId)
@@ -189,8 +191,15 @@ export class RankedClient {
       return;
     }
 
+    if (message.type === 'matchTransition') {
+      this.transitionsByRevision.set(message.revision, message);
+      return;
+    }
+
     if (message.type === 'matchState') {
-      this.onSnapshot(message);
+      const transition = this.transitionsByRevision.get(message.revision) ?? null;
+      this.transitionsByRevision.delete(message.revision);
+      this.onSnapshot(message, transition);
     }
   }
 
@@ -203,6 +212,45 @@ export class RankedClient {
 
   debug(event, payload = {}) {
     console.debug('[ranked]', event, payload);
+  }
+}
+
+export class RankedUpdateQueue {
+  constructor() {
+    this.items = [];
+    this.latestRevision = 0;
+  }
+
+  push(snapshot, transition = null) {
+    if (snapshot.revision <= this.latestRevision) {
+      return false;
+    }
+    this.latestRevision = snapshot.revision;
+    if (transition) {
+      this.items.push({ snapshot, transition });
+      return true;
+    }
+
+    const last = this.items.at(-1);
+    if (last && !last.transition) {
+      last.snapshot = snapshot;
+      return true;
+    }
+    this.items.push({ snapshot, transition: null });
+    return true;
+  }
+
+  shift() {
+    return this.items.shift() ?? null;
+  }
+
+  clear() {
+    this.items.length = 0;
+    this.latestRevision = 0;
+  }
+
+  get length() {
+    return this.items.length;
   }
 }
 

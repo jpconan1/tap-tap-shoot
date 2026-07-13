@@ -191,6 +191,7 @@ export class RankedDuelService {
   createRoom(p1Session, p2Session) {
     const room = {
       id: this.createId(),
+      revision: 0,
       phase: 'countdown',
       players: {
         p1: p1Session,
@@ -242,12 +243,16 @@ export class RankedDuelService {
       return;
     }
 
-    room.phase = 'banning';
+    const previousPhase = room.phase;
+    room.phase = 'variantSelection';
     room.variantPicks = {};
     room.variantPickOrder = [];
     room.variantSelectionRound = tiebreaker ? 2 : 1;
     room.deadlineAt = null;
-    this.broadcastRoom(room);
+    const transitionId = ['revealed', 'roundOver'].includes(previousPhase)
+      ? 'variant-selection-started'
+      : null;
+    this.broadcastRoom(room, {}, transitionId);
   }
 
   submitBan(session, variantId) {
@@ -257,7 +262,7 @@ export class RankedDuelService {
   submitVariantPick(session, variantId) {
     const room = this.rooms.get(session.roomId);
 
-    if (!room || room.phase !== 'banning') {
+    if (!room || room.phase !== 'variantSelection') {
       return;
     }
 
@@ -327,6 +332,7 @@ export class RankedDuelService {
       return;
     }
 
+    const previousPhase = room.phase;
     room.phase = 'choosing';
     room.pendingMoves.clear();
     room.pendingContinues.clear();
@@ -336,7 +342,10 @@ export class RankedDuelService {
     room.noContestWaitingAt = this.now() + this.noSelectionGraceMs;
     room.noContestCountdownAt = room.noContestWaitingAt + this.noContestWaitingMs;
     room.deadlineAt = room.noContestCountdownAt + this.noContestCountdownMs;
-    this.broadcastRoom(room);
+    const transitionId = previousPhase === 'variantSelection'
+      ? 'variant-set-started'
+      : previousPhase === 'roundOver' ? 'next-turn-started' : null;
+    this.broadcastRoom(room, {}, transitionId);
     this.setRoomTimer(room, () => this.handleChoosingDeadline(room), room.deadlineAt - this.now());
   }
 
@@ -425,7 +434,7 @@ export class RankedDuelService {
       room.roundWins[room.roundState.winner] += 1;
     }
 
-    this.broadcastRoom(room, { revealedMoves: { p1: p1Move, p2: p2Move } });
+    this.broadcastRoom(room, { revealedMoves: { p1: p1Move, p2: p2Move } }, 'turn-revealed');
 
     this.setRoomTimer(room, () => {
       if (room.roundState.status !== 'finished') {
@@ -453,7 +462,7 @@ export class RankedDuelService {
     room.readyPlayerKey = null;
     room.waitingPlayerKey = null;
     room.deadlineAt = null;
-    this.broadcastRoom(room);
+    this.broadcastRoom(room, {}, 'round-ended');
   }
 
   submitContinue(session) {
@@ -536,7 +545,7 @@ export class RankedDuelService {
       room.phase = 'gameOver';
       room.winner = null;
       room.ratings = null;
-      this.broadcastRoom(room);
+      this.broadcastRoom(room, {}, 'match-ended');
       this.releaseRoom(room);
       return;
     }
@@ -574,7 +583,7 @@ export class RankedDuelService {
         winner: winnerKey,
         strikes: room.timeoutStrikes[loserKey],
       },
-    });
+    }, 'turn-revealed');
 
     this.setRoomTimer(room, () => {
       if (room.roundWins.p1 >= GAME_TARGET_ROUNDS || room.roundWins.p2 >= GAME_TARGET_ROUNDS) {
@@ -634,7 +643,7 @@ export class RankedDuelService {
       }
     }
 
-    this.broadcastRoom(room);
+    this.broadcastRoom(room, {}, 'match-ended');
     this.releaseRoom(room);
   }
 
@@ -706,8 +715,16 @@ export class RankedDuelService {
     return [...this.sessions.values()].filter((session) => !session.closed).length;
   }
 
-  broadcastRoom(room, extra = {}) {
+  broadcastRoom(room, extra = {}, transitionId = null) {
+    room.revision += 1;
     for (const playerKey of ['p1', 'p2']) {
+      if (transitionId) {
+        this.send(room.players[playerKey], 'matchTransition', {
+          matchId: room.id,
+          revision: room.revision,
+          transitionId,
+        });
+      }
       this.send(room.players[playerKey], 'matchState', {
         ...this.getPublicRoomState(room, playerKey),
         ...extra,
@@ -721,6 +738,7 @@ export class RankedDuelService {
 
     return {
       matchId: room.id,
+      revision: room.revision,
       variantId: room.variantId,
       currentVariantId: room.variantId,
       variants: room.variants.map((variantId) => ({

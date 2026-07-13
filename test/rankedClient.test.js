@@ -1,0 +1,47 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+
+import { RankedClient, RankedUpdateQueue } from '../src/rankedClient.js';
+
+test('rapid ordinary snapshots coalesce while transition updates remain ordered', () => {
+  const queue = new RankedUpdateQueue();
+  queue.push({ revision: 1, phase: 'variantSelection' });
+  queue.push({ revision: 2, phase: 'variantSelection' });
+  queue.push(
+    { revision: 3, phase: 'choosing' },
+    { revision: 3, transitionId: 'variant-set-started' },
+  );
+  queue.push({ revision: 4, phase: 'choosing', readyPlayerKey: 'p1' });
+  queue.push({ revision: 5, phase: 'choosing', readyPlayerKey: 'p2' });
+
+  assert.deepEqual(queue.items.map(({ snapshot, transition }) => [
+    snapshot.revision,
+    transition?.transitionId ?? null,
+  ]), [
+    [2, null],
+    [3, 'variant-set-started'],
+    [5, null],
+  ]);
+});
+
+test('delayed stale snapshots cannot replace newer queued state', () => {
+  const queue = new RankedUpdateQueue();
+  assert.equal(queue.push({ revision: 4 }), true);
+  assert.equal(queue.push({ revision: 3 }), false);
+  assert.equal(queue.shift().snapshot.revision, 4);
+});
+
+test('client pairs a separate transition event with its authoritative snapshot', () => {
+  const received = [];
+  const client = new RankedClient({
+    onQueue() {},
+    onSnapshot(snapshot, transition) { received.push({ snapshot, transition }); },
+    onClose() {},
+  });
+
+  client.handleMessage({ type: 'matchTransition', revision: 7, transitionId: 'variant-set-started' });
+  client.handleMessage({ type: 'matchState', revision: 7, phase: 'choosing' });
+
+  assert.equal(received[0].snapshot.phase, 'choosing');
+  assert.equal(received[0].transition.transitionId, 'variant-set-started');
+});

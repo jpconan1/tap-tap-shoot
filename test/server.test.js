@@ -64,6 +64,25 @@ test('variant picks are realtime unique and play first picker first', async () =
   });
 });
 
+test('room revisions increase and variant start is a separate transition event', async () => {
+  const { service, p1, p2 } = await createMatchedService();
+  const room = onlyRoom(service);
+  service.beginBanning(room);
+  const banningRevision = lastMessage(p1).revision;
+
+  service.receive(p1.session, { type: 'submitVariantPick', variantId: VARIANT_IDS.rockPaperScissors });
+  service.receive(p2.session, { type: 'submitVariantPick', variantId: VARIANT_IDS.fireballWar });
+
+  const transitionIndex = p1.messages.findLastIndex((message) => message.type === 'matchTransition');
+  const transition = p1.messages[transitionIndex];
+  const snapshot = p1.messages[transitionIndex + 1];
+  assert.equal(transition.transitionId, 'variant-set-started');
+  assert.equal(snapshot.type, 'matchState');
+  assert.equal(snapshot.revision, transition.revision);
+  assert.ok(snapshot.revision > banningRevision);
+  assert.equal(lastMessage(p2).revision, snapshot.revision);
+});
+
 test('online player count tracks connected sessions', async () => {
   const service = createTestService();
   const p1 = await connectTestPlayer(service, 'p1');
@@ -417,7 +436,7 @@ test('split variant games trigger tiebreaker selection with previous variants ba
   service.receive(p2.session, { type: 'submitMove', moveId: 'fireball' });
   await wait(10);
 
-  assert.equal(room.phase, 'banning');
+  assert.equal(room.phase, 'variantSelection');
   assert.deepEqual(room.gameWins, { p1: 1, p2: 1 });
   assert.deepEqual(room.bannedVariants, [VARIANT_IDS.rockPaperScissors, VARIANT_IDS.fireballWar]);
 

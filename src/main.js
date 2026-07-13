@@ -38,7 +38,7 @@ import {
   unlockSceneAudio,
   WIN_SOUND_AUDIO,
 } from './audio.js';
-import { RankedClient } from './rankedClient.js';
+import { RankedClient, RankedUpdateQueue } from './rankedClient.js';
 import { getResourcePresentation, shouldShowPickHistoryForVariant } from './variantPresentation.js';
 import { resolveReadyScene, resolveScene, swapScenePerspective } from './sceneResolver.js';
 import { VARIANT_SELECT_PAGE_SIZE, VARIANT_SELECT_VARIANTS } from './variantSelectConfig.js';
@@ -416,7 +416,7 @@ let p1QueuedMove = null;
 let localTurnChoice = null;
 let localRoundTimedOutPlayer = null;
 let rankedSnapshot = null;
-let pendingRankedSnapshot = null;
+const rankedUpdateQueue = new RankedUpdateQueue();
 let pendingSuperAnimation = null;
 let isApplyingRankedSnapshot = false;
 let rankedReadyWaiting = null;
@@ -1402,7 +1402,7 @@ function render() {
 
   const legalMoves = new Set(getCurrentLegalMoves());
 
-  if (playMode === 'online' && rankedSnapshot?.phase === 'banning') {
+  if (playMode === 'online' && rankedSnapshot?.phase === 'variantSelection') {
     renderRankedBanScreen();
     return;
   }
@@ -2935,7 +2935,7 @@ async function showVariantDetail(variantId, sourceButton) {
 }
 
 async function showRankedVariantDetail(variantId, sourceButton) {
-  if (isTransitioning || variantDetailMenu || rankedSnapshot?.phase !== 'banning') {
+  if (isTransitioning || variantDetailMenu || rankedSnapshot?.phase !== 'variantSelection') {
     return;
   }
 
@@ -2944,7 +2944,7 @@ async function showRankedVariantDetail(variantId, sourceButton) {
   isTransitioning = true;
   const curtain = await closeCurtainWipe(app, playCurtainCloseAudio);
 
-  if (playMode !== 'online' || rankedSnapshot?.phase !== 'banning') {
+  if (playMode !== 'online' || rankedSnapshot?.phase !== 'variantSelection') {
     restoreVariantButton(selectedButton);
     curtain.remove();
     isTransitioning = false;
@@ -4191,7 +4191,7 @@ async function playSelectedVariant(variantId) {
 async function confirmRankedVariantPick(variantId) {
   const menu = variantDetailMenu;
 
-  if (!menu || menu.mode !== 'online' || isTransitioning || rankedSnapshot?.phase !== 'banning') {
+  if (!menu || menu.mode !== 'online' || isTransitioning || rankedSnapshot?.phase !== 'variantSelection') {
     return;
   }
 
@@ -4519,7 +4519,7 @@ async function startRankedFromTitle() {
     screen = 'online-name';
     p1QueuedMove = null;
     rankedSnapshot = null;
-    pendingRankedSnapshot = null;
+    rankedUpdateQueue.clear();
     rankedReadyWaiting = null;
     rankedRoundAudioKey = null;
     render();
@@ -4539,7 +4539,7 @@ async function returnToTitleFromOnlineName() {
     screen = 'title';
     p1QueuedMove = null;
     rankedSnapshot = null;
-    pendingRankedSnapshot = null;
+    rankedUpdateQueue.clear();
     rankedReadyWaiting = null;
     rankedRoundAudioKey = null;
     render();
@@ -4585,12 +4585,11 @@ function beginRankedQueue() {
   screen = 'queue';
   p1QueuedMove = null;
   rankedSnapshot = null;
-  pendingRankedSnapshot = null;
+  rankedUpdateQueue.clear();
   rankedReadyWaiting = null;
   rankedRoundAudioKey = null;
   rankedQueueError = null;
   findingMatchStep = 0;
-  render();
   rankedQueueCurtainPromise = closeRankedQueueCurtain();
   rankedClient.connect(rankedDisplayName, DEFAULT_VARIANT_ID);
 }
@@ -4627,14 +4626,17 @@ function handleRankedClose() {
     }
     screen = 'title';
     rankedSnapshot = null;
-    pendingRankedSnapshot = null;
+    rankedUpdateQueue.clear();
     rankedRoundAudioKey = null;
     render();
   }
 }
 
-function applyRankedSnapshot(snapshot) {
-  pendingRankedSnapshot = snapshot;
+function applyRankedSnapshot(snapshot, transition = null) {
+  if (snapshot.revision <= (rankedSnapshot?.revision ?? 0)) {
+    return;
+  }
+  rankedUpdateQueue.push(snapshot, transition);
   drainRankedSnapshots();
 }
 
@@ -4646,23 +4648,22 @@ async function drainRankedSnapshots() {
   isApplyingRankedSnapshot = true;
 
   try {
-    while (pendingRankedSnapshot) {
-      const snapshot = pendingRankedSnapshot;
-      pendingRankedSnapshot = null;
+    while (rankedUpdateQueue.length) {
+      const update = rankedUpdateQueue.shift();
+      const { snapshot, transition } = update;
 
       if (playMode !== 'online') {
         continue;
       }
 
-      await processRankedSnapshot(snapshot);
+      await processRankedSnapshot(snapshot, transition);
     }
   } finally {
     isApplyingRankedSnapshot = false;
   }
 }
 
-async function processRankedSnapshot(snapshot) {
-  stopFindingMatchTicker();
+async function processRankedSnapshot(snapshot, transition = null) {
   const previousSnapshot = rankedSnapshot;
   const previousPhase = previousSnapshot?.phase;
 
@@ -4670,7 +4671,16 @@ async function processRankedSnapshot(snapshot) {
     await rankedQueueCurtainPromise;
   }
 
-  if (rankedQueueCurtain && snapshot.phase === 'banning') {
+  if (rankedQueueCurtain && snapshot.phase === 'countdown') {
+    commitRankedSnapshot(snapshot, previousPhase);
+    renderBehindRankedQueueCurtain();
+    renderFindingMatchOverlay();
+    return;
+  }
+
+  stopFindingMatchTicker();
+
+  if (rankedQueueCurtain) {
     commitRankedSnapshot(snapshot, previousPhase);
     renderBehindRankedQueueCurtain();
     const curtain = rankedQueueCurtain;
@@ -4684,18 +4694,12 @@ async function processRankedSnapshot(snapshot) {
     return;
   }
 
-  if (rankedQueueCurtain) {
-    commitRankedSnapshot(snapshot, previousPhase);
-    renderBehindRankedQueueCurtain();
-    return;
-  }
-
-  if (shouldCurtainToRankedSnapshot(previousSnapshot, snapshot)) {
+  if (['variant-set-started', 'variant-selection-started'].includes(transition?.transitionId)) {
     await curtainToRankedSnapshot(snapshot, previousPhase);
     return;
   }
 
-  if (shouldWipeToRankedSnapshot(previousSnapshot, snapshot)) {
+  if (transition) {
     await wipeToRankedSnapshot(snapshot, previousPhase);
     return;
   }
@@ -4717,6 +4721,10 @@ async function wipeToRankedSnapshot(snapshot, previousPhase) {
   });
   isTransitioning = false;
   render();
+
+  if (snapshot.phase === 'revealed') {
+    await playPendingSuperAnimation(loopToken);
+  }
 }
 
 async function curtainToRankedSnapshot(snapshot, previousPhase) {
@@ -4728,62 +4736,6 @@ async function curtainToRankedSnapshot(snapshot, previousPhase) {
   });
   isTransitioning = false;
   render();
-}
-
-function shouldCurtainToRankedSnapshot(previousSnapshot, snapshot) {
-  return playMode === 'online'
-    && !isTransitioning
-    && (
-      (previousSnapshot?.phase === 'banning' && snapshot.phase === 'choosing')
-      || (previousSnapshot?.phase === 'revealed' && snapshot.phase === 'banning')
-      || (previousSnapshot?.phase === 'roundOver' && snapshot.phase === 'banning')
-    );
-}
-
-function shouldWipeToRankedSnapshot(previousSnapshot, snapshot) {
-  return shouldWipeToRankedNoContest(previousSnapshot, snapshot)
-    || shouldWipeToRankedReveal(previousSnapshot, snapshot)
-    || shouldWipeToRankedRoundOver(previousSnapshot, snapshot)
-    || shouldWipeToRankedGameOver(previousSnapshot, snapshot)
-    || shouldWipeToRankedNextTurn(previousSnapshot, snapshot);
-}
-
-function shouldWipeToRankedNoContest(previousSnapshot, snapshot) {
-  return playMode === 'online'
-    && snapshot.phase === 'gameOver'
-    && snapshot.noContest
-    && previousSnapshot?.phase !== 'gameOver'
-    && !isTransitioning;
-}
-
-function shouldWipeToRankedReveal(previousSnapshot, snapshot) {
-  return playMode === 'online'
-    && previousSnapshot?.phase === 'choosing'
-    && snapshot.phase === 'revealed'
-    && Boolean(snapshot.revealedMoves)
-    && !isTransitioning;
-}
-
-function shouldWipeToRankedRoundOver(previousSnapshot, snapshot) {
-  return playMode === 'online'
-    && previousSnapshot?.phase === 'revealed'
-    && snapshot.phase === 'roundOver'
-    && !isTransitioning;
-}
-
-function shouldWipeToRankedGameOver(previousSnapshot, snapshot) {
-  return playMode === 'online'
-    && ['revealed', 'roundOver'].includes(previousSnapshot?.phase)
-    && snapshot.phase === 'gameOver'
-    && !snapshot.noContest
-    && !isTransitioning;
-}
-
-function shouldWipeToRankedNextTurn(previousSnapshot, snapshot) {
-  return playMode === 'online'
-    && previousSnapshot?.phase === 'roundOver'
-    && snapshot.phase === 'choosing'
-    && !isTransitioning;
 }
 
 function commitRankedSnapshot(snapshot, previousPhase = rankedSnapshot?.phase) {
@@ -4816,7 +4768,10 @@ function commitRankedSnapshot(snapshot, previousPhase = rankedSnapshot?.phase) {
     };
   } else if (snapshot.phase === 'revealed') {
     lastMoves = getLocalMovesFromRankedSnapshot(snapshot);
-    stagePresentation = getVariantStagePresentation(getLocalTurnResultFromRankedSnapshot(snapshot), lastMoves.p1, lastMoves.p2, { variantId: snapshot.currentVariantId ?? snapshot.variantId });
+    const result = getLocalTurnResultFromRankedSnapshot(snapshot);
+    pendingSuperAnimation = getSuperAnimation(result);
+    stagePresentation = pendingSuperAnimation?.frames[0]
+      ?? getVariantStagePresentation(result, lastMoves.p1, lastMoves.p2, { variantId: snapshot.currentVariantId ?? snapshot.variantId });
   } else if (snapshot.phase === 'roundOver') {
     stagePresentation = {
       kind: 'overlay',
@@ -4829,7 +4784,7 @@ function commitRankedSnapshot(snapshot, previousPhase = rankedSnapshot?.phase) {
     };
   } else if (snapshot.phase === 'countdown') {
     stagePresentation = { kind: 'cue', name: 'READY' };
-  } else if (snapshot.phase === 'banning') {
+  } else if (snapshot.phase === 'variantSelection') {
     stagePresentation = { kind: 'cue', name: 'READY' };
   } else if (snapshot.phase === 'choosing' && snapshot.readyPlayerKey) {
     stagePresentation = getRankedChoosingPresentation(snapshot);
@@ -4946,7 +4901,7 @@ function getTurnPhaseFromRankedSnapshot(snapshot) {
     return 'ready';
   }
 
-  if (snapshot.phase === 'banning') {
+  if (snapshot.phase === 'variantSelection') {
     return 'ban';
   }
 
@@ -5082,7 +5037,7 @@ function leaveRanked() {
   setCachedActiveGameLayoutForVariant(DEFAULT_VARIANT_ID);
   clearLocalTurnChoice();
   rankedSnapshot = null;
-  pendingRankedSnapshot = null;
+  rankedUpdateQueue.clear();
   rankedReadyWaiting = null;
   rankedRoundAudioKey = null;
   rankedQueueError = null;
@@ -5120,6 +5075,8 @@ async function closeRankedQueueCurtain() {
   }
   rankedQueueCurtain = curtain;
   rankedQueueCurtainPhase = 'closed';
+  renderBehindRankedQueueCurtain();
+  renderFindingMatchOverlay();
   isTransitioning = false;
 }
 
@@ -5129,6 +5086,7 @@ function removeRankedQueueCurtain({ keepPromise = false } = {}) {
     rankedQueueCurtainPromise = null;
   }
   rankedQueueCurtainPhase = null;
+  app.querySelector('.finding-match-overlay')?.remove();
   rankedQueueCurtain?.remove();
   rankedQueueCurtain = null;
 }
@@ -5152,8 +5110,47 @@ function startFindingMatchTicker() {
     }
 
     findingMatchStep = (findingMatchStep + 1) % FINDING_MATCH_DOODLES.length;
-    render();
+    const art = app.querySelector('.finding-match-overlay .finding-match-art');
+    if (art) {
+      art.dataset.doodle = FINDING_MATCH_DOODLES[findingMatchStep];
+      mountSpriteRenderers(app.querySelectorAll('.sprite-canvas'));
+    } else if (!rankedQueueCurtainPhase) {
+      render();
+    }
   }, BEAT_MS);
+}
+
+function renderFindingMatchOverlay() {
+  app.querySelector('.finding-match-overlay')?.remove();
+  const overlay = document.createElement('div');
+  overlay.className = 'finding-match-overlay';
+  overlay.innerHTML = `
+    <div class="finding-match-panel" role="status" aria-label="Finding match">
+      <canvas
+        class="sprite-canvas finding-match-art"
+        data-doodle="${FINDING_MATCH_DOODLES[findingMatchStep]}"
+        data-frame-width="${TITLE_BUTTON_FRAME_WIDTH}"
+        data-frame-height="${TITLE_BUTTON_FRAME_HEIGHT}"
+        width="${TITLE_BUTTON_FRAME_WIDTH}"
+        height="${TITLE_BUTTON_FRAME_HEIGHT}"
+        aria-hidden="true"
+      ></canvas>
+    </div>
+    <button class="opponent-button finding-match-cancel" data-action="cancel-queue" aria-label="Back">
+      <canvas
+        class="sprite-canvas opponent-button-art"
+        data-doodle="back_button_w"
+        data-frame-width="${TITLE_BUTTON_FRAME_WIDTH}"
+        data-frame-height="${TITLE_BUTTON_FRAME_HEIGHT}"
+        width="${TITLE_BUTTON_FRAME_WIDTH}"
+        height="${TITLE_BUTTON_FRAME_HEIGHT}"
+        aria-hidden="true"
+      ></canvas>
+    </button>
+  `;
+  app.append(overlay);
+  overlay.querySelector('[data-action="cancel-queue"]').addEventListener('click', leaveRanked);
+  mountSpriteRenderers(overlay.querySelectorAll('.sprite-canvas'));
 }
 
 function stopFindingMatchTicker() {
