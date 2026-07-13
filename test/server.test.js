@@ -334,17 +334,17 @@ test('no contest awards match to current round leader', async () => {
   assert.equal((await store.getPlayer('p1')).losses, 1);
 });
 
-test('first to five ends match and updates Elo once', async () => {
+test('first to three ends match and updates Elo once', async () => {
   const { service, p1, p2, store } = await createMatchedService({ revealMs: 1 });
   const room = onlyRoom(service);
 
-  for (let win = 0; win < 5; win += 1) {
+  for (let win = 0; win < 3; win += 1) {
     service.beginChoosing(room);
     service.receive(p1.session, { type: 'submitMove', moveId: 'shoot' });
     service.receive(p2.session, { type: 'submitMove', moveId: 'stab' });
     await wait(0);
 
-    if (win < 4) {
+    if (win < 2) {
       room.roundState = service.rooms.get(room.id).roundState.status === 'finished'
         ? createFreshRound(service, room)
         : room.roundState;
@@ -359,14 +359,14 @@ test('first to five ends match and updates Elo once', async () => {
   assert.equal((await store.getPlayer('p2')).rating, expected.opponent);
 });
 
-test('current rules first to five updates rating records', async () => {
+test('current rules first to three updates rating records', async () => {
   const { service, p1, p2, store } = await createMatchedService({
     revealMs: 1,
     variantId: VARIANT_IDS.tapTapShootY,
   });
   const room = onlyRoom(service);
 
-  room.roundWins.p1 = 4;
+  room.roundWins.p1 = 2;
   service.beginChoosing(room);
   service.receive(p1.session, { type: 'submitMove', moveId: 'shoot' });
   service.receive(p2.session, { type: 'submitMove', moveId: 'stab' });
@@ -389,7 +389,7 @@ test('best of three variant games advances variants and updates Elo once', async
   service.receive(p2.session, { type: 'submitVariantPick', variantId: VARIANT_IDS.gunKnifeFist });
   assert.equal(room.variantId, VARIANT_IDS.tapTapShootY);
 
-  room.roundWins.p1 = 4;
+  room.roundWins.p1 = 2;
   service.receive(p1.session, { type: 'submitMove', moveId: 'shoot' });
   service.receive(p2.session, { type: 'submitMove', moveId: 'stab' });
   await wait(10);
@@ -404,7 +404,7 @@ test('best of three variant games advances variants and updates Elo once', async
   assert.equal(room.variantId, VARIANT_IDS.gunKnifeFist);
   assert.deepEqual(room.roundWins, { p1: 0, p2: 0 });
 
-  room.roundWins.p1 = 4;
+  room.roundWins.p1 = 2;
   service.receive(p1.session, { type: 'submitMove', moveId: 'shoot' });
   service.receive(p2.session, { type: 'submitMove', moveId: 'stab' });
   await wait(10);
@@ -431,7 +431,7 @@ test('split variant games trigger tiebreaker selection with previous variants ba
   service.receive(p1.session, { type: 'submitContinue' });
   service.receive(p2.session, { type: 'submitContinue' });
 
-  room.roundWins.p2 = 4;
+  room.roundWins.p2 = 2;
   service.receive(p1.session, { type: 'submitMove', moveId: 'charge' });
   service.receive(p2.session, { type: 'submitMove', moveId: 'fireball' });
   await wait(10);

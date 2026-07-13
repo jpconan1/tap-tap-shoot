@@ -6,12 +6,12 @@ import {
   VARIANT_ORDER,
   VARIANTS,
   getVariantLabel,
+  getVariantTargetRoundWins,
   normalizeVariantId,
 } from '../src/engine/moves.js';
 import { updateRatings } from './elo.js';
 import { MemoryPlayerStore } from './playerStore.js';
 
-const GAME_TARGET_ROUNDS = 5;
 const MAX_TIMEOUT_STRIKES = 3;
 const DEFAULT_COUNTDOWN_MS = 3000;
 const NO_SELECTION_GRACE_MS = 90 * 1000;
@@ -442,8 +442,9 @@ export class RankedDuelService {
         return;
       }
 
-      if (room.roundWins.p1 >= GAME_TARGET_ROUNDS || room.roundWins.p2 >= GAME_TARGET_ROUNDS) {
-        const gameWinnerKey = room.roundWins.p1 >= GAME_TARGET_ROUNDS ? 'p1' : 'p2';
+      const targetRoundWins = getVariantTargetRoundWins(room.variantId);
+      if (room.roundWins.p1 >= targetRoundWins || room.roundWins.p2 >= targetRoundWins) {
+        const gameWinnerKey = room.roundWins.p1 >= targetRoundWins ? 'p1' : 'p2';
         this.finishVariantGame(room, gameWinnerKey);
         return;
       }
@@ -586,7 +587,8 @@ export class RankedDuelService {
     }, 'turn-revealed');
 
     this.setRoomTimer(room, () => {
-      if (room.roundWins.p1 >= GAME_TARGET_ROUNDS || room.roundWins.p2 >= GAME_TARGET_ROUNDS) {
+      const targetRoundWins = getVariantTargetRoundWins(room.variantId);
+      if (room.roundWins.p1 >= targetRoundWins || room.roundWins.p2 >= targetRoundWins) {
         this.finishVariantGame(room, winnerKey);
         return;
       }

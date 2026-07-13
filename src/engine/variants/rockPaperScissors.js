@@ -5,6 +5,7 @@ export function createRockPaperScissorsVariant({ id, moves }) {
     id,
     label: 'Rock Paper Scissors',
     isRanked: true,
+    targetRoundWins: 5,
     moveIds: Object.freeze(['rock', 'paper', 'scissors']),
     moves,
     resourceMax: 0,

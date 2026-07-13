@@ -371,6 +371,127 @@ canvas {
   transform: rotate(-0.3deg);
 }
 
+.pick-variant-header.online-stage-header {
+  width: 380px;
+  height: 256px;
+  margin-bottom: -54px;
+}
+
+.online-interstitial {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 960px;
+  height: 540px;
+  overflow: hidden;
+}
+
+.online-interstitial-header {
+  width: 380px;
+  height: 256px;
+  margin-bottom: -52px;
+  image-rendering: pixelated;
+}
+
+.match-found-name {
+  position: relative;
+  z-index: 5;
+  max-width: 720px;
+  font-size: 34px;
+  font-weight: 800;
+  line-height: 1.05;
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+
+.match-found-vs {
+  position: relative;
+  z-index: 5;
+  width: 64px;
+  height: 64px;
+  margin: 4px 0;
+  image-rendering: pixelated;
+}
+
+.scoreboard-stage {
+  display: block;
+}
+
+.scoreboard-name {
+  position: absolute;
+  top: 26px;
+  z-index: 8;
+  width: 300px;
+  font-size: 27px;
+  font-weight: 800;
+  line-height: 1;
+  overflow-wrap: anywhere;
+}
+
+.scoreboard-name-left {
+  left: 38px;
+  text-align: left;
+}
+
+.scoreboard-name-right {
+  right: 38px;
+  text-align: right;
+}
+
+.scoreboard-header {
+  position: absolute;
+  top: 14px;
+  left: 328px;
+  z-index: 7;
+  width: 304px;
+  height: 128px;
+  image-rendering: pixelated;
+}
+
+.scoreboard-board {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  width: 960px;
+  height: 540px;
+  image-rendering: pixelated;
+}
+
+.scoreboard-variants {
+  position: absolute;
+  top: 218px;
+  left: 160px;
+  z-index: 7;
+  display: grid;
+  grid-template-columns: 244px 64px 244px 64px;
+  gap: 8px;
+  align-items: center;
+}
+
+.scoreboard-variant-button {
+  width: 244px;
+  height: 96px;
+  image-rendering: pixelated;
+}
+
+.scoreboard-check {
+  width: 64px;
+  height: 64px;
+  image-rendering: pixelated;
+}
+
+.scoreboard-tiebreaker {
+  position: absolute;
+  top: 358px;
+  left: 350px;
+  z-index: 7;
+  width: 260px;
+  height: 102px;
+  image-rendering: pixelated;
+}
+
 .title-actions {
   display: flex;
   flex-wrap: wrap;

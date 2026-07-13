@@ -7,6 +7,7 @@ import {
   getVariantLabel,
   getVariantResourceMax,
   getVariantStartResource,
+  getVariantTargetRoundWins,
 } from './engine/moves.js';
 import { createRoundState, getPlayerLegalMoves, getPlayerResource, playTurn } from './engine/gameState.js';
 import { resolveTurn } from './engine/resolveTurn.js';
@@ -99,6 +100,8 @@ const VARIANT_DIFFICULTY_TOGGLE_FRAME_WIDTH = 110;
 const VARIANT_DIFFICULTY_TOGGLE_FRAME_HEIGHT = 140;
 const PICK_VARIANT_FRAME_WIDTH = 388;
 const PICK_VARIANT_FRAME_HEIGHT = 233;
+const ONLINE_HEADER_FRAME_WIDTH = 759;
+const ONLINE_HEADER_FRAME_HEIGHT = 512;
 const TUTORIAL_MAIN_SLIDE_COUNT = 6;
 const TUTORIAL_REVEAL_SLIDE_INDEX = 5;
 const TUTORIAL_TIPS_SLIDE_COUNT = 3;
@@ -106,7 +109,6 @@ const REMATCH_BUTTON_FRAME_WIDTH = 256;
 const REMATCH_BUTTON_FRAME_HEIGHT = 128;
 const BULLET_SLOT_COUNT = MAX_BULLETS;
 const LAST_NUMBERED_TURN = 21;
-const GAME_TARGET_ROUNDS = 5;
 const FRAME_WIDTH = 960;
 const FRAME_HEIGHT = 540;
 const FRAME_BOTTOM_GUTTER = 36;
@@ -426,6 +428,7 @@ let rankedQueueCurtain = null;
 let rankedQueueCurtainToken = 0;
 let rankedQueueCurtainPromise = null;
 let rankedQueueCurtainPhase = null;
+let rankedSelectionCurtain = null;
 let rankedQueueError = null;
 let rankedDisconnectReturnTimer = null;
 let rankedDisplayName = readStoredDisplayName();
@@ -807,7 +810,8 @@ function getGamePreloadDoodles() {
     ...getResourceDoodlesForPreload(),
     ...Array.from({ length: LAST_NUMBERED_TURN + 1 }, (_, turn) => `turn${turn}`),
     'turnlostcount',
-    ...Array.from({ length: GAME_TARGET_ROUNDS }, (_, index) => `w${index + 1}`),
+    ...Array.from({ length: 5 }, (_, index) => `w${index + 1}`),
+    ...Array.from({ length: 4 }, (_, index) => `ft3-win-counter-${index}`),
   ];
 }
 
@@ -1395,6 +1399,16 @@ function render() {
     return;
   }
 
+  if (screen === 'match-found') {
+    renderMatchFoundScreen();
+    return;
+  }
+
+  if (screen === 'scoreboard') {
+    renderScoreboardScreen();
+    return;
+  }
+
   if (screen === 'tutorial') {
     renderTutorialScreen();
     return;
@@ -1469,12 +1483,12 @@ function renderRankedBanScreen() {
       ${renderOpenCurtainBorder()}
 
       <canvas
-        class="sprite-canvas pick-variant-header"
-        data-doodle-file="pick_variant_sheet.webp"
-        data-frame-width="${PICK_VARIANT_FRAME_WIDTH}"
-        data-frame-height="${PICK_VARIANT_FRAME_HEIGHT}"
-        width="${PICK_VARIANT_FRAME_WIDTH}"
-        height="${PICK_VARIANT_FRAME_HEIGHT}"
+        class="sprite-canvas pick-variant-header online-stage-header"
+        data-doodle-file="header-first-variant_sheet.webp"
+        data-frame-width="${ONLINE_HEADER_FRAME_WIDTH}"
+        data-frame-height="${ONLINE_HEADER_FRAME_HEIGHT}"
+        width="${ONLINE_HEADER_FRAME_WIDTH}"
+        height="${ONLINE_HEADER_FRAME_HEIGHT}"
         aria-label="Pick variant"
       ></canvas>
 
@@ -1498,6 +1512,45 @@ function renderRankedBanScreen() {
   });
   mountSpriteRenderers(app.querySelectorAll('.sprite-canvas'));
   mountReadyWaitingOverlays(app.querySelectorAll('.ranked-variant-ready'));
+}
+
+function renderMatchFoundScreen() {
+  const playerName = rankedSnapshot?.players?.[rankedSnapshot.playerKey]?.displayName ?? rankedDisplayName;
+  const opponentName = rankedSnapshot?.players?.[rankedSnapshot.opponentKey]?.displayName ?? 'Opponent';
+  app.innerHTML = `
+    <section class="online-interstitial match-found-stage" aria-label="Match found">
+      ${renderOpenCurtainBorder()}
+      ${renderStaticDoodle('header-match-found', 759, 512, 'online-interstitial-header')}
+      <div class="match-found-name">${escapeHtml(playerName)}</div>
+      ${renderStaticDoodle('vs-sm', 64, 64, 'match-found-vs')}
+      <div class="match-found-name">${escapeHtml(opponentName)}</div>
+    </section>
+  `;
+  mountSpriteRenderers(app.querySelectorAll('.sprite-canvas'));
+}
+
+function renderScoreboardScreen() {
+  const localName = rankedSnapshot?.players?.[rankedSnapshot.playerKey]?.displayName ?? rankedDisplayName;
+  const opponentName = rankedSnapshot?.players?.[rankedSnapshot.opponentKey]?.displayName ?? 'Opponent';
+  const localVariant = getComputerVariant(rankedSnapshot?.variantPicks?.[rankedSnapshot.playerKey]);
+  const opponentVariant = getComputerVariant(rankedSnapshot?.variantPicks?.[rankedSnapshot.opponentKey]);
+  app.innerHTML = `
+    <section class="online-interstitial scoreboard-stage" aria-label="Scoreboard">
+      ${renderOpenCurtainBorder()}
+      <div class="scoreboard-name scoreboard-name-left">${escapeHtml(localName)}</div>
+      <div class="scoreboard-name scoreboard-name-right">${escapeHtml(opponentName)}</div>
+      ${renderStaticDoodle('header-scoreboard', 607, 256, 'scoreboard-header')}
+      ${renderStaticDoodle('scoreboard', 960, 540, 'scoreboard-board')}
+      <div class="scoreboard-variants">
+        ${renderStaticDoodle(localVariant.buttonDoodle, VARIANT_BUTTON_FRAME_WIDTH, VARIANT_BUTTON_FRAME_HEIGHT, 'scoreboard-variant-button')}
+        ${renderStaticDoodle('ft3-win-counter-3', 64, 64, 'scoreboard-check')}
+        ${renderStaticDoodle(opponentVariant.buttonDoodle, VARIANT_BUTTON_FRAME_WIDTH, VARIANT_BUTTON_FRAME_HEIGHT, 'scoreboard-variant-button')}
+        ${renderStaticDoodle('ft3-win-counter-3', 64, 64, 'scoreboard-check')}
+      </div>
+      ${renderStaticDoodle('tie_breaker_button', 325, 128, 'scoreboard-tiebreaker')}
+    </section>
+  `;
+  mountSpriteRenderers(app.querySelectorAll('.sprite-canvas'));
 }
 
 function getRankedVariantSelectVariants() {
@@ -1649,11 +1702,15 @@ function renderTurnCounter() {
 }
 
 function renderWinCounter(playerId) {
-  if (roundWins[playerId] <= 0) {
+  const targetRoundWins = getVariantTargetRoundWins(getCurrentVariantId());
+
+  if (targetRoundWins === 5 && roundWins[playerId] <= 0) {
     return '';
   }
 
-  return renderStaticDoodle(`w${Math.min(roundWins[playerId], GAME_TARGET_ROUNDS)}`, WIN_MARK_FRAME_WIDTH, WIN_MARK_FRAME_HEIGHT, 'win-mark');
+  const counter = Math.min(roundWins[playerId], targetRoundWins);
+  const doodle = targetRoundWins === 5 ? `w${counter}` : `ft3-win-counter-${counter}`;
+  return renderStaticDoodle(doodle, WIN_MARK_FRAME_WIDTH, WIN_MARK_FRAME_HEIGHT, 'win-mark');
 }
 
 function renderLayoutBulletSlots(playerId) {
@@ -4086,6 +4143,11 @@ async function closeVariantDetail() {
   variantDetailMenu = null;
   isTransitioning = true;
   menu.overlay.remove();
+  if (menu.mode === 'online' && rankedSnapshot?.phase === 'variantSelection') {
+    restoreVariantButton(menu.selectedButton);
+    renderRankedBanScreen();
+    app.append(menu.curtain);
+  }
   await openCurtainWipe(menu.curtain, playCurtainOpenAudio);
   restoreVariantButton(menu.selectedButton);
   mountSpriteRenderers(app.querySelectorAll('.sprite-canvas'));
@@ -4200,8 +4262,9 @@ async function confirmRankedVariantPick(variantId) {
   menu.overlay.remove();
   restoreVariantButton(menu.selectedButton);
   submitRankedVariantPick(variantId);
+  rankedSelectionCurtain = menu.curtain;
+  renderRankedBanScreen();
   app.append(menu.curtain);
-  await openCurtainWipe(menu.curtain, playCurtainOpenAudio);
   isTransitioning = false;
 }
 
@@ -4396,15 +4459,17 @@ function resetRoundWins() {
 }
 
 function isGameOver() {
-  return roundWins.p1 >= GAME_TARGET_ROUNDS || roundWins.p2 >= GAME_TARGET_ROUNDS;
+  const targetRoundWins = getVariantTargetRoundWins(getCurrentVariantId());
+  return roundWins.p1 >= targetRoundWins || roundWins.p2 >= targetRoundWins;
 }
 
 function getGameWinner() {
-  if (roundWins.p1 >= GAME_TARGET_ROUNDS) {
+  const targetRoundWins = getVariantTargetRoundWins(getCurrentVariantId());
+  if (roundWins.p1 >= targetRoundWins) {
     return 'p1';
   }
 
-  if (roundWins.p2 >= GAME_TARGET_ROUNDS) {
+  if (roundWins.p2 >= targetRoundWins) {
     return 'p2';
   }
 
@@ -4412,15 +4477,16 @@ function getGameWinner() {
 }
 
 function getMusicTopperFile() {
+  const targetRoundWins = getVariantTargetRoundWins(getCurrentVariantId());
   if (
     !shouldUseMusicTopper() ||
     isGameOver() ||
-    (roundWins.p1 !== GAME_TARGET_ROUNDS - 1 && roundWins.p2 !== GAME_TARGET_ROUNDS - 1)
+    (roundWins.p1 !== targetRoundWins - 1 && roundWins.p2 !== targetRoundWins - 1)
   ) {
     return null;
   }
 
-  if (roundWins.p1 === GAME_TARGET_ROUNDS - 1 && roundWins.p2 === GAME_TARGET_ROUNDS - 1) {
+  if (roundWins.p1 === targetRoundWins - 1 && roundWins.p2 === targetRoundWins - 1) {
     return getMusicTopperId('final');
   }
 
@@ -4673,8 +4739,19 @@ async function processRankedSnapshot(snapshot, transition = null) {
 
   if (rankedQueueCurtain && snapshot.phase === 'countdown') {
     commitRankedSnapshot(snapshot, previousPhase);
-    renderBehindRankedQueueCurtain();
-    renderFindingMatchOverlay();
+    screen = 'match-found';
+    render();
+    const curtain = rankedQueueCurtain;
+    rankedQueueCurtain = null;
+    rankedQueueCurtainPhase = 'opening';
+    app.append(curtain);
+    isTransitioning = true;
+    await openCurtainWipe(curtain, playCurtainOpenAudio);
+    await waitMs(2 * BEAT_MS);
+    rankedQueueCurtainPhase = 'closing';
+    rankedQueueCurtain = await closeCurtainWipe(app, playCurtainCloseAudio);
+    rankedQueueCurtainPhase = 'closed';
+    isTransitioning = false;
     return;
   }
 
@@ -4695,6 +4772,10 @@ async function processRankedSnapshot(snapshot, transition = null) {
   }
 
   if (['variant-set-started', 'variant-selection-started'].includes(transition?.transitionId)) {
+    if (transition.transitionId === 'variant-set-started') {
+      await showRankedScoreboard(snapshot, previousPhase);
+      return;
+    }
     await curtainToRankedSnapshot(snapshot, previousPhase);
     return;
   }
@@ -4705,7 +4786,38 @@ async function processRankedSnapshot(snapshot, transition = null) {
   }
 
   commitRankedSnapshot(snapshot, previousPhase);
+  if (snapshot.phase === 'variantSelection' && variantDetailMenu) {
+    return;
+  }
   render();
+  if (snapshot.phase === 'variantSelection' && rankedSelectionCurtain) {
+    app.append(rankedSelectionCurtain);
+  }
+}
+
+async function showRankedScoreboard(snapshot, previousPhase) {
+  clearRankedReadyWaitingTimer();
+  variantDetailMenu?.overlay.remove();
+  variantDetailMenu = null;
+  isTransitioning = true;
+  let curtain = rankedSelectionCurtain;
+  rankedSelectionCurtain = null;
+  if (!curtain?.isConnected) {
+    curtain = await closeCurtainWipe(app, playCurtainCloseAudio);
+  }
+  commitRankedSnapshot(snapshot, previousPhase);
+  screen = 'scoreboard';
+  render();
+  app.append(curtain);
+  await openCurtainWipe(curtain, playCurtainOpenAudio);
+  await waitMs(2 * BEAT_MS);
+  await playWipeTransition(() => {
+    screen = 'playing';
+    render();
+  });
+  isTransitioning = false;
+  render();
+  beginOpeningCues();
 }
 
 async function wipeToRankedSnapshot(snapshot, previousPhase) {
@@ -4826,10 +4938,11 @@ function maybePlayRankedRoundResultAudio(snapshot) {
   rankedRoundAudioKey = audioKey;
 
   const didWinRound = snapshot.round.winner === snapshot.playerKey;
+  const targetRoundWins = getVariantTargetRoundWins(snapshot.currentVariantId ?? snapshot.variantId);
   const isFinalRound = snapshot.gameWins?.p1 >= 2
     || snapshot.gameWins?.p2 >= 2
-    || snapshot.roundWins?.p1 >= GAME_TARGET_ROUNDS
-    || snapshot.roundWins?.p2 >= GAME_TARGET_ROUNDS;
+    || snapshot.roundWins?.p1 >= targetRoundWins
+    || snapshot.roundWins?.p2 >= targetRoundWins;
   interruptMusicFileOnce(didWinRound ? WIN_SOUND_AUDIO : LOSE_JINGLE_AUDIO, isFinalRound ? null : 'game', !isFinalRound);
 }
 
@@ -5030,6 +5143,10 @@ function leaveRanked() {
   }
   rankedClient.close();
   removeRankedQueueCurtain();
+  rankedSelectionCurtain?.remove();
+  rankedSelectionCurtain = null;
+  variantDetailMenu?.overlay.remove();
+  variantDetailMenu = null;
   stopFindingMatchTicker();
   clearRankedReadyWaitingTimer();
   playMode = 'local';
@@ -5354,13 +5471,13 @@ function resolveQueuedTurn() {
     }
 
     if (playMode === 'local' && state.status === 'finished' && state.winner === 'p2') {
-      if (isGameOver() || (screen !== 'tutorial' && roundWins.p2 >= GAME_TARGET_ROUNDS - 1)) {
+      if (isGameOver() || (screen !== 'tutorial' && roundWins.p2 >= getVariantTargetRoundWins(getCurrentVariantId()) - 1)) {
         interruptMusicFileOnce(LOSE_JINGLE_AUDIO, null, false);
       } else {
         interruptMusicFileOnce(LOSE_JINGLE_AUDIO, 'game');
       }
     } else if (playMode === 'local' && state.status === 'finished' && state.winner === 'p1') {
-      if (isGameOver() || (screen !== 'tutorial' && roundWins.p1 >= GAME_TARGET_ROUNDS - 1)) {
+      if (isGameOver() || (screen !== 'tutorial' && roundWins.p1 >= getVariantTargetRoundWins(getCurrentVariantId()) - 1)) {
         interruptMusicFileOnce(WIN_SOUND_AUDIO, null, false);
       } else {
         interruptMusicFileOnce(WIN_SOUND_AUDIO, 'game');

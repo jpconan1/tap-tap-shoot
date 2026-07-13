@@ -23,6 +23,7 @@ export function createGunKnifeFistVariant({ id, moves, startHealth }) {
     id,
     label: 'Gun Knife Fist',
     isRanked: true,
+    targetRoundWins: 3,
     moveIds: Object.freeze(['punch', 'stab', 'shoot']),
     moves: variantMoves,
     resourceMax: startHealth,

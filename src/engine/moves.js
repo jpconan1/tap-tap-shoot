@@ -111,6 +111,7 @@ export const MOVES = Object.freeze({
 export const MOVE_IDS = Object.freeze(Object.keys(MOVES));
 export const MAX_BULLETS = 3;
 export const MAX_RESOURCE = MAX_BULLETS;
+export const DEFAULT_TARGET_ROUND_WINS = 3;
 export const VARIANT_ORDER = Object.freeze([
   VARIANT_IDS.rockPaperScissors,
   VARIANT_IDS.fireballWar,
@@ -167,6 +168,10 @@ export function getVariantResourceMax(variantId = DEFAULT_VARIANT_ID) {
 
 export function getVariantStartResource(variantId = DEFAULT_VARIANT_ID) {
   return getVariant(variantId).startResource;
+}
+
+export function getVariantTargetRoundWins(variantId = DEFAULT_VARIANT_ID) {
+  return getVariant(variantId).targetRoundWins ?? DEFAULT_TARGET_ROUND_WINS;
 }
 
 export function getVariantHitTable(variantId = DEFAULT_VARIANT_ID) {

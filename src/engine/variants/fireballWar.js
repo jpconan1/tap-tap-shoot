@@ -11,6 +11,7 @@ export function createFireballWarVariant({ id, moves, maxResource }) {
     id,
     label: 'Fireball War',
     isRanked: true,
+    targetRoundWins: 3,
     moveIds: Object.freeze(['charge', 'block', 'fireball']),
     moves,
     resourceMax: maxResource,

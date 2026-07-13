@@ -12,6 +12,7 @@ export function createTapTapShootXVariant({ id, moves, maxResource }) {
     id,
     label: 'Tap Tap Shoot X',
     isRanked: true,
+    targetRoundWins: 3,
     moveIds: Object.freeze(['reload', 'shoot', 'stab', 'duck', 'counterstab']),
     moves: variantMoves,
     resourceMax: maxResource,
