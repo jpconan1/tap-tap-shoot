@@ -54,6 +54,7 @@ import {
   getVariantSuperAnimation,
   getRendererPreloadDoodles,
   mountCountdownOverlays,
+  mountBanAnimations,
   mountReadyWaitingOverlays,
   mountWaitingDotsOverlays,
   mountSpriteRenderers,
@@ -104,6 +105,8 @@ const PICK_VARIANT_FRAME_WIDTH = 388;
 const PICK_VARIANT_FRAME_HEIGHT = 233;
 const ONLINE_HEADER_FRAME_WIDTH = 1518;
 const ONLINE_HEADER_FRAME_HEIGHT = 512;
+const BAN_HEADER_FRAME_WIDTH = 910;
+const BAN_HEADER_FRAME_HEIGHT = 512;
 const TUTORIAL_MAIN_SLIDE_COUNT = 6;
 const TUTORIAL_REVEAL_SLIDE_INDEX = 5;
 const TUTORIAL_TIPS_SLIDE_COUNT = 3;
@@ -405,6 +408,7 @@ let variantSelectPage = 0;
 let variantDifficultyToggleState = 'easy';
 let isTransitioning = false;
 let variantDetailMenu = null;
+const completedBanAnimationVariants = new Set();
 let isMusicEnabled = false;
 let isSoundEnabled = false;
 let isBoilEnabled = readStoredBoilEnabled();
@@ -1495,23 +1499,27 @@ function renderRankedBanScreen() {
   const bannedVariants = new Set(rankedSnapshot.bannedVariants ?? []);
   const playerPick = picks[rankedSnapshot.playerKey];
   const variants = getRankedVariantSelectVariants();
+  const isTiebreakerBan = rankedSnapshot.variantSelectionRound === 2;
   const firstPickedVariant = picks[rankedSnapshot.variantPickOrder?.[0]];
-  const headerDoodle = firstPickedVariant
+  const headerDoodle = isTiebreakerBan
+    ? 'header-ban-variant_sheet.webp'
+    : firstPickedVariant
     ? 'header-second-variant_sheet.webp'
     : 'header-first-variant_sheet.webp';
+  const headerWidth = isTiebreakerBan ? BAN_HEADER_FRAME_WIDTH : ONLINE_HEADER_FRAME_WIDTH;
 
   app.innerHTML = `
-    <section class="title-screen opponent-select-screen variant-ban-screen" aria-label="Pick variant">
+    <section class="title-screen opponent-select-screen variant-ban-screen ${isTiebreakerBan ? 'tiebreaker-ban-stage' : ''}" aria-label="${isTiebreakerBan ? 'Ban variant' : 'Pick variant'}">
       ${renderOpenCurtainBorder()}
 
       <canvas
         class="sprite-canvas pick-variant-header online-stage-header"
         data-doodle-file="${headerDoodle}"
-        data-frame-width="${ONLINE_HEADER_FRAME_WIDTH}"
-        data-frame-height="${ONLINE_HEADER_FRAME_HEIGHT}"
-        width="${ONLINE_HEADER_FRAME_WIDTH}"
-        height="${ONLINE_HEADER_FRAME_HEIGHT}"
-        aria-label="Pick variant"
+        data-frame-width="${headerWidth}"
+        data-frame-height="${isTiebreakerBan ? BAN_HEADER_FRAME_HEIGHT : ONLINE_HEADER_FRAME_HEIGHT}"
+        width="${headerWidth}"
+        height="${isTiebreakerBan ? BAN_HEADER_FRAME_HEIGHT : ONLINE_HEADER_FRAME_HEIGHT}"
+        aria-label="${isTiebreakerBan ? 'Ban variant' : 'Pick variant'}"
       ></canvas>
 
       <div class="variant-actions">
@@ -1522,6 +1530,7 @@ function renderRankedBanScreen() {
           picked: pickedVariants.has(variant.id),
           banned: bannedVariants.has(variant.id),
           firstPicked: firstPickedVariant === variant.id,
+          isTiebreakerBan,
         })).join('')}
         ${renderRankedQuitButton()}
       </div>
@@ -1530,10 +1539,19 @@ function renderRankedBanScreen() {
 
   app.querySelector('[data-action="quit"]')?.addEventListener('click', leaveRanked);
   app.querySelectorAll('[data-pick-variant]').forEach((button) => {
-    button.addEventListener('click', () => showRankedVariantDetail(button.dataset.pickVariant, button));
+    button.addEventListener('click', () => {
+      if (isTiebreakerBan) submitRankedVariantPick(button.dataset.pickVariant);
+      else showRankedVariantDetail(button.dataset.pickVariant, button);
+    });
   });
   mountSpriteRenderers(app.querySelectorAll('.sprite-canvas'));
   mountReadyWaitingOverlays(app.querySelectorAll('.ranked-variant-ready'));
+  app.querySelectorAll('.ranked-ban-animation').forEach((canvas) => {
+    canvas.addEventListener('ban-animation-complete', () => {
+      completedBanAnimationVariants.add(canvas.dataset.variantId);
+    }, { once: true });
+  });
+  mountBanAnimations(app.querySelectorAll('.ranked-ban-animation'));
 }
 
 function renderMatchFoundScreen() {
@@ -1675,12 +1693,18 @@ function getRankedVariantSelectVariants() {
     .filter(Boolean);
 }
 
-function renderRankedVariantPickButton({ variant, slot, disabled, picked, banned, firstPicked }) {
+function renderRankedVariantPickButton({ variant, slot, disabled, picked, banned, firstPicked, isTiebreakerBan }) {
+  const showSettledBan = isTiebreakerBan && (banned || completedBanAnimationVariants.has(variant.id));
+  const showBanAnimation = isTiebreakerBan && picked && !showSettledBan;
   return renderVariantButton(variant, slot, {
-    className: `ranked-variant-pick ${picked ? 'picked' : ''} ${banned ? 'banned' : ''}`,
+    className: `ranked-variant-pick ${picked ? 'picked' : ''} ${banned ? 'banned' : ''} ${isTiebreakerBan ? 'tiebreaker-ban' : ''}`,
     dataAttribute: 'data-pick-variant',
     disabled,
-    content: firstPicked ? `
+    content: showSettledBan
+      ? renderStaticDoodle('ban-animation/x', 300, 256, 'ranked-ban-mark')
+      : showBanAnimation
+        ? `<canvas class="ranked-ban-animation" data-variant-id="${variant.id}" width="300" height="256" aria-hidden="true"></canvas>`
+        : firstPicked ? `
         <canvas
           class="ranked-variant-ready"
           width="300"
@@ -4916,10 +4940,19 @@ async function processRankedSnapshot(snapshot, transition = null) {
     return;
   }
 
-  if (['VARIANTS_CHOSEN', 'VARIANT_SELECTION_STARTED', 'NEXT_VARIANT_STARTED', 'VARIANT_GAME_FINISHED', 'MATCH_FINISHED'].includes(flowEvent)) {
+  if ([
+    'VARIANTS_CHOSEN',
+    'VARIANT_SELECTION_STARTED',
+    'TIEBREAKER_SELECTION_STARTED',
+    'TIEBREAKER_CHOSEN',
+    'NEXT_VARIANT_STARTED',
+    'VARIANT_GAME_FINISHED',
+    'MATCH_FINISHED',
+  ].includes(flowEvent)) {
     clearRankedReadyWaitingTimer();
     variantDetailMenu?.overlay.remove();
     variantDetailMenu = null;
+    if (flowEvent === 'TIEBREAKER_SELECTION_STARTED') completedBanAnimationVariants.clear();
     isTransitioning = true;
     await onlineFlowDirector.play(flowEvent, { snapshot, previousPhase });
     isTransitioning = false;
@@ -5014,6 +5047,23 @@ function commitRankedSnapshot(snapshot, previousPhase = rankedSnapshot?.phase) {
             ? 'system_scenes/game_won'
             : 'system_scenes/game_lost'
           : getRoundOverDoodle(getLocalRoundWinnerFromRankedSnapshot(snapshot), true),
+        flip: false,
+      },
+    };
+  } else if (
+    snapshot.phase === 'variantSelection'
+    && snapshot.variantSelectionRound === 2
+    && previousPhase === 'revealed'
+  ) {
+    const latestGameWinner = snapshot.gameResults?.at(-1)?.winner;
+    stagePresentation = {
+      kind: 'overlay',
+      base: getInteractionPresentation(stagePresentation),
+      overlay: {
+        kind: 'doodle',
+        name: latestGameWinner === snapshot.playerKey
+          ? 'system_scenes/game_won'
+          : 'system_scenes/game_lost',
         flip: false,
       },
     };

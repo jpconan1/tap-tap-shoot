@@ -16,6 +16,8 @@
   --blue: #2f66b3;
   --green: #287d54;
   --yellow: #f2c24b;
+  --intergame-mark-width: 256.25px;
+  --intergame-mark-height: 218.667px;
 }
 
 html {
@@ -378,6 +380,11 @@ canvas {
   transform: translateY(-40px) rotate(-0.3deg);
 }
 
+.tiebreaker-ban-stage .pick-variant-header.online-stage-header {
+  width: 364px;
+  height: 205px;
+}
+
 .online-interstitial {
   position: relative;
   display: flex;
@@ -459,8 +466,8 @@ canvas {
 .scoreboard-ready {
   position: absolute;
   top: 50%;
-  width: 75px;
-  height: 64px;
+  width: var(--intergame-mark-width);
+  height: var(--intergame-mark-height);
   image-rendering: pixelated;
   pointer-events: none;
 }
@@ -509,8 +516,8 @@ canvas {
 .scoreboard-next-ready {
   left: 50%;
   z-index: 2;
-  width: 112.5px;
-  height: 96px;
+  width: var(--intergame-mark-width);
+  height: var(--intergame-mark-height);
   transform: translate(-50%, -50%) rotate(-3deg);
 }
 
@@ -851,12 +858,31 @@ canvas {
   filter: grayscale(1);
 }
 
+.ranked-variant-pick.tiebreaker-ban.picked,
+.ranked-variant-pick.tiebreaker-ban.banned {
+  opacity: 1;
+  filter: none;
+}
+
+.ranked-ban-animation,
+.ranked-ban-mark {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: 3;
+  width: var(--intergame-mark-width);
+  height: var(--intergame-mark-height);
+  image-rendering: pixelated;
+  pointer-events: none;
+  transform: translate(-50%, -50%) rotate(-3deg);
+}
+
 .ranked-variant-ready {
   position: absolute;
   left: 50%;
   top: 50%;
-  width: 400px;
-  height: 341.333px;
+  width: var(--intergame-mark-width);
+  height: var(--intergame-mark-height);
   transform: translate(-50%, -50%) rotate(-3deg);
   image-rendering: pixelated;
   pointer-events: none;
@@ -1139,8 +1165,8 @@ canvas {
   position: absolute;
   top: 50%;
   left: 50%;
-  width: 400px;
-  height: 341.333px;
+  width: var(--intergame-mark-width);
+  height: var(--intergame-mark-height);
   image-rendering: pixelated;
   pointer-events: none;
   transform: translate(-50%, -50%);

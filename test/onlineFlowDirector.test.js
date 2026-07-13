@@ -88,6 +88,37 @@ test('finished variant holds the result before opening the scoreboard', async ()
   ]);
 });
 
+test('split second game visits scoreboard before opening tiebreaker bans', async () => {
+  const log = [];
+  const director = createDirector(log);
+
+  await director.play('TIEBREAKER_SELECTION_STARTED', { snapshot: {}, previousPhase: 'revealed' });
+
+  assert.deepEqual(log, [
+    'commit',
+    'show:playing',
+    'wait:2',
+    'close',
+    'show:scoreboard',
+    'reattach',
+    'open',
+    'wait:5',
+    'close',
+    'show:variant-select',
+    'reattach',
+    'open',
+  ]);
+});
+
+test('finished bans hold for animation then spike wipe into tiebreaker', async () => {
+  const log = [];
+  const director = createDirector(log);
+
+  await director.play('TIEBREAKER_CHOSEN', { snapshot: {}, previousPhase: 'variantSelection' });
+
+  assert.deepEqual(log, ['wait:1', 'commit', 'spike:playing', 'cues']);
+});
+
 test('snapshot interpreter separates server facts from presentation events', () => {
   assert.equal(interpretOnlineSnapshot(null, { phase: 'countdown' }), 'MATCH_FOUND');
   assert.equal(
@@ -105,6 +136,22 @@ test('snapshot interpreter separates server facts from presentation events', () 
   assert.equal(
     interpretOnlineSnapshot({ phase: 'countdown' }, { phase: 'variantSelection' }),
     'VARIANT_SELECTION_STARTED',
+  );
+  assert.equal(
+    interpretOnlineSnapshot(
+      { phase: 'revealed' },
+      { phase: 'variantSelection', variantSelectionRound: 2 },
+      'variant-selection-started',
+    ),
+    'TIEBREAKER_SELECTION_STARTED',
+  );
+  assert.equal(
+    interpretOnlineSnapshot(
+      { phase: 'variantSelection', variantSelectionRound: 2 },
+      { phase: 'choosing', variantSelectionRound: 2 },
+      'variant-set-started',
+    ),
+    'TIEBREAKER_CHOSEN',
   );
   assert.equal(
     interpretOnlineSnapshot(

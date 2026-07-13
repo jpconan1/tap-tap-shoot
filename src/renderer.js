@@ -36,6 +36,15 @@ const READY_WAITING_READY_STEPS = Object.freeze([
   '7',
 ]);
 const READY_WAITING_SPLIT_STEP = 3;
+const BAN_ANIMATION_STEPS = Object.freeze([
+  'frame-1',
+  'frame-2',
+  'frame-3',
+  'frame-4',
+  'frame-5',
+  'frame-6',
+  'frame-7',
+]);
 
 const INTERACTION_DOODLES = Object.freeze({
   'reload|reload': 'reloading',
@@ -403,6 +412,12 @@ export function mountReadyWaitingOverlays(canvases) {
   });
 }
 
+export function mountBanAnimations(canvases) {
+  [...canvases].forEach((canvas) => {
+    startBanAnimation(canvas);
+  });
+}
+
 export function mountWaitingDotsOverlays(canvases) {
   [...canvases].forEach((canvas) => {
     startWaitingDotsLoop(canvas);
@@ -548,6 +563,55 @@ function drawReadyWaitingStep(canvas, context, layers, now) {
       canvas.height,
     );
   });
+}
+
+async function startBanAnimation(canvas) {
+  const context = getSharpContext(canvas);
+  await preloadDoodleSheets([
+    ...BAN_ANIMATION_STEPS.map((name) => `ban-animation/${name}`),
+    'ban-animation/x',
+  ]);
+  const startedAt = getRendererNow(performance.now());
+  let didFinish = false;
+
+  function tick(now) {
+    if (!canvas.isConnected) return;
+    const renderNow = getRendererNow(now);
+    const stepIndex = Math.floor((renderNow - startedAt) / READY_WAITING_STEP_DURATION);
+    const layer = stepIndex >= BAN_ANIMATION_STEPS.length
+      ? 'x'
+      : BAN_ANIMATION_STEPS[stepIndex];
+    drawBanAnimationFrame(canvas, context, layer, renderNow);
+
+    if (layer === 'x') {
+      if (!didFinish) {
+        didFinish = true;
+        canvas.dispatchEvent(new CustomEvent('ban-animation-complete', { bubbles: true }));
+      }
+      return;
+    }
+    requestAnimationFrame(tick);
+  }
+
+  requestAnimationFrame(tick);
+}
+
+function drawBanAnimationFrame(canvas, context, layer, now) {
+  const image = loadDoodleSheet(`ban-animation/${layer}`);
+  const frame = getBoilFrame(now);
+  context.clearRect(0, 0, canvas.width, canvas.height);
+  if (!image.complete || !image.naturalWidth) return;
+  context.drawImage(
+    image,
+    0,
+    frame * READY_WAITING_FRAME_HEIGHT,
+    READY_WAITING_FRAME_WIDTH,
+    READY_WAITING_FRAME_HEIGHT,
+    0,
+    0,
+    canvas.width,
+    canvas.height,
+  );
 }
 
 async function startWaitingDotsLoop(canvas) {
