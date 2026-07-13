@@ -15,6 +15,8 @@ function createDirector(log) {
     commit: () => log.push('commit'),
     show: (stage) => log.push(`show:${stage}`),
     openingCues: () => log.push('cues'),
+    disconnect: () => log.push('disconnect'),
+    exitRanked: () => log.push('exit-ranked'),
   });
 }
 
@@ -89,6 +91,14 @@ test('finished variant holds the result before opening the scoreboard', async ()
 test('snapshot interpreter separates server facts from presentation events', () => {
   assert.equal(interpretOnlineSnapshot(null, { phase: 'countdown' }), 'MATCH_FOUND');
   assert.equal(
+    interpretOnlineSnapshot(
+      { phase: 'revealed' },
+      { phase: 'gameOver', winner: 'p1', gameWins: { p1: 2, p2: 0 }, gameResults: [{}, {}] },
+      'match-ended',
+    ),
+    'MATCH_FINISHED',
+  );
+  assert.equal(
     interpretOnlineSnapshot({ phase: 'variantSelection' }, { phase: 'choosing' }, 'variant-set-started'),
     'VARIANTS_CHOSEN',
   );
@@ -112,4 +122,31 @@ test('snapshot interpreter separates server facts from presentation events', () 
     ),
     'NEXT_VARIANT_STARTED',
   );
+});
+
+test('straight-set match disconnects after showing the match result', async () => {
+  const log = [];
+  const director = createDirector(log);
+
+  await director.play('MATCH_FINISHED', { snapshot: {}, previousPhase: 'revealed' });
+
+  assert.deepEqual(log, ['commit', 'spike:playing', 'disconnect']);
+});
+
+test('match-result continue curtain-wipes to the final scoreboard', async () => {
+  const log = [];
+  const director = createDirector(log);
+
+  await director.play('FINAL_SCOREBOARD', { snapshot: {}, previousPhase: 'gameOver' });
+
+  assert.deepEqual(log, ['close', 'show:scoreboard', 'reattach', 'open']);
+});
+
+test('main menu curtain-wipes from scoreboard to title', async () => {
+  const log = [];
+  const director = createDirector(log);
+
+  await director.play('RETURN_TO_TITLE', { snapshot: {}, previousPhase: 'gameOver' });
+
+  assert.deepEqual(log, ['close', 'exit-ranked', 'show:title', 'reattach', 'open']);
 });

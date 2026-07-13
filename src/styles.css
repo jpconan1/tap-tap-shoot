@@ -421,6 +421,20 @@ canvas {
   display: block;
 }
 
+.match-result-name {
+  position: absolute;
+  bottom: 12px;
+  left: 50%;
+  z-index: 2;
+  width: 90%;
+  font-size: 24px;
+  font-weight: 800;
+  line-height: 1;
+  text-align: center;
+  overflow-wrap: anywhere;
+  transform: translateX(-50%);
+}
+
 .scoreboard-name {
   position: absolute;
   top: 108px;

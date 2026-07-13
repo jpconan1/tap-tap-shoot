@@ -474,6 +474,8 @@ const onlineFlowDirector = new OnlineFlowDirector({
     render();
   },
   openingCues: beginOpeningCues,
+  disconnect: () => rankedClient.close(),
+  exitRanked: resetRankedSession,
 });
 
 configureAudio({ getMusicTopperFile });
@@ -1590,13 +1592,14 @@ function renderScoreboardScreen() {
         </div>
         ${renderStaticDoodle('tie_breaker_button', 325, 128, 'scoreboard-tiebreaker')}
       </div>
-      ${renderScoreboardNextVariant(readyPlayerId === 'p1')}
-      ${readyPlayerId === 'p1'
+      ${renderScoreboardAction(readyPlayerId === 'p1')}
+      ${rankedSnapshot?.phase !== 'gameOver' && readyPlayerId === 'p1'
         ? '<div class="scoreboard-waiting-message">Waiting for your opponent</div>'
         : ''}
     </section>
   `;
   app.querySelector('[data-action="continue"]')?.addEventListener('click', submitRankedContinue);
+  app.querySelector('[data-action="main-menu"]')?.addEventListener('click', wipeToTitleFromScoreboard);
   mountSpriteRenderers(app.querySelectorAll('.sprite-canvas'));
   mountReadyWaitingOverlays(app.querySelectorAll('.scoreboard-ready'));
 }
@@ -1607,7 +1610,15 @@ function renderScoreboardReady(show) {
     : '';
 }
 
-function renderScoreboardNextVariant(isLocalReady) {
+function renderScoreboardAction(isLocalReady) {
+  if (rankedSnapshot?.phase === 'gameOver') {
+    return `
+      <div class="scoreboard-next-variant-wrap">
+        ${renderSheetButton('main-menu', 'main_menu_button', 'Main menu', 'scoreboard-next-variant')}
+      </div>
+    `;
+  }
+
   if (!rankedSnapshot?.pendingNextVariant) {
     return '';
   }
@@ -1619,6 +1630,26 @@ function renderScoreboardNextVariant(isLocalReady) {
         : renderSheetButton('continue', 'next_variant_button', 'Next variant', 'scoreboard-next-variant')}
     </div>
   `;
+}
+
+async function showFinalRankedScoreboard() {
+  if (isTransitioning) return;
+  isTransitioning = true;
+  await onlineFlowDirector.play('FINAL_SCOREBOARD', {
+    snapshot: rankedSnapshot,
+    previousPhase: rankedSnapshot?.phase,
+  });
+  isTransitioning = false;
+}
+
+async function wipeToTitleFromScoreboard() {
+  if (isTransitioning) return;
+  isTransitioning = true;
+  await onlineFlowDirector.play('RETURN_TO_TITLE', {
+    snapshot: rankedSnapshot,
+    previousPhase: rankedSnapshot?.phase,
+  });
+  isTransitioning = false;
 }
 
 function getScoreboardVariantScore(variantId) {
@@ -1726,7 +1757,10 @@ function renderLayoutGameScreen(legalMoves) {
 }
 
 function installLayoutActionHandlers() {
-  app.querySelector('[data-action="continue"]')?.addEventListener('click', continueGame);
+  app.querySelector('[data-action="continue"]')?.addEventListener(
+    'click',
+    isStraightSetMatchFinished() ? showFinalRankedScoreboard : continueGame,
+  );
   app.querySelector('[data-action="rematch"]')?.addEventListener('click', restartGame);
   app.querySelector('[data-action="quit"]')?.addEventListener('click', quitLocalGame);
   app.querySelector('[data-action="skip-game"]')?.addEventListener('click', skipRankedGame);
@@ -1911,6 +1945,8 @@ function renderLayoutRoundActions() {
       actions = rankedSnapshot.pendingNextVariant
         ? []
         : [{ slot: 'continue-button', markup: renderContinueButton() }];
+    } else if (isStraightSetMatchFinished()) {
+      actions = [{ slot: 'continue-button', markup: renderContinueButton() }];
     } else {
       actions = [
         { slot: 'continue-button', markup: renderSheetButton('rematch', 'continue_button', 'Continue', 'continue-button') },
@@ -1927,6 +1963,13 @@ function renderLayoutRoundActions() {
   }
 
   return actions.map(({ slot, markup }) => renderLayoutSlot(slot, markup, 'move-button-slot')).join('');
+}
+
+function isStraightSetMatchFinished() {
+  return playMode === 'online'
+    && rankedSnapshot?.phase === 'gameOver'
+    && rankedSnapshot?.gameResults?.length === 2
+    && rankedSnapshot?.gameWins?.[rankedSnapshot.winner] === 2;
 }
 
 function getActiveGameLayout() {
@@ -2026,11 +2069,19 @@ function renderStagePresentationArt() {
       <div class="stage-presentation-stack">
         ${renderSingleStagePresentation(stagePresentation.base)}
         ${renderSingleStagePresentation(stagePresentation.overlay, 'result-overlay')}
+        ${stagePresentation.overlay.name === 'system_scenes/round-game-match'
+          ? renderMatchResultName()
+          : ''}
       </div>
     `;
   }
 
   return renderSingleStagePresentation(stagePresentation);
+}
+
+function renderMatchResultName() {
+  const winnerName = rankedSnapshot?.players?.[rankedSnapshot.winner]?.displayName ?? 'Player';
+  return `<div class="match-result-name">${escapeHtml(winnerName)}</div>`;
 }
 
 function renderLastPickVersus() {
@@ -4865,7 +4916,7 @@ async function processRankedSnapshot(snapshot, transition = null) {
     return;
   }
 
-  if (['VARIANTS_CHOSEN', 'VARIANT_SELECTION_STARTED', 'NEXT_VARIANT_STARTED', 'VARIANT_GAME_FINISHED'].includes(flowEvent)) {
+  if (['VARIANTS_CHOSEN', 'VARIANT_SELECTION_STARTED', 'NEXT_VARIANT_STARTED', 'VARIANT_GAME_FINISHED', 'MATCH_FINISHED'].includes(flowEvent)) {
     clearRankedReadyWaitingTimer();
     variantDetailMenu?.overlay.remove();
     variantDetailMenu = null;
@@ -4979,7 +5030,11 @@ function commitRankedSnapshot(snapshot, previousPhase = rankedSnapshot?.phase) {
       base: getInteractionPresentation(stagePresentation),
       overlay: {
         kind: 'doodle',
-        name: snapshot.winner === snapshot.playerKey ? 'system_scenes/game_won' : 'system_scenes/game_lost',
+        name: isStraightSetMatchFinished()
+          ? 'system_scenes/round-game-match'
+          : snapshot.winner === snapshot.playerKey
+            ? 'system_scenes/game_won'
+            : 'system_scenes/game_lost',
         flip: false,
       },
     };
@@ -5220,13 +5275,19 @@ function skipRankedGame() {
 }
 
 function leaveRanked() {
+  resetRankedSession();
+  onlineFlowDirector.cancel();
+  screen = 'title';
+  render();
+}
+
+function resetRankedSession() {
   if (rankedDisconnectReturnTimer) {
     clearTimeout(rankedDisconnectReturnTimer);
     rankedDisconnectReturnTimer = null;
   }
   rankedClient.close();
   removeRankedQueueCurtain();
-  onlineFlowDirector.cancel();
   variantDetailMenu?.overlay.remove();
   variantDetailMenu = null;
   stopFindingMatchTicker();
@@ -5240,10 +5301,8 @@ function leaveRanked() {
   rankedReadyWaiting = null;
   rankedRoundAudioKey = null;
   rankedQueueError = null;
-  screen = 'title';
   turnPhase = 'idle';
   p1QueuedMove = null;
-  render();
 }
 
 function renderRankedDisconnectNotice() {

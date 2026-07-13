@@ -1,8 +1,8 @@
 import { ONLINE_FLOW_SEQUENCE } from './onlineFlowSequences.js';
 
 export class OnlineFlowDirector {
-  constructor({ closeCurtains, openCurtains, reattachCurtain, spikeWipe, waitBeats, commit, show, openingCues }) {
-    this.effects = { closeCurtains, openCurtains, reattachCurtain, spikeWipe, waitBeats, commit, show, openingCues };
+  constructor({ closeCurtains, openCurtains, reattachCurtain, spikeWipe, waitBeats, commit, show, openingCues, disconnect, exitRanked }) {
+    this.effects = { closeCurtains, openCurtains, reattachCurtain, spikeWipe, waitBeats, commit, show, openingCues, disconnect, exitRanked };
     this.curtain = null;
     this.mailbox = new Map();
     this.runId = 0;
@@ -63,5 +63,7 @@ export class OnlineFlowDirector {
     else if (step.type === 'cancelMailbox') this.mailbox.clear();
     else if (step.type === 'spikeWipe') await this.effects.spikeWipe(step.stage);
     else if (step.type === 'openingCues') this.effects.openingCues();
+    else if (step.type === 'disconnect') this.effects.disconnect?.();
+    else if (step.type === 'exitRanked') this.effects.exitRanked?.();
   }
 }
