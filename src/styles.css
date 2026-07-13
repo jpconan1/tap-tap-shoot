@@ -434,12 +434,12 @@ canvas {
 
 .scoreboard-name-left {
   left: 230px;
-  text-align: center;
+  text-align: right;
 }
 
 .scoreboard-name-right {
   right: 230px;
-  text-align: center;
+  text-align: left;
 }
 
 .scoreboard-ready {
@@ -457,15 +457,59 @@ canvas {
 }
 
 .scoreboard-name-right .scoreboard-ready {
-  right: 100%;
-  transform: translate(-8px, -50%) rotate(3deg);
+  left: 100%;
+  width: 112.5px;
+  height: 96px;
+  transform: translate(-20px, -50%) rotate(3deg);
 }
 
-.scoreboard-stage > .continue-button {
+.scoreboard-next-variant-wrap {
   position: absolute;
-  right: 54px;
-  bottom: 22px;
+  top: 50%;
+  right: 0;
   z-index: 9;
+  width: 192px;
+  height: 96px;
+  transform: translateY(-50%);
+}
+
+.scoreboard-next-variant {
+  width: 192px;
+  height: 96px;
+  transform: none;
+}
+
+.scoreboard-next-variant .sheet-button-art {
+  width: 192px;
+  height: 96px;
+}
+
+.scoreboard-next-variant:hover {
+  transform: translateY(-2px);
+}
+
+.scoreboard-next-variant:active {
+  transform: translateY(2px);
+}
+
+.scoreboard-next-ready {
+  left: 50%;
+  z-index: 2;
+  width: 112.5px;
+  height: 96px;
+  transform: translate(-50%, -50%) rotate(-3deg);
+}
+
+.scoreboard-waiting-message {
+  position: absolute;
+  bottom: 18px;
+  left: 50%;
+  z-index: 9;
+  width: 100%;
+  font-size: 24px;
+  font-weight: 800;
+  text-align: center;
+  transform: translateX(-50%);
 }
 
 .scoreboard-header {
@@ -797,8 +841,8 @@ canvas {
   position: absolute;
   left: 50%;
   top: 50%;
-  width: 150px;
-  height: 128px;
+  width: 400px;
+  height: 341.333px;
   transform: translate(-50%, -50%) rotate(-3deg);
   image-rendering: pixelated;
   pointer-events: none;
@@ -1025,6 +1069,7 @@ canvas {
 }
 
 .variant-detail-action {
+  position: relative;
   display: block;
   width: 192px;
   height: 96px;
@@ -1077,11 +1122,14 @@ canvas {
 }
 
 .variant-detail-ready {
-  display: block;
-  width: 112.5px;
-  height: 96px;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 400px;
+  height: 341.333px;
   image-rendering: pixelated;
   pointer-events: none;
+  transform: translate(-50%, -50%);
 }
 
 .variant-detail-slot-1 .variant-detail-copy,

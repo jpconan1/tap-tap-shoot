@@ -1570,7 +1570,6 @@ function renderScoreboardScreen() {
       ${renderOpenCurtainBorder()}
       <div class="scoreboard-name scoreboard-name-left">
         ${escapeHtml(localName)}
-        ${renderScoreboardReady(readyPlayerId === 'p1')}
       </div>
       <div class="scoreboard-name scoreboard-name-right">
         ${escapeHtml(opponentName)}
@@ -1591,8 +1590,9 @@ function renderScoreboardScreen() {
         </div>
         ${renderStaticDoodle('tie_breaker_button', 325, 128, 'scoreboard-tiebreaker')}
       </div>
-      ${rankedSnapshot?.pendingNextVariant && rankedSnapshot.players?.[rankedSnapshot.playerKey]?.canContinue
-        ? renderContinueButton()
+      ${renderScoreboardNextVariant(readyPlayerId === 'p1')}
+      ${readyPlayerId === 'p1'
+        ? '<div class="scoreboard-waiting-message">Waiting for your opponent</div>'
         : ''}
     </section>
   `;
@@ -1605,6 +1605,20 @@ function renderScoreboardReady(show) {
   return show
     ? '<canvas class="scoreboard-ready" width="300" height="256" aria-hidden="true"></canvas>'
     : '';
+}
+
+function renderScoreboardNextVariant(isLocalReady) {
+  if (!rankedSnapshot?.pendingNextVariant) {
+    return '';
+  }
+
+  return `
+    <div class="scoreboard-next-variant-wrap ${isLocalReady ? 'is-ready' : ''}">
+      ${isLocalReady
+        ? '<canvas class="scoreboard-ready scoreboard-next-ready" width="300" height="256" aria-hidden="true"></canvas>'
+        : renderSheetButton('continue', 'next_variant_button', 'Next variant', 'scoreboard-next-variant')}
+    </div>
+  `;
 }
 
 function getScoreboardVariantScore(variantId) {
