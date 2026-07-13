@@ -372,9 +372,10 @@ canvas {
 }
 
 .pick-variant-header.online-stage-header {
-  width: 380px;
-  height: 256px;
+  width: 607px;
+  height: 205px;
   margin-bottom: -54px;
+  transform: translateY(-40px) rotate(-0.3deg);
 }
 
 .online-interstitial {
@@ -389,10 +390,11 @@ canvas {
 }
 
 .online-interstitial-header {
-  width: 380px;
-  height: 256px;
+  width: 304px;
+  height: 205px;
   margin-bottom: -52px;
   image-rendering: pixelated;
+  transform: translateY(-40px);
 }
 
 .match-found-name {
@@ -421,9 +423,9 @@ canvas {
 
 .scoreboard-name {
   position: absolute;
-  top: 26px;
+  top: 108px;
   z-index: 8;
-  width: 300px;
+  width: 240px;
   font-size: 27px;
   font-weight: 800;
   line-height: 1;
@@ -431,42 +433,50 @@ canvas {
 }
 
 .scoreboard-name-left {
-  left: 38px;
-  text-align: left;
+  left: 230px;
+  text-align: center;
 }
 
 .scoreboard-name-right {
-  right: 38px;
-  text-align: right;
+  right: 230px;
+  text-align: center;
 }
 
 .scoreboard-header {
   position: absolute;
-  top: 14px;
-  left: 328px;
+  top: 4px;
+  left: 237px;
   z-index: 7;
-  width: 304px;
-  height: 128px;
+  width: 486px;
+  height: 102px;
   image-rendering: pixelated;
 }
 
 .scoreboard-board {
   position: absolute;
-  inset: 0;
+  top: 51px;
+  left: 48px;
   z-index: 3;
-  width: 960px;
-  height: 540px;
+  width: 864px;
+  height: 486px;
   image-rendering: pixelated;
 }
 
-.scoreboard-variants {
+.scoreboard-games {
   position: absolute;
-  top: 218px;
-  left: 160px;
+  top: 181px;
+  left: 246px;
   z-index: 7;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: center;
+}
+
+.scoreboard-game-row {
   display: grid;
-  grid-template-columns: 244px 64px 244px 64px;
-  gap: 8px;
+  grid-template-columns: 64px 244px 64px;
+  gap: 48px;
   align-items: center;
 }
 
@@ -476,19 +486,16 @@ canvas {
   image-rendering: pixelated;
 }
 
-.scoreboard-check {
+.scoreboard-win-counter {
   width: 64px;
   height: 64px;
   image-rendering: pixelated;
 }
 
 .scoreboard-tiebreaker {
-  position: absolute;
-  top: 358px;
-  left: 350px;
-  z-index: 7;
   width: 260px;
   height: 102px;
+  margin-top: -3px;
   image-rendering: pixelated;
 }
 
@@ -1025,6 +1032,30 @@ canvas {
   object-fit: contain;
   image-rendering: pixelated;
   filter: drop-shadow(3px 6px 0 rgba(29, 27, 24, 0.1));
+}
+
+.variant-detail-action.variant-detail-action-hidden {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.variant-detail-waiting {
+  margin-top: 12px;
+  color: var(--ink);
+  font-size: 24px;
+  font-weight: 700;
+}
+
+.variant-detail-fireballWar .variant-detail-waiting {
+  margin-top: 108px;
+}
+
+.variant-detail-ready {
+  display: block;
+  width: 112.5px;
+  height: 96px;
+  image-rendering: pixelated;
+  pointer-events: none;
 }
 
 .variant-detail-slot-1 .variant-detail-copy,

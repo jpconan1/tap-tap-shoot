@@ -170,6 +170,36 @@ test('submitted moves resolve immediately when both players lock in', async () =
   assert.equal(lastMessage(p2).revealedMoves.p2, 'stab');
 });
 
+test('skip game awards the current variant game to the sender without ending the match', async () => {
+  const { service, p1 } = await createMatchedService();
+  const room = onlyRoom(service);
+  room.remainingVariants = [VARIANT_IDS.tapTapShootY, VARIANT_IDS.fireballWar];
+  room.variantId = VARIANT_IDS.tapTapShootY;
+  room.phase = 'choosing';
+
+  service.receive(p1.session, { type: 'skipGame' });
+
+  assert.equal(room.gameWins.p1, 1);
+  assert.equal(room.gameWins.p2, 0);
+  assert.equal(room.phase, 'roundOver');
+  assert.equal(room.pendingNextVariant, true);
+  assert.equal(room.winner, null);
+});
+
+test('skip game can win the match when the sender takes a second game', async () => {
+  const { service, p2 } = await createMatchedService();
+  const room = onlyRoom(service);
+  room.remainingVariants = [VARIANT_IDS.tapTapShootY, VARIANT_IDS.fireballWar];
+  room.gameWins.p2 = 1;
+  room.phase = 'choosing';
+
+  service.receive(p2.session, { type: 'skipGame' });
+
+  assert.equal(room.gameWins.p2, 2);
+  assert.equal(room.phase, 'gameOver');
+  assert.equal(room.winner, 'p2');
+});
+
 test('Tap Tap Shoot Y rejects counterstab and accepts free stab', async () => {
   const { service, p1, p2 } = await createMatchedService({ variantId: VARIANT_IDS.tapTapShootY });
   const room = onlyRoom(service);

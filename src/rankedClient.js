@@ -120,6 +120,21 @@ export class RankedClient {
     return true;
   }
 
+  skipGame(snapshot) {
+    if (
+      !this.socket ||
+      this.socket.readyState !== WebSocket.OPEN ||
+      !snapshot ||
+      snapshot.pendingNextVariant ||
+      !['choosing', 'revealed', 'roundOver'].includes(snapshot.phase)
+    ) {
+      return false;
+    }
+
+    this.send({ type: 'skipGame', matchId: snapshot.matchId });
+    return true;
+  }
+
   close() {
     if (!this.socket) {
       return;

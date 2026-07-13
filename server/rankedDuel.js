@@ -107,6 +107,11 @@ export class RankedDuelService {
 
     if (message.type === 'submitContinue') {
       this.submitContinue(session);
+      return;
+    }
+
+    if (message.type === 'skipGame') {
+      this.skipGame(session);
     }
   }
 
@@ -625,6 +630,22 @@ export class RankedDuelService {
 
     room.pendingNextVariant = true;
     this.beginRoundOver(room);
+  }
+
+  skipGame(session) {
+    const room = this.rooms.get(session.roomId);
+
+    if (!room || room.pendingNextVariant || !['choosing', 'revealed', 'roundOver'].includes(room.phase)) {
+      return;
+    }
+
+    this.clearRoomTimer(room);
+    room.pendingMoves.clear();
+    room.pendingContinues.clear();
+    room.readyPlayerKey = null;
+    room.waitingPlayerKey = null;
+    room.deadlineAt = null;
+    this.finishVariantGame(room, this.getPlayerKey(room, session));
   }
 
   async finishRoom(room, winnerKey) {
