@@ -210,6 +210,7 @@ export class RankedDuelService {
       remainingVariants: [],
       currentVariantIndex: 0,
       gameWins: createEmptyScore(),
+      gameResults: [],
       roundWins: createEmptyScore(),
       timeoutStrikes: {
         p1: 0,
@@ -306,6 +307,7 @@ export class RankedDuelService {
     room.remainingVariants = room.variantPickOrder.map((playerKey) => room.variantPicks[playerKey]);
     room.currentVariantIndex = 0;
     room.gameWins = createEmptyScore();
+    room.gameResults = [];
     room.roundWins = createEmptyScore();
     room.pendingNextVariant = false;
     room.variantId = room.remainingVariants[0] ?? DEFAULT_VARIANT_ID;
@@ -613,6 +615,11 @@ export class RankedDuelService {
 
   finishVariantGame(room, winnerKey) {
     room.gameWins[winnerKey] += 1;
+    room.gameResults.push({
+      variantId: room.variantId,
+      roundWins: { ...room.roundWins },
+      winner: winnerKey,
+    });
 
     if (room.gameWins[winnerKey] >= 2 || room.variantSelectionRound === 2 || room.remainingVariants.length <= 1) {
       this.finishRoom(room, winnerKey);
@@ -645,7 +652,9 @@ export class RankedDuelService {
     room.readyPlayerKey = null;
     room.waitingPlayerKey = null;
     room.deadlineAt = null;
-    this.finishVariantGame(room, this.getPlayerKey(room, session));
+    const winnerKey = this.getPlayerKey(room, session);
+    room.roundWins[winnerKey] = getVariantTargetRoundWins(room.variantId);
+    this.finishVariantGame(room, winnerKey);
   }
 
   async finishRoom(room, winnerKey) {
@@ -775,6 +784,7 @@ export class RankedDuelService {
       variantSelectionRound: room.variantSelectionRound,
       remainingVariants: room.remainingVariants,
       gameWins: room.gameWins,
+      gameResults: room.gameResults,
       pendingNextVariant: room.pendingNextVariant,
       playerKey,
       opponentKey,

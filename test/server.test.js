@@ -181,6 +181,11 @@ test('skip game awards the current variant game to the sender without ending the
 
   assert.equal(room.gameWins.p1, 1);
   assert.equal(room.gameWins.p2, 0);
+  assert.deepEqual(room.gameResults, [{
+    variantId: VARIANT_IDS.tapTapShootY,
+    roundWins: { p1: 3, p2: 0 },
+    winner: 'p1',
+  }]);
   assert.equal(room.phase, 'roundOver');
   assert.equal(room.pendingNextVariant, true);
   assert.equal(room.winner, null);

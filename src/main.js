@@ -1560,29 +1560,63 @@ function renderScoreboardScreen() {
     : rankedSnapshot?.remainingVariants ?? [];
   const firstVariant = getComputerVariant(firstVariantId);
   const secondVariant = getComputerVariant(secondVariantId);
+  const firstScore = getScoreboardVariantScore(firstVariantId);
+  const secondScore = getScoreboardVariantScore(secondVariantId);
+  const readyPlayerId = rankedSnapshot?.readyPlayerKey === rankedSnapshot?.playerKey ? 'p1'
+    : rankedSnapshot?.readyPlayerKey === rankedSnapshot?.opponentKey ? 'p2'
+      : null;
   app.innerHTML = `
     <section class="online-interstitial scoreboard-stage" aria-label="Scoreboard">
       ${renderOpenCurtainBorder()}
-      <div class="scoreboard-name scoreboard-name-left">${escapeHtml(localName)}</div>
-      <div class="scoreboard-name scoreboard-name-right">${escapeHtml(opponentName)}</div>
+      <div class="scoreboard-name scoreboard-name-left">
+        ${escapeHtml(localName)}
+        ${renderScoreboardReady(readyPlayerId === 'p1')}
+      </div>
+      <div class="scoreboard-name scoreboard-name-right">
+        ${escapeHtml(opponentName)}
+        ${renderScoreboardReady(readyPlayerId === 'p2')}
+      </div>
       ${renderStaticDoodle('header-scoreboard', 1214, 256, 'scoreboard-header')}
       ${renderStaticDoodle('scoreboard', 960, 540, 'scoreboard-board')}
       <div class="scoreboard-games">
         <div class="scoreboard-game-row">
-          ${renderStaticDoodle('ft3-win-counter-0', 64, 64, 'scoreboard-win-counter')}
+          ${renderScoreboardWinCounter(firstVariantId, firstScore.p1)}
           ${renderStaticDoodle(firstVariant.buttonDoodle, VARIANT_BUTTON_FRAME_WIDTH, VARIANT_BUTTON_FRAME_HEIGHT, 'scoreboard-variant-button')}
-          ${renderStaticDoodle('ft3-win-counter-0', 64, 64, 'scoreboard-win-counter')}
+          ${renderScoreboardWinCounter(firstVariantId, firstScore.p2)}
         </div>
         <div class="scoreboard-game-row">
-          ${renderStaticDoodle('ft3-win-counter-0', 64, 64, 'scoreboard-win-counter')}
+          ${renderScoreboardWinCounter(secondVariantId, secondScore.p1)}
           ${renderStaticDoodle(secondVariant.buttonDoodle, VARIANT_BUTTON_FRAME_WIDTH, VARIANT_BUTTON_FRAME_HEIGHT, 'scoreboard-variant-button')}
-          ${renderStaticDoodle('ft3-win-counter-0', 64, 64, 'scoreboard-win-counter')}
+          ${renderScoreboardWinCounter(secondVariantId, secondScore.p2)}
         </div>
         ${renderStaticDoodle('tie_breaker_button', 325, 128, 'scoreboard-tiebreaker')}
       </div>
+      ${rankedSnapshot?.pendingNextVariant && rankedSnapshot.players?.[rankedSnapshot.playerKey]?.canContinue
+        ? renderContinueButton()
+        : ''}
     </section>
   `;
+  app.querySelector('[data-action="continue"]')?.addEventListener('click', submitRankedContinue);
   mountSpriteRenderers(app.querySelectorAll('.sprite-canvas'));
+  mountReadyWaitingOverlays(app.querySelectorAll('.scoreboard-ready'));
+}
+
+function renderScoreboardReady(show) {
+  return show
+    ? '<canvas class="scoreboard-ready" width="300" height="256" aria-hidden="true"></canvas>'
+    : '';
+}
+
+function getScoreboardVariantScore(variantId) {
+  const result = rankedSnapshot?.gameResults?.find((gameResult) => gameResult.variantId === variantId);
+  return {
+    p1: result?.roundWins?.[rankedSnapshot.playerKey] ?? 0,
+    p2: result?.roundWins?.[rankedSnapshot.opponentKey] ?? 0,
+  };
+}
+
+function renderScoreboardWinCounter(variantId, wins) {
+  return renderStaticDoodle(getWinCounterDoodle(variantId, wins), 64, 64, 'scoreboard-win-counter');
 }
 
 function getRankedVariantSelectVariants() {
@@ -1737,14 +1771,15 @@ function renderTurnCounter() {
 
 function renderWinCounter(playerId) {
   const targetRoundWins = getVariantTargetRoundWins(getCurrentVariantId());
-
-  if (targetRoundWins === 5 && roundWins[playerId] <= 0) {
-    return '';
-  }
-
   const counter = Math.min(roundWins[playerId], targetRoundWins);
-  const doodle = targetRoundWins === 5 ? `w${counter}` : `ft3-win-counter-${counter}`;
+  const doodle = getWinCounterDoodle(getCurrentVariantId(), counter);
   return renderStaticDoodle(doodle, WIN_MARK_FRAME_WIDTH, WIN_MARK_FRAME_HEIGHT, 'win-mark');
+}
+
+function getWinCounterDoodle(variantId, wins) {
+  const targetRoundWins = getVariantTargetRoundWins(variantId);
+  const counter = Math.max(0, Math.min(wins, targetRoundWins));
+  return targetRoundWins === 5 ? `ft5-w${counter}` : `ft3-win-counter-${counter}`;
 }
 
 function renderLayoutBulletSlots(playerId) {
@@ -1859,7 +1894,9 @@ function renderLayoutRoundActions() {
     if (rankedSnapshot?.noContest && !rankedSnapshot.winner) {
       actions = [{ slot: 'quit-button', markup: renderSheetButton('quit', 'quit_button', 'Back to menu', 'quit-button') }];
     } else if (rankedSnapshot?.phase === 'roundOver') {
-      actions = [{ slot: 'continue-button', markup: renderContinueButton() }];
+      actions = rankedSnapshot.pendingNextVariant
+        ? []
+        : [{ slot: 'continue-button', markup: renderContinueButton() }];
     } else {
       actions = [
         { slot: 'continue-button', markup: renderSheetButton('rematch', 'continue_button', 'Continue', 'continue-button') },
@@ -3466,6 +3503,9 @@ function renderActionButtons(legalMoves) {
       }
 
       if (rankedSnapshot?.phase === 'roundOver') {
+        if (rankedSnapshot.pendingNextVariant) {
+          return '';
+        }
         return renderContinueButton();
       }
 
@@ -4811,7 +4851,7 @@ async function processRankedSnapshot(snapshot, transition = null) {
     return;
   }
 
-  if (flowEvent === 'VARIANTS_CHOSEN' || flowEvent === 'VARIANT_SELECTION_STARTED') {
+  if (['VARIANTS_CHOSEN', 'VARIANT_SELECTION_STARTED', 'NEXT_VARIANT_STARTED', 'VARIANT_GAME_FINISHED'].includes(flowEvent)) {
     clearRankedReadyWaitingTimer();
     variantDetailMenu?.overlay.remove();
     variantDetailMenu = null;
@@ -4864,7 +4904,9 @@ async function wipeToRankedSnapshot(snapshot, previousPhase) {
 function commitRankedSnapshot(snapshot, previousPhase = rankedSnapshot?.phase) {
   rankedSnapshot = snapshot;
   rankedReadyWaiting = getRankedReadyWaitingFromSnapshot(snapshot);
-  screen = 'playing';
+  screen = screen === 'scoreboard' && snapshot.phase === 'roundOver' && snapshot.pendingNextVariant
+    ? 'scoreboard'
+    : 'playing';
   setCachedActiveGameLayoutForVariant(snapshot.currentVariantId ?? snapshot.variantId ?? DEFAULT_VARIANT_ID);
   state = getLocalStateFromRankedSnapshot(snapshot);
   roundWins = getLocalRoundWinsFromRankedSnapshot(snapshot);
@@ -4896,12 +4938,17 @@ function commitRankedSnapshot(snapshot, previousPhase = rankedSnapshot?.phase) {
     stagePresentation = pendingSuperAnimation?.frames[0]
       ?? getVariantStagePresentation(result, lastMoves.p1, lastMoves.p2, { variantId: snapshot.currentVariantId ?? snapshot.variantId });
   } else if (snapshot.phase === 'roundOver') {
+    const didFinishVariantGame = Boolean(snapshot.pendingNextVariant);
     stagePresentation = {
       kind: 'overlay',
       base: getInteractionPresentation(stagePresentation),
       overlay: {
         kind: 'doodle',
-        name: getRoundOverDoodle(getLocalRoundWinnerFromRankedSnapshot(snapshot), true),
+        name: didFinishVariantGame
+          ? snapshot.round?.winner === snapshot.playerKey
+            ? 'system_scenes/game_won'
+            : 'system_scenes/game_lost'
+          : getRoundOverDoodle(getLocalRoundWinnerFromRankedSnapshot(snapshot), true),
         flip: false,
       },
     };

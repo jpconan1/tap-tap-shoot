@@ -53,6 +53,39 @@ test('variants-chosen sequence owns scoreboard and spike wipe', async () => {
   ]);
 });
 
+test('next variant leaves the scoreboard after both players continue', async () => {
+  const log = [];
+  const director = createDirector(log);
+
+  await director.play('NEXT_VARIANT_STARTED', { snapshot: {}, previousPhase: 'roundOver' });
+
+  assert.deepEqual(log, [
+    'close',
+    'commit',
+    'show:playing',
+    'reattach',
+    'open',
+    'cues',
+  ]);
+});
+
+test('finished variant holds the result before opening the scoreboard', async () => {
+  const log = [];
+  const director = createDirector(log);
+
+  await director.play('VARIANT_GAME_FINISHED', { snapshot: {}, previousPhase: 'revealed' });
+
+  assert.deepEqual(log, [
+    'commit',
+    'show:playing',
+    'wait:2',
+    'close',
+    'show:scoreboard',
+    'reattach',
+    'open',
+  ]);
+});
+
 test('snapshot interpreter separates server facts from presentation events', () => {
   assert.equal(interpretOnlineSnapshot(null, { phase: 'countdown' }), 'MATCH_FOUND');
   assert.equal(
@@ -62,5 +95,21 @@ test('snapshot interpreter separates server facts from presentation events', () 
   assert.equal(
     interpretOnlineSnapshot({ phase: 'countdown' }, { phase: 'variantSelection' }),
     'VARIANT_SELECTION_STARTED',
+  );
+  assert.equal(
+    interpretOnlineSnapshot(
+      { phase: 'revealed' },
+      { phase: 'roundOver', pendingNextVariant: true },
+      'round-ended',
+    ),
+    'VARIANT_GAME_FINISHED',
+  );
+  assert.equal(
+    interpretOnlineSnapshot(
+      { phase: 'roundOver', pendingNextVariant: true },
+      { phase: 'choosing', pendingNextVariant: false },
+      'next-turn-started',
+    ),
+    'NEXT_VARIANT_STARTED',
   );
 });

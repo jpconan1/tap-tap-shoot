@@ -442,6 +442,32 @@ canvas {
   text-align: center;
 }
 
+.scoreboard-ready {
+  position: absolute;
+  top: 50%;
+  width: 75px;
+  height: 64px;
+  image-rendering: pixelated;
+  pointer-events: none;
+}
+
+.scoreboard-name-left .scoreboard-ready {
+  left: 100%;
+  transform: translate(8px, -50%) rotate(-3deg);
+}
+
+.scoreboard-name-right .scoreboard-ready {
+  right: 100%;
+  transform: translate(-8px, -50%) rotate(3deg);
+}
+
+.scoreboard-stage > .continue-button {
+  position: absolute;
+  right: 54px;
+  bottom: 22px;
+  z-index: 9;
+}
+
 .scoreboard-header {
   position: absolute;
   top: 4px;
