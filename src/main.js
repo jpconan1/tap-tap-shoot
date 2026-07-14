@@ -490,10 +490,16 @@ const onlineFlowDirector = new OnlineFlowDirector({
   },
   commit: commitRankedSnapshot,
   show: (stage) => {
+    if (stage === 'title' || (stage === 'scoreboard' && rankedSnapshot?.phase !== 'gameOver')) {
+      requestMusicTrack('title');
+    }
     screen = stage;
     render();
   },
-  openingCues: beginOpeningCues,
+  openingCues: () => {
+    requestMusicTrack('game');
+    beginOpeningCues();
+  },
   disconnect: () => rankedClient.close(),
   exitRanked: resetRankedSession,
 });

@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "audio:normalize": "bash scripts/normalize-sfx.sh",
     "assets:compress-staged": "scripts/compress-staged-assets.sh",
     "assets:check": "scripts/check-compressed-assets.sh",
     "itch:pack": "sh scripts/package-itch.sh",
