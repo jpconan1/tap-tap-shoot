@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { isIP } from 'node:net';
 
 const WS_GUID = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11';
 const DEFAULT_MAX_MESSAGE_BYTES = 16 * 1024;
@@ -12,8 +13,22 @@ export function attachWebSocketServer(server, {
   maxBufferedBytes = DEFAULT_MAX_BUFFERED_BYTES,
   heartbeatMs = DEFAULT_HEARTBEAT_MS,
   maxConnections = Infinity,
+  maxConnectionsPerIp = 25,
+  maxConnectionsPerMinute = 30,
+  maxMessagesPerSecond = 20,
+  trustProxy = false,
+  now = () => Date.now(),
 }) {
   let activeConnections = 0;
+  const ipLimiter = createIpConnectionLimiter({
+    maxActive: maxConnectionsPerIp,
+    maxAttempts: maxConnectionsPerMinute,
+    windowMs: 60_000,
+    now,
+  });
+  const cleanupTimer = setInterval(() => ipLimiter.cleanup(), 60_000);
+  cleanupTimer.unref?.();
+  server.on('close', () => clearInterval(cleanupTimer));
 
   server.on('upgrade', (request, socket) => {
     if (new URL(request.url, 'http://localhost').pathname !== path) {
@@ -35,6 +50,14 @@ export function attachWebSocketServer(server, {
       return;
     }
 
+    const clientIp = getClientIp(request, { trustProxy });
+    const admission = ipLimiter.acquire(clientIp);
+    if (!admission.ok) {
+      socket.write('HTTP/1.1 429 Too Many Requests\r\nConnection: close\r\nRetry-After: 60\r\n\r\n');
+      socket.destroy();
+      return;
+    }
+
     activeConnections += 1;
 
     const accept = createHash('sha1').update(`${key}${WS_GUID}`).digest('base64');
@@ -51,8 +74,11 @@ export function attachWebSocketServer(server, {
       maxMessageBytes,
       maxBufferedBytes,
       heartbeatMs,
+      maxMessagesPerSecond,
+      now,
       onClose() {
         activeConnections -= 1;
+        admission.release();
       },
     });
     onConnection(connection, request);
@@ -63,6 +89,8 @@ function createWebSocketConnection(socket, {
   maxMessageBytes,
   maxBufferedBytes,
   heartbeatMs,
+  maxMessagesPerSecond,
+  now,
   onClose,
 }) {
   let buffer = Buffer.alloc(0);
@@ -70,6 +98,11 @@ function createWebSocketConnection(socket, {
   let closed = false;
   const messageListeners = new Set();
   const closeListeners = new Set();
+  const messageLimiter = createSlidingWindowLimiter({
+    limit: maxMessagesPerSecond,
+    windowMs: 1_000,
+    now,
+  });
   const heartbeat = heartbeatMs > 0
     ? setInterval(() => {
       if (!alive) {
@@ -110,6 +143,11 @@ function createWebSocketConnection(socket, {
         if (frame.opcode === 0xA) {
           alive = true;
           continue;
+        }
+
+        if (!messageLimiter.allow()) {
+          closeWithCode(1008, 'message rate exceeded');
+          return;
         }
 
         const message = frame.payload.toString('utf8');
@@ -182,6 +220,89 @@ function createWebSocketConnection(socket, {
     },
     onClose(listener) {
       closeListeners.add(listener);
+    },
+  };
+}
+
+export function getClientIp(request, { trustProxy = false } = {}) {
+  if (trustProxy) {
+    const forwarded = request.headers?.['x-forwarded-for'];
+    const candidate = Array.isArray(forwarded) ? forwarded[0] : forwarded?.split(',')[0]?.trim();
+    if (candidate && isIP(candidate)) {
+      return candidate;
+    }
+  }
+
+  return request.socket?.remoteAddress || 'unknown';
+}
+
+export function createIpConnectionLimiter({ maxActive, maxAttempts, windowMs, now = () => Date.now() }) {
+  const entries = new Map();
+
+  function getEntry(ip) {
+    let entry = entries.get(ip);
+    if (!entry) {
+      entry = { active: 0, attempts: [] };
+      entries.set(ip, entry);
+    }
+    prune(entry);
+    return entry;
+  }
+
+  function prune(entry) {
+    const cutoff = now() - windowMs;
+    while (entry.attempts[0] <= cutoff) {
+      entry.attempts.shift();
+    }
+  }
+
+  return {
+    acquire(ip) {
+      const entry = getEntry(ip);
+      if (entry.attempts.length >= maxAttempts) {
+        return { ok: false, reason: 'attempts' };
+      }
+      entry.attempts.push(now());
+      if (entry.active >= maxActive) {
+        return { ok: false, reason: 'active' };
+      }
+      entry.active += 1;
+      let released = false;
+      return {
+        ok: true,
+        release() {
+          if (!released) {
+            released = true;
+            entry.active = Math.max(0, entry.active - 1);
+          }
+        },
+      };
+    },
+    cleanup() {
+      for (const [ip, entry] of entries) {
+        prune(entry);
+        if (entry.active === 0 && entry.attempts.length === 0) {
+          entries.delete(ip);
+        }
+      }
+    },
+    entries,
+  };
+}
+
+export function createSlidingWindowLimiter({ limit, windowMs, now = () => Date.now() }) {
+  const events = [];
+  return {
+    allow() {
+      const cutoff = now() - windowMs;
+      while (events[0] <= cutoff) {
+        events.shift();
+      }
+      if (events.length >= limit) {
+        return false;
+      }
+      events.push(now());
+      return true;
     },
   };
 }

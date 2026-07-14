@@ -1,6 +1,7 @@
 import { createHmac, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 
 const DEFAULT_TOKEN_LIFETIME_MS = 7 * 24 * 60 * 60 * 1000;
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export function createGuestTokenService({
   secret,
@@ -52,7 +53,7 @@ export function createGuestTokenService({
       if (
         claims.v !== 1
         || typeof claims.playerId !== 'string'
-        || claims.playerId.length > 100
+        || !UUID_PATTERN.test(claims.playerId)
         || !Number.isFinite(claims.expiresAt)
         || claims.expiresAt <= now()
       ) {

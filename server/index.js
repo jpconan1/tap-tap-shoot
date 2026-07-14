@@ -37,10 +37,14 @@ export function createTapTapShootServer({
 
   attachWebSocketServer(server, {
     path: '/ws',
-    maxConnections: Number(env.WS_MAX_CONNECTIONS ?? 2000),
-    maxMessageBytes: Number(env.WS_MAX_MESSAGE_BYTES ?? 16 * 1024),
-    maxBufferedBytes: Number(env.WS_MAX_BUFFERED_BYTES ?? 256 * 1024),
-    heartbeatMs: Number(env.WS_HEARTBEAT_MS ?? 30 * 1000),
+    maxConnections: readPositiveNumber(env.WS_MAX_CONNECTIONS, 2000),
+    maxMessageBytes: readPositiveNumber(env.WS_MAX_MESSAGE_BYTES, 16 * 1024),
+    maxBufferedBytes: readPositiveNumber(env.WS_MAX_BUFFERED_BYTES, 256 * 1024),
+    heartbeatMs: readPositiveNumber(env.WS_HEARTBEAT_MS, 30 * 1000),
+    maxConnectionsPerIp: readPositiveNumber(env.WS_MAX_CONNECTIONS_PER_IP, 25),
+    maxConnectionsPerMinute: readPositiveNumber(env.WS_CONNECTIONS_PER_MINUTE, 30),
+    maxMessagesPerSecond: readPositiveNumber(env.WS_MESSAGES_PER_SECOND, 20),
+    trustProxy: env.NODE_ENV === 'production',
     onConnection(connection) {
       attachRankedConnection(connection, { rankedDuel, guestTokens });
     },
@@ -208,6 +212,11 @@ function getErrorMessage(error) {
   }
 
   return JSON.stringify(error);
+}
+
+function readPositiveNumber(value, fallback) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

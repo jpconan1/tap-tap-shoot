@@ -4,11 +4,59 @@ import test from 'node:test';
 
 import { MemoryPlayerStore } from '../server/playerStore.js';
 import { RankedDuelService } from '../server/rankedDuel.js';
-import { attachWebSocketServer } from '../server/webSocket.js';
+import {
+  attachWebSocketServer,
+  createIpConnectionLimiter,
+  createSlidingWindowLimiter,
+  getClientIp,
+} from '../server/webSocket.js';
 import { attachRankedConnection } from '../server/index.js';
 import { createGuestTokenService } from '../server/guestToken.js';
 
 const TOKEN_SECRET = 'websocket-test-secret-that-is-longer-than-32-characters';
+
+test('IP connection limiter caps active sockets and rolling attempts', () => {
+  let now = 0;
+  const limiter = createIpConnectionLimiter({
+    maxActive: 2,
+    maxAttempts: 3,
+    windowMs: 60_000,
+    now: () => now,
+  });
+  const first = limiter.acquire('203.0.113.1');
+  const second = limiter.acquire('203.0.113.1');
+
+  assert.equal(first.ok, true);
+  assert.equal(second.ok, true);
+  assert.equal(limiter.acquire('203.0.113.1').reason, 'active');
+  first.release();
+  assert.equal(limiter.acquire('203.0.113.1').reason, 'attempts');
+
+  now = 60_001;
+  assert.equal(limiter.acquire('203.0.113.1').ok, true);
+  second.release();
+});
+
+test('message limiter permits bursts up to limit then recovers', () => {
+  let now = 0;
+  const limiter = createSlidingWindowLimiter({ limit: 2, windowMs: 1_000, now: () => now });
+
+  assert.equal(limiter.allow(), true);
+  assert.equal(limiter.allow(), true);
+  assert.equal(limiter.allow(), false);
+  now = 1_001;
+  assert.equal(limiter.allow(), true);
+});
+
+test('proxy IP is trusted only when explicitly enabled', () => {
+  const request = {
+    headers: { 'x-forwarded-for': '198.51.100.4, 10.0.0.1' },
+    socket: { remoteAddress: '127.0.0.1' },
+  };
+
+  assert.equal(getClientIp(request), '127.0.0.1');
+  assert.equal(getClientIp(request, { trustProxy: true }), '198.51.100.4');
+});
 
 test('WebSocket clients can connect, queue, and receive match state', async (t) => {
   const service = new RankedDuelService({

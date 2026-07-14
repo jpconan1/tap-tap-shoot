@@ -51,12 +51,20 @@ export class RankedDuelService {
     this.createId = createId;
     this.onError = onError;
     this.sessions = new Map();
+    this.sessionsByPlayerId = new Map();
     this.queue = [];
     this.rooms = new Map();
   }
 
   async connect(client, authenticatedPlayerId, sessionToken) {
     const playerId = authenticatedPlayerId || this.createId();
+    const existingSession = this.sessionsByPlayerId.get(playerId);
+
+    if (existingSession && !existingSession.closed) {
+      await this.disconnect(existingSession);
+      existingSession.client.close?.();
+    }
+
     const player = await this.playerStore.getPlayer(playerId);
     const session = {
       id: this.createId(),
@@ -70,6 +78,7 @@ export class RankedDuelService {
     };
 
     this.sessions.set(session.id, session);
+    this.sessionsByPlayerId.set(player.id, session);
     this.send(session, 'hello', {
       playerId: player.id,
       rating: player.rating,
@@ -132,8 +141,12 @@ export class RankedDuelService {
     this.leaveQueue(session);
     this.sessions.delete(session.id);
 
+    if (this.sessionsByPlayerId.get(session.player.id) === session) {
+      this.sessionsByPlayerId.delete(session.player.id);
+    }
+
     if (session.roomId) {
-      this.forfeitRoom(session.roomId, session);
+      return this.forfeitRoom(session.roomId, session);
     }
   }
 
@@ -756,7 +769,7 @@ export class RankedDuelService {
       return;
     }
 
-    this.finishRoom(room, winnerKey);
+    return this.finishRoom(room, winnerKey);
   }
 
   getPlayerKey(room, session) {

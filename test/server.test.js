@@ -145,16 +145,36 @@ test('matchmaking waits on rating gaps until search spread widens', async () => 
   assert.equal(service.rooms.size, 1);
 });
 
-test('matchmaking does not pair two sessions for the same player', async () => {
+test('newest connection replaces older session for the same player', async () => {
   const service = createTestService();
   const firstSession = await connectTestPlayer(service, 'p1');
+  service.receive(firstSession.session, { type: 'joinRanked' });
   const secondSession = await connectTestPlayer(service, 'p1');
 
-  service.receive(firstSession.session, { type: 'joinRanked' });
   service.receive(secondSession.session, { type: 'joinRanked' });
 
+  assert.equal(firstSession.session.closed, true);
+  assert.equal(firstSession.client.closed, true);
   assert.equal(service.rooms.size, 0);
-  assert.equal(service.queue.length, 2);
+  assert.deepEqual(service.queue, [secondSession.session]);
+  assert.equal(service.getOnlinePlayerCount(), 1);
+});
+
+test('replacement connection forfeits old active match before loading rating', async () => {
+  const { service, p1, p2, store } = await createMatchedService();
+  const room = onlyRoom(service);
+  service.beginBanning(room);
+  service.receive(p1.session, { type: 'submitVariantPick', variantId: VARIANT_IDS.rockPaperScissors });
+  service.receive(p2.session, { type: 'submitVariantPick', variantId: VARIANT_IDS.fireballWar });
+
+  const replacement = await connectTestPlayer(service, 'p1');
+
+  assert.equal(p1.session.closed, true);
+  assert.equal(p1.client.closed, true);
+  assert.equal(room.phase, 'gameOver');
+  assert.equal(room.winner, 'p2');
+  assert.equal(replacement.session.player.losses, 1);
+  assert.equal((await store.getPlayer('p2')).wins, 1);
 });
 
 test('submitted moves resolve immediately when both players lock in', async () => {
@@ -628,13 +648,18 @@ async function createMatchedService(options) {
 
 async function connectTestPlayer(service, playerId) {
   const messages = [];
-  const session = await service.connect({
+  const client = {
+    closed: false,
     send(raw) {
       messages.push(JSON.parse(raw));
     },
-  }, playerId);
+    close() {
+      this.closed = true;
+    },
+  };
+  const session = await service.connect(client, playerId);
 
-  return { session, messages };
+  return { session, messages, client };
 }
 
 function onlyRoom(service) {
