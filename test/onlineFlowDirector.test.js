@@ -81,7 +81,7 @@ test('finished variant holds the result before opening the scoreboard', async ()
 
   assert.deepEqual(log, [
     'commit',
-    'show:playing',
+    'spike:playing',
     'wait:2',
     'close',
     'show:scoreboard',

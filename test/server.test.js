@@ -358,6 +358,23 @@ test('finished round waits for both players to continue', async () => {
   assert.equal(room.roundState.status, 'playing');
 });
 
+test('ordinary Rock Paper Scissors wins open the next throw without continues', async () => {
+  const { service, p1, p2 } = await createMatchedService({ revealMs: 1000 });
+  const room = onlyRoom(service);
+  room.variantId = VARIANT_IDS.rockPaperScissors;
+  room.roundState = createRoundState({ variantId: room.variantId });
+
+  service.beginChoosing(room);
+  service.receive(p1.session, { type: 'submitMove', moveId: 'rock' });
+  service.receive(p2.session, { type: 'submitMove', moveId: 'scissors' });
+  await wait(10);
+
+  assert.equal(room.roundWins.p1, 1);
+  assert.equal(room.phase, 'choosing');
+  assert.equal(room.roundState.status, 'playing');
+  assert.equal(lastMessage(p1).players.p1.canContinue, false);
+});
+
 test('third timeout loses match regardless of score', async () => {
   const { service, p1, p2, store } = await createMatchedService({ turnMs: 10 });
   const room = onlyRoom(service);

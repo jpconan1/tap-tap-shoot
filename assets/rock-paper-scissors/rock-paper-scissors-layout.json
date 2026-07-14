@@ -17,6 +17,7 @@
     "playing.default": {
       "name": "Playing",
       "elements": [
+        { "id": "rock-paper-scissors-rules-playing-default", "key": "rules-button", "kind": "image", "name": "Rules button", "text": "Rules button", "asset": "assets/rules_button_sheet.webp", "frameIndex": 0, "sourceWidth": 256, "sourceHeight": 128, "x": 12, "y": 456, "width": 128, "height": 64 },
         {
           "id": "803b4f7e-7796-47ab-b171-ef3aacac38ab",
           "key": "scene",
@@ -346,6 +347,7 @@
     "playing.disadvantaged": {
       "name": "Disadvantaged",
       "elements": [
+        { "id": "rock-paper-scissors-rules-playing-disadvantaged", "key": "rules-button", "kind": "image", "name": "Rules button", "text": "Rules button", "asset": "assets/rules_button_sheet.webp", "frameIndex": 0, "sourceWidth": 256, "sourceHeight": 128, "x": 12, "y": 456, "width": 128, "height": 64 },
         {
           "id": "803b4f7e-7796-47ab-b171-ef3aacac38ab",
           "key": "scene",

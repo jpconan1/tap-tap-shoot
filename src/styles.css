@@ -1166,6 +1166,38 @@ canvas {
   pointer-events: none;
 }
 
+.gameplay-rules-button-slot {
+  pointer-events: auto;
+}
+
+.gameplay-rules-button {
+  width: 100%;
+  height: 100%;
+}
+
+.gameplay-rules-button .sheet-button-art {
+  width: 100%;
+  height: 100%;
+}
+
+.gameplay-rules-overlay {
+  z-index: 300;
+  background: rgba(29, 27, 24, 0.2);
+}
+
+.gameplay-rules-overlay .variant-detail-copy {
+  top: 62px;
+  left: 50%;
+  width: 700px;
+  min-height: 300px;
+  transform: translateX(-50%) rotate(-0.35deg);
+}
+
+.gameplay-rules-overlay .variant-detail-actions {
+  left: 50%;
+  transform: translateX(-50%);
+}
+
 .variant-detail-waiting {
   margin-top: 12px;
   color: var(--ink);

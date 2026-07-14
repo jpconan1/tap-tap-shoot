@@ -47,7 +47,7 @@ export const ONLINE_FLOW_SEQUENCE = Object.freeze({
   ]),
   VARIANT_GAME_FINISHED: Object.freeze([
     Object.freeze({ type: 'commit' }),
-    Object.freeze({ type: 'show', stage: 'playing' }),
+    Object.freeze({ type: 'spikeWipe', stage: 'playing' }),
     Object.freeze({ type: 'waitBeats', beats: 2 }),
     Object.freeze({ type: 'closeCurtains' }),
     Object.freeze({ type: 'show', stage: 'scoreboard' }),

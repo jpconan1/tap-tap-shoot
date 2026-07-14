@@ -10,6 +10,7 @@ import {
   normalizeVariantId,
 } from '../src/engine/moves.js';
 import { MemoryPlayerStore } from './playerStore.js';
+import { shouldAutoAdvanceRound } from '../src/presentation/gameFlowPolicies.js';
 
 const MAX_TIMEOUT_STRIKES = 3;
 const DEFAULT_COUNTDOWN_MS = 3000;
@@ -465,6 +466,7 @@ export class RankedDuelService {
 
     this.broadcastRoom(room, { revealedMoves: { p1: p1Move, p2: p2Move } }, 'turn-revealed');
 
+    const revealDelay = shouldAutoAdvanceRound(room.variantId) ? 0 : this.revealMs;
     this.setRoomTimer(room, () => {
       if (room.roundState.status !== 'finished') {
         this.beginChoosing(room);
@@ -478,8 +480,13 @@ export class RankedDuelService {
         return;
       }
 
+      if (shouldAutoAdvanceRound(room.variantId)) {
+        this.beginNextRound(room);
+        return;
+      }
+
       this.beginRoundOver(room);
-    }, this.revealMs);
+    }, revealDelay);
   }
 
   beginRoundOver(room) {
@@ -620,6 +627,7 @@ export class RankedDuelService {
       },
     }, 'turn-revealed');
 
+    const revealDelay = shouldAutoAdvanceRound(room.variantId) ? 0 : this.revealMs;
     this.setRoomTimer(room, () => {
       const targetRoundWins = getVariantTargetRoundWins(room.variantId);
       if (room.roundWins.p1 >= targetRoundWins || room.roundWins.p2 >= targetRoundWins) {
@@ -627,8 +635,13 @@ export class RankedDuelService {
         return;
       }
 
+      if (shouldAutoAdvanceRound(room.variantId)) {
+        this.beginNextRound(room);
+        return;
+      }
+
       this.beginRoundOver(room);
-    }, this.revealMs);
+    }, revealDelay);
   }
 
   applyTimeoutStrike(room, loserKey) {

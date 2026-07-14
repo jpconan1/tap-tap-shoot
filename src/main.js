@@ -43,6 +43,7 @@ import { RankedClient, RankedUpdateQueue } from './rankedClient.js';
 import { getServerHttpUrl } from './serverUrl.js';
 import { OnlineFlowDirector } from './presentation/onlineFlowDirector.js';
 import { interpretOnlineSnapshot } from './presentation/onlineFlowSequences.js';
+import { GameFlowDirector } from './presentation/gameFlowDirector.js';
 import { getResourcePresentation, shouldShowPickHistoryForVariant } from './variantPresentation.js';
 import { resolveReadyScene, resolveScene, swapScenePerspective } from './sceneResolver.js';
 import { VARIANT_SELECT_PAGE_SIZE, VARIANT_SELECT_VARIANTS } from './variantSelectConfig.js';
@@ -130,7 +131,6 @@ const DEFAULT_LAYOUT_STATE_ID = 'playing.default';
 const DISADVANTAGED_LAYOUT_STATE_ID = 'playing.disadvantaged';
 const BETWEEN_ROUND_LAYOUT_STATE_ID = 'round.between';
 const GAME_OVER_LAYOUT_STATE_ID = 'round.game-over';
-const ROUND_OVER_SCENE_BEATS = 2;
 const SUPER_FINAL_FRAME_COUNT = 4;
 const SUPER_FINAL_FRAME_MS = 320;
 const SUPER_FINAL_LINGER_BEATS = 1;
@@ -417,6 +417,7 @@ let isBoilEnabled = readStoredBoilEnabled();
 let musicVolume = readStoredVolume(MUSIC_VOLUME_KEY);
 let sfxVolume = readStoredVolume(SFX_VOLUME_KEY);
 let pauseMenu = null;
+let gameplayRulesOpen = false;
 let pauseStartedAt = null;
 const pausableTimers = new Set();
 let loopToken = 0;
@@ -495,6 +496,12 @@ const onlineFlowDirector = new OnlineFlowDirector({
   openingCues: beginOpeningCues,
   disconnect: () => rankedClient.close(),
   exitRanked: resetRankedSession,
+});
+const gameFlowDirector = new GameFlowDirector({
+  playSuper: (animation) => playSuperAnimation(animation, loopToken),
+  waitBeats: (beats) => waitBeats(beats, loopToken),
+  showResult: showDirectedLocalResult,
+  advanceRound: advanceLocalRoundPreservingReveal,
 });
 
 configureAudio({ getMusicTopperFile });
@@ -798,6 +805,7 @@ function getGamePreloadDoodles() {
   return [
     ...getRendererPreloadDoodles(),
     'back_button_w',
+    'rules_button',
     'continue_button',
     'continue_t_button',
     'next_slide_button',
@@ -1411,6 +1419,10 @@ function resumePausableTimers() {
 }
 
 function render() {
+  if (screen !== 'playing') {
+    gameplayRulesOpen = false;
+  }
+
   if (screen === 'title') {
     renderTitleScreen();
     return;
@@ -1801,6 +1813,7 @@ function renderLayoutGameScreen(legalMoves) {
         ${renderLayoutPickHistorySlots('p1')}
         ${renderLayoutPickHistorySlots('p2')}
         ${renderLayoutMoveControls(legalMoves)}
+        ${renderLayoutSlot('rules-button', renderGameplayRulesButton(), 'gameplay-rules-button-slot')}
         ${renderTestOpponentControls()}
         ${renderReadyWaitingOverlay()}
         <section class="controls layout-controls">
@@ -1810,6 +1823,7 @@ function renderLayoutGameScreen(legalMoves) {
       </div>
     </section>
     ${renderRankedDisconnectNotice()}
+    ${renderGameplayRulesOverlay()}
   `;
 
   installMoveButtonHandlers();
@@ -1836,9 +1850,55 @@ function installLayoutActionHandlers() {
   app.querySelector('[data-action="quit"]')?.addEventListener('click', quitLocalGame);
   app.querySelector('[data-action="skip-game"]')?.addEventListener('click', skipRankedGame);
   app.querySelector('[data-action="reset"]')?.addEventListener('click', restartGame);
+  app.querySelector('[data-action="show-rules"]')?.addEventListener('click', openGameplayRules);
+  app.querySelector('[data-action="dismiss-rules"]')?.addEventListener('click', closeGameplayRules);
   app.querySelectorAll('[data-test-opponent-move]').forEach((button) => {
     button.addEventListener('click', () => submitTestOpponentMove(button.dataset.testOpponentMove));
   });
+}
+
+function renderGameplayRulesButton() {
+  return renderSheetButton('show-rules', 'rules_button', 'Rules', 'gameplay-rules-button');
+}
+
+function renderGameplayRulesOverlay() {
+  if (!gameplayRulesOpen) {
+    return '';
+  }
+
+  const variant = getComputerVariant(getCurrentVariantId());
+  return `
+    <div class="variant-detail-overlay gameplay-rules-overlay">
+      <div class="variant-detail-copy" role="dialog" aria-modal="true" aria-label="${escapeHtml(variant.name)} rules">
+        ${renderVariantDetailCopy(variant)}
+      </div>
+      <div class="variant-detail-actions">
+        <button class="variant-detail-action" data-action="dismiss-rules" type="button" aria-label="Back">
+          <canvas
+            class="sprite-canvas variant-detail-action-art"
+            data-doodle="back_button_w"
+            data-frame-width="${TITLE_BUTTON_FRAME_WIDTH}"
+            data-frame-height="${TITLE_BUTTON_FRAME_HEIGHT}"
+            width="${TITLE_BUTTON_FRAME_WIDTH}"
+            height="${TITLE_BUTTON_FRAME_HEIGHT}"
+            aria-hidden="true"
+          ></canvas>
+        </button>
+      </div>
+    </div>
+  `;
+}
+
+function openGameplayRules() {
+  gameplayRulesOpen = true;
+  render();
+  app.querySelector('[data-action="dismiss-rules"]')?.focus();
+}
+
+function closeGameplayRules() {
+  gameplayRulesOpen = false;
+  render();
+  app.querySelector('[data-action="show-rules"]')?.focus();
 }
 
 function renderLayoutSlot(key, markup, extraClass = '') {
@@ -2086,7 +2146,11 @@ function renderPickHistories() {
 }
 
 function shouldShowPickHistory() {
-  return state.history.length > 0
+  const hasPersistedRpsReveal = getCurrentVariantId() === VARIANT_IDS.rockPaperScissors
+    && stagePresentation.kind === 'doodle'
+    && stagePresentation.name !== 'rock-paper-scissors/rps-standoff';
+
+  return (state.history.length > 0 || hasPersistedRpsReveal)
     && turnPhase !== 'round-over'
     && rankedSnapshot?.phase !== 'roundOver'
     && rankedSnapshot?.phase !== 'gameOver';
@@ -3985,6 +4049,15 @@ function handleReadyWaitingSplit() {
     return;
   }
 
+  if (
+    getCurrentVariantId() === VARIANT_IDS.rockPaperScissors
+    && state.history.length === 0
+    && stagePresentation.kind === 'doodle'
+    && stagePresentation.name !== 'rock-paper-scissors/rps-standoff'
+  ) {
+    return;
+  }
+
   const splitPresentation = getReadySplitPresentation(choice.readyPlayerId);
 
   if (!splitPresentation) {
@@ -4927,6 +5000,7 @@ function handleRankedClose({ code } = {}) {
   if (playMode === 'online' && screen !== 'title') {
     removeRankedQueueCurtain();
     onlineFlowDirector.cancel();
+    gameFlowDirector.cancel();
     clearRankedReadyWaitingTimer();
     rankedReadyWaiting = null;
     if (code === 4001) {
@@ -5149,9 +5223,18 @@ function commitRankedSnapshot(snapshot, previousPhase = rankedSnapshot?.phase) {
   } else if (snapshot.phase === 'countdown' || snapshot.phase === 'variantSelection') {
     stagePresentation = getIdleStagePresentation(snapshot.currentVariantId ?? snapshot.variantId);
   } else if (snapshot.phase === 'choosing' && snapshot.readyPlayerKey) {
-    stagePresentation = getRankedChoosingPresentation(snapshot);
+    const preserveRpsWinReveal = (snapshot.currentVariantId ?? snapshot.variantId) === VARIANT_IDS.rockPaperScissors
+      && !snapshot.round?.lastTurn
+      && (snapshot.round?.turn ?? 0) === 0;
+    if (!preserveRpsWinReveal) {
+      stagePresentation = getRankedChoosingPresentation(snapshot);
+    }
   } else if (snapshot.phase === 'choosing') {
-    stagePresentation = getRankedIdleChoosingPresentation(snapshot);
+    const preserveRpsReveal = (snapshot.currentVariantId ?? snapshot.variantId) === VARIANT_IDS.rockPaperScissors
+      && previousPhase === 'revealed';
+    if (!preserveRpsReveal) {
+      stagePresentation = getRankedIdleChoosingPresentation(snapshot);
+    }
   } else if (snapshot.phase === 'gameOver') {
     finishMusicLoopThenStop();
     stagePresentation = {
@@ -5340,13 +5423,24 @@ function getLocalMovesFromRankedSnapshot(snapshot) {
 }
 
 function getLocalTurnResultFromRankedSnapshot(snapshot) {
-  const result = snapshot.round?.lastTurn ?? {};
+  const lastTurn = snapshot.round?.lastTurn ?? {};
+  const result = {
+    ...lastTurn,
+    p1Resource: lastTurn.p1Resource ?? lastTurn.p1ResourceAfter,
+    p2Resource: lastTurn.p2Resource ?? lastTurn.p2ResourceAfter,
+  };
 
-  if (snapshot.playerKey !== 'p2') {
-    return result;
-  }
+  const localResult = snapshot.playerKey === 'p2'
+    ? swapScenePerspective(result)
+    : result;
 
-  return swapScenePerspective(result);
+  return {
+    ...localResult,
+    resources: {
+      p1: localResult.p1Resource,
+      p2: localResult.p2Resource,
+    },
+  };
 }
 
 function submitRankedMove(moveId) {
@@ -5408,6 +5502,7 @@ function skipRankedGame() {
 function leaveRanked() {
   resetRankedSession();
   onlineFlowDirector.cancel();
+  gameFlowDirector.cancel();
   screen = 'title';
   render();
 }
@@ -5666,8 +5761,14 @@ async function resolvePlayerSelection() {
     if (screen === 'tutorial') {
       maybeShowTutorialFeedback(token);
     } else {
-      await playPendingSuperAnimation(token);
-      maybeShowRoundOverScene(token);
+      const animation = pendingSuperAnimation;
+      pendingSuperAnimation = null;
+      await gameFlowDirector.reveal({
+        variantId: getCurrentVariantId(),
+        superAnimation: animation,
+        roundFinished: state.status === 'finished',
+        resultLevel: getLocalResultLevel(),
+      });
     }
   }
 }
@@ -5793,10 +5894,7 @@ function getSuperAnimation(result) {
   });
 }
 
-async function playPendingSuperAnimation(token) {
-  const animation = pendingSuperAnimation;
-  pendingSuperAnimation = null;
-
+async function playSuperAnimation(animation, token) {
   if (!animation || !isActiveLoop(token)) {
     return;
   }
@@ -5823,6 +5921,43 @@ async function playPendingSuperAnimation(token) {
   await waitBeats(SUPER_FINAL_LINGER_BEATS, token);
 }
 
+async function playPendingSuperAnimation(token) {
+  const animation = pendingSuperAnimation;
+  pendingSuperAnimation = null;
+  await gameFlowDirector.reveal({
+    variantId: getCurrentVariantId(),
+    superAnimation: animation,
+  });
+}
+
+function getLocalResultLevel() {
+  if (!state.winner) return 'round';
+  const target = getVariantTargetRoundWins(getCurrentVariantId());
+  return roundWins[state.winner] + 1 >= target ? 'game' : 'round';
+}
+
+async function showDirectedLocalResult(resultLevel) {
+  if (!isActiveLoop(loopToken) || state.status !== 'finished') return;
+  turnPhase = 'round-over';
+  isTransitioning = true;
+  await playWipeTransition(() => showRoundOverScene(resultLevel));
+  isTransitioning = false;
+  if (isActiveLoop(loopToken)) render();
+}
+
+function advanceLocalRoundPreservingReveal() {
+  if (!state.winner || state.status !== 'finished') return;
+  const reveal = stagePresentation;
+  const moves = { ...lastMoves };
+  roundWins[state.winner] += 1;
+  syncMusicTopper();
+  setNewRound();
+  turnPhase = 'scene';
+  stagePresentation = reveal;
+  lastMoves = moves;
+  render();
+}
+
 function settleTutorialScene() {
   if (tutorialStageMode !== 'scene') {
     return;
@@ -5830,27 +5965,6 @@ function settleTutorialScene() {
 
   if (state.status === 'finished') {
     setNewTutorialRound();
-  }
-}
-
-async function maybeShowRoundOverScene(token) {
-  if (!isActiveLoop(token) || state.status !== 'finished') {
-    return;
-  }
-
-  await waitBeats(ROUND_OVER_SCENE_BEATS, token);
-
-  if (!isActiveLoop(token) || state.status !== 'finished') {
-    return;
-  }
-
-  turnPhase = 'round-over';
-  isTransitioning = true;
-  await playWipeTransition(showRoundOverScene);
-  isTransitioning = false;
-
-  if (isActiveLoop(token)) {
-    render();
   }
 }
 
@@ -5894,7 +6008,7 @@ async function maybeShowTutorialFeedback(token) {
   }
 }
 
-function showRoundOverScene() {
+function showRoundOverScene(resultLevel = 'round') {
   if (state.winner && screen !== 'tutorial') {
     roundWins[state.winner] += 1;
   }
@@ -5906,14 +6020,16 @@ function showRoundOverScene() {
     }
   }
 
-  const isRoundOverInComputerFight = playMode === 'local' && screen !== 'tutorial' && !isGameOver();
+  const useRoundDoodle = resultLevel === 'round';
 
   stagePresentation = {
     kind: 'overlay',
     base: getInteractionPresentation(stagePresentation),
     overlay: {
       kind: 'doodle',
-      name: getRoundOverDoodle(state.winner, isRoundOverInComputerFight),
+      name: resultLevel === 'match'
+        ? 'system_scenes/round-game-match'
+        : getRoundOverDoodle(state.winner, useRoundDoodle),
       flip: false,
     },
   };
