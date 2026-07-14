@@ -62,7 +62,7 @@ export class RankedDuelService {
 
     if (existingSession && !existingSession.closed) {
       await this.disconnect(existingSession);
-      existingSession.client.close?.();
+      existingSession.client.close?.(4001, 'guest connected elsewhere');
     }
 
     const player = await this.playerStore.getPlayer(playerId);
@@ -864,6 +864,10 @@ export class RankedDuelService {
   }
 
   send(session, type, payload = {}) {
+    if (session.closed) {
+      return;
+    }
+
     session.client.send(JSON.stringify({ type, ...payload }));
   }
 

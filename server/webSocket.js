@@ -212,8 +212,8 @@ function createWebSocketConnection(socket, {
 
       sendFrame(payload, 0x1);
     },
-    close() {
-      closeWithCode(1000);
+    close(code = 1000, reason = '') {
+      closeWithCode(code, reason);
     },
     onMessage(listener) {
       messageListeners.add(listener);

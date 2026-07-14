@@ -56,7 +56,7 @@ export class RankedClient {
       }
 
       this.socket = null;
-      this.onClose();
+      this.onClose({ code: event.code, reason: event.reason });
     });
   }
 

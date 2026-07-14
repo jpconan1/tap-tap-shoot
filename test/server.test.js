@@ -155,6 +155,7 @@ test('newest connection replaces older session for the same player', async () =>
 
   assert.equal(firstSession.session.closed, true);
   assert.equal(firstSession.client.closed, true);
+  assert.deepEqual(firstSession.client.closeArgs, [4001, 'guest connected elsewhere']);
   assert.equal(service.rooms.size, 0);
   assert.deepEqual(service.queue, [secondSession.session]);
   assert.equal(service.getOnlinePlayerCount(), 1);
@@ -655,6 +656,7 @@ async function connectTestPlayer(service, playerId) {
     },
     close() {
       this.closed = true;
+      this.closeArgs = [...arguments];
     },
   };
   const session = await service.connect(client, playerId);

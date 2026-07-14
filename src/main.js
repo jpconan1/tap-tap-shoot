@@ -435,6 +435,7 @@ let rankedQueueCurtainToken = 0;
 let rankedQueueCurtainPromise = null;
 let rankedQueueCurtainPhase = null;
 let rankedQueueError = null;
+let rankedConnectionNotice = null;
 let rankedDisconnectReturnTimer = null;
 let rankedDisplayName = readStoredDisplayName();
 let onlinePlayerCount = null;
@@ -2438,6 +2439,10 @@ function renderTitleScreen() {
         ${renderTitleVolumeSlider('sfx', sfxVolume)}
         ${renderTitleBoilButton()}
       </div>
+
+      ${rankedConnectionNotice
+        ? `<p class="online-player-count" role="alert">${escapeHtml(rankedConnectionNotice)}</p>`
+        : ''}
 
       ${debugTools.sceneGallery
         ? '<button class="text-link scene-gallery-link" data-action="scene-gallery" type="button">Scene gallery</button>'
@@ -4891,6 +4896,7 @@ function beginRankedQueue() {
   rankedReadyWaiting = null;
   rankedRoundAudioKey = null;
   rankedQueueError = null;
+  rankedConnectionNotice = null;
   findingMatchStep = 0;
   rankedQueueCurtainPromise = closeRankedQueueCurtain();
   rankedClient.connect(rankedDisplayName, DEFAULT_VARIANT_ID);
@@ -4916,12 +4922,21 @@ function handleRankedError(message = 'connection failed') {
   }
 }
 
-function handleRankedClose() {
+function handleRankedClose({ code } = {}) {
   if (playMode === 'online' && screen !== 'title') {
     removeRankedQueueCurtain();
     onlineFlowDirector.cancel();
     clearRankedReadyWaitingTimer();
     rankedReadyWaiting = null;
+    if (code === 4001) {
+      rankedConnectionNotice = 'New connection for this guest. Disconnected.';
+      screen = 'title';
+      rankedSnapshot = null;
+      rankedUpdateQueue.clear();
+      rankedRoundAudioKey = null;
+      render();
+      return;
+    }
     if (screen === 'queue' && !rankedSnapshot) {
       rankedQueueError = rankedQueueError ?? 'connection closed';
       render();
