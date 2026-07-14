@@ -19,6 +19,11 @@ const PUBLIC_TYPES = new Map([
   ['.ttf', 'font/ttf'],
 ]);
 const PUBLIC_PREFIXES = Object.freeze(['assets/', 'src/']);
+const SECURITY_HEADERS = Object.freeze({
+  'X-Content-Type-Options': 'nosniff',
+  'Referrer-Policy': 'no-referrer',
+  'X-Frame-Options': 'SAMEORIGIN',
+});
 
 export function createTapTapShootServer({
   env = process.env,
@@ -45,6 +50,9 @@ export function createTapTapShootServer({
     maxConnectionsPerMinute: readPositiveNumber(env.WS_CONNECTIONS_PER_MINUTE, 30),
     maxMessagesPerSecond: readPositiveNumber(env.WS_MESSAGES_PER_SECOND, 20),
     trustProxy: env.NODE_ENV === 'production',
+    originMode: env.WS_ORIGIN_MODE ?? (env.NODE_ENV === 'production' ? 'report' : 'off'),
+    allowedOrigins: readAllowedOrigins(env.WS_ALLOWED_ORIGINS),
+    originSummaryMs: readPositiveNumber(env.WS_ORIGIN_SUMMARY_MS, 5 * 60 * 1000),
     onConnection(connection) {
       attachRankedConnection(connection, { rankedDuel, guestTokens });
     },
@@ -77,8 +85,13 @@ export function attachRankedConnection(connection, { rankedDuel, guestTokens, au
       await rankedDuel.receive(session, message);
     } catch (error) {
       console.error('Ranked message failed:', getErrorMessage(error));
-      connection.send(JSON.stringify({ type: 'error', message: 'server error' }));
-      connection.close();
+      const authenticationFailed = !session && authenticating;
+      connection.send(JSON.stringify({
+        type: 'error',
+        code: authenticationFailed ? 'ranked_unavailable' : 'server_error',
+        message: authenticationFailed ? 'ranked service temporarily unavailable' : 'server error',
+      }));
+      connection.close(authenticationFailed ? 1013 : 1011, authenticationFailed ? 'try again later' : 'server error');
     }
   });
   connection.onClose(() => {
@@ -104,6 +117,17 @@ export function createPlayerStore({ env = process.env, root = DEFAULT_ROOT } = {
   const supabaseSecretKey = env.SUPABASE_SECRET_KEY ?? env.SUPABASE_SERVICE_ROLE_KEY;
   const localStore = new JsonPlayerStore(join(root, '.ranked-players.json'));
 
+  if (env.NODE_ENV === 'production' && (!supabaseUrl || !supabaseSecretKey)) {
+    throw new Error('SUPABASE_URL and SUPABASE_SECRET_KEY are required in production');
+  }
+
+  if (env.NODE_ENV === 'production') {
+    return new SupabasePlayerStore({
+      url: supabaseUrl,
+      secretKey: supabaseSecretKey,
+    });
+  }
+
   return supabaseUrl && supabaseSecretKey
     ? new FallbackPlayerStore(new SupabasePlayerStore({
       url: supabaseUrl,
@@ -123,7 +147,14 @@ export function createStaticRequestHandler({ root = DEFAULT_ROOT, rankedDuel } =
       return;
     }
 
-    const url = new URL(request.url, `http://${request.headers.host}`);
+    let url;
+
+    try {
+      url = new URL(request.url, 'http://localhost');
+    } catch {
+      response.writeHead(400).end('Bad request');
+      return;
+    }
 
     if (url.pathname === '/api/ranked-status') {
       writeJson(response, {
@@ -152,6 +183,7 @@ export function createStaticRequestHandler({ root = DEFAULT_ROOT, rankedDuel } =
     try {
       const body = await readFile(filePath);
       response.writeHead(200, {
+        ...SECURITY_HEADERS,
         'Content-Type': PUBLIC_TYPES.get(extname(filePath)) ?? 'application/octet-stream',
         'Cache-Control': 'no-store',
       });
@@ -169,8 +201,10 @@ export function createStaticRequestHandler({ root = DEFAULT_ROOT, rankedDuel } =
 
 function writeJson(response, payload) {
   response.writeHead(200, {
+    ...SECURITY_HEADERS,
     'Content-Type': 'application/json; charset=utf-8',
     'Cache-Control': 'no-store',
+    'Access-Control-Allow-Origin': '*',
   });
   response.end(JSON.stringify(payload));
 }
@@ -201,7 +235,7 @@ function isPublicPath(publicPath) {
   }
 
   return publicPath === 'index.html'
-    || publicPath === 'layout-editor.html'
+    || publicPath === 'server-config.js'
     || publicPath === 'new_layout.json'
     || PUBLIC_PREFIXES.some((prefix) => publicPath.startsWith(prefix));
 }
@@ -217,6 +251,18 @@ function getErrorMessage(error) {
 function readPositiveNumber(value, fallback) {
   const parsed = Number(value);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function readAllowedOrigins(value) {
+  const defaults = [
+    'https://tap-tap-shoot.onrender.com',
+    'https://html-classic.itch.zone',
+  ];
+  const origins = typeof value === 'string' && value.trim()
+    ? value.split(',')
+    : defaults;
+
+  return origins.map((origin) => origin.trim()).filter(Boolean);
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

@@ -27,10 +27,13 @@ jobs:
       - name: Configure Pages
         uses: actions/configure-pages@v5
 
+      - name: Package game
+        run: sh scripts/package-pages.sh
+
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: .
+          path: dist/pages
 
       - name: Deploy to GitHub Pages
         id: deployment

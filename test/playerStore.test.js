@@ -58,6 +58,55 @@ test('SupabasePlayerStore maps saved player fields to database columns', async (
   assert.equal(rows.get('p1').last_played, '2026-06-16T12:00:00.000Z');
 });
 
+test('SupabasePlayerStore records both ranked players through one RPC', async () => {
+  const requests = [];
+  const store = new SupabasePlayerStore({
+    url: 'https://example.supabase.co',
+    secretKey: 'sb_secret_test',
+    fetchImpl: async (url, options) => {
+      requests.push({ url, ...options });
+      return createJsonResponse({
+        winner: { id: 'p1', rating: 1016, wins: 1, losses: 0, last_played: '2026-07-14T12:00:00.000Z' },
+        loser: { id: 'p2', rating: 984, wins: 0, losses: 1, last_played: '2026-07-14T12:00:00.000Z' },
+      });
+    },
+  });
+
+  const saved = await store.recordMatchResult({
+    matchId: 'match-1',
+    winnerId: 'p1',
+    loserId: 'p2',
+    playedAt: '2026-07-14T12:00:00.000Z',
+  });
+
+  assert.equal(requests.length, 1);
+  assert.equal(requests[0].url.pathname, '/rest/v1/rpc/record_ranked_match');
+  assert.deepEqual(JSON.parse(requests[0].body), {
+    p_match_id: 'match-1',
+    p_winner_id: 'p1',
+    p_loser_id: 'p2',
+    p_played_at: '2026-07-14T12:00:00.000Z',
+  });
+  assert.equal(saved.winner.rating, 1016);
+  assert.equal(saved.loser.rating, 984);
+});
+
+test('MemoryPlayerStore updates both ranked players in one operation', async () => {
+  const store = new MemoryPlayerStore();
+
+  const saved = await store.recordMatchResult({
+    matchId: 'match-1',
+    winnerId: 'p1',
+    loserId: 'p2',
+    playedAt: '2026-07-14T12:00:00.000Z',
+  });
+
+  assert.equal(saved.winner.rating, 1016);
+  assert.equal(saved.winner.wins, 1);
+  assert.equal(saved.loser.rating, 984);
+  assert.equal(saved.loser.losses, 1);
+});
+
 test('SupabasePlayerStore reports Supabase errors', async () => {
   const store = new SupabasePlayerStore({
     url: 'https://example.supabase.co',

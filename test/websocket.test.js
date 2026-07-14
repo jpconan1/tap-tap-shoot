@@ -5,6 +5,7 @@ import test from 'node:test';
 import { MemoryPlayerStore } from '../server/playerStore.js';
 import { RankedDuelService } from '../server/rankedDuel.js';
 import {
+  createWebSocketOriginPolicy,
   attachWebSocketServer,
   createIpConnectionLimiter,
   createSlidingWindowLimiter,
@@ -56,6 +57,50 @@ test('proxy IP is trusted only when explicitly enabled', () => {
 
   assert.equal(getClientIp(request), '127.0.0.1');
   assert.equal(getClientIp(request, { trustProxy: true }), '198.51.100.4');
+});
+
+test('origin report mode observes unknown websites without blocking them', () => {
+  const summaries = [];
+  const policy = createWebSocketOriginPolicy({
+    mode: 'report',
+    allowedOrigins: ['https://tap-tap-shoot.onrender.com'],
+    onSummary: (summary) => summaries.push(summary),
+  });
+
+  assert.deepEqual(policy.check('https://tap-tap-shoot.onrender.com'), {
+    ok: true,
+    status: 'allowed',
+  });
+  assert.deepEqual(policy.check('https://evil.example'), {
+    ok: true,
+    status: 'wouldReject',
+  });
+  assert.deepEqual(policy.check(undefined), {
+    ok: true,
+    status: 'missing',
+  });
+
+  policy.flushSummary();
+  assert.deepEqual(summaries[0], {
+    mode: 'report',
+    allowed: 1,
+    missing: 1,
+    wouldReject: 1,
+    origins: {
+      'https://tap-tap-shoot.onrender.com': 1,
+      'https://evil.example': 1,
+    },
+  });
+});
+
+test('origin enforcement rejects unknown websites but permits native clients without Origin', () => {
+  const policy = createWebSocketOriginPolicy({
+    mode: 'enforce',
+    allowedOrigins: ['https://tap-tap-shoot.onrender.com'],
+  });
+
+  assert.equal(policy.check('https://evil.example').ok, false);
+  assert.equal(policy.check(undefined).ok, true);
 });
 
 test('WebSocket clients can connect, queue, and receive match state', async (t) => {

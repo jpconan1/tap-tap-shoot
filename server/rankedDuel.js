@@ -9,7 +9,6 @@ import {
   getVariantTargetRoundWins,
   normalizeVariantId,
 } from '../src/engine/moves.js';
-import { updateRatings } from './elo.js';
 import { MemoryPlayerStore } from './playerStore.js';
 
 const MAX_TIMEOUT_STRIKES = 3;
@@ -716,33 +715,25 @@ export class RankedDuelService {
     const loserKey = winnerKey === 'p1' ? 'p2' : 'p1';
     const winner = room.players[winnerKey].player;
     const loser = room.players[loserKey].player;
-    const nextRatings = updateRatings(winner.rating, loser.rating, true);
     const playedAt = new Date(this.now()).toISOString();
+    const saved = await this.playerStore.recordMatchResult({
+      matchId: room.id,
+      winnerId: winner.id,
+      loserId: loser.id,
+      playedAt,
+    });
 
-    const savedWinner = {
-      ...winner,
-      rating: nextRatings.player,
-      wins: winner.wins + 1,
-      lastPlayed: playedAt,
-    };
-    const savedLoser = {
-      ...loser,
-      rating: nextRatings.opponent,
-      losses: loser.losses + 1,
-      lastPlayed: playedAt,
-    };
-
-    room.players[winnerKey].player = await this.playerStore.savePlayer(savedWinner);
-    room.players[loserKey].player = await this.playerStore.savePlayer(savedLoser);
+    room.players[winnerKey].player = saved.winner;
+    room.players[loserKey].player = saved.loser;
 
     return {
       [winnerKey]: {
         before: winner.rating,
-        after: savedWinner.rating,
+        after: saved.winner.rating,
       },
       [loserKey]: {
         before: loser.rating,
-        after: savedLoser.rating,
+        after: saved.loser.rating,
       },
     };
   }

@@ -7,6 +7,8 @@
     "assets:compress-staged": "scripts/compress-staged-assets.sh",
     "assets:check": "scripts/check-compressed-assets.sh",
     "itch:pack": "sh scripts/package-itch.sh",
+    "pages:pack": "sh scripts/package-pages.sh",
+    "editor": "node server/layoutEditor.js",
     "test": "node --test",
     "server": "node --env-file-if-exists=.env server/index.js"
   }

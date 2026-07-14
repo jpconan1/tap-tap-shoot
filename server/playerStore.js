@@ -1,6 +1,6 @@
 import { readFile, writeFile } from 'node:fs/promises';
 
-import { DEFAULT_RATING } from './elo.js';
+import { DEFAULT_RATING, updateRatings } from './elo.js';
 
 export class MemoryPlayerStore {
   constructor(players = new Map()) {
@@ -23,6 +23,28 @@ export class MemoryPlayerStore {
     this.players.set(player.id, { ...player });
     return { ...player };
   }
+
+  async recordMatchResult({ winnerId, loserId, playedAt }) {
+    const winner = await this.getPlayer(winnerId);
+    const loser = await this.getPlayer(loserId);
+    const ratings = updateRatings(winner.rating, loser.rating, true);
+    const savedWinner = {
+      ...winner,
+      rating: ratings.player,
+      wins: winner.wins + 1,
+      lastPlayed: playedAt,
+    };
+    const savedLoser = {
+      ...loser,
+      rating: ratings.opponent,
+      losses: loser.losses + 1,
+      lastPlayed: playedAt,
+    };
+
+    this.players.set(savedWinner.id, savedWinner);
+    this.players.set(savedLoser.id, savedLoser);
+    return { winner: { ...savedWinner }, loser: { ...savedLoser } };
+  }
 }
 
 export class JsonPlayerStore extends MemoryPlayerStore {
@@ -40,6 +62,13 @@ export class JsonPlayerStore extends MemoryPlayerStore {
   async savePlayer(player) {
     await this.load();
     const saved = await super.savePlayer(player);
+    await this.flush();
+    return saved;
+  }
+
+  async recordMatchResult(result) {
+    await this.load();
+    const saved = await super.recordMatchResult(result);
     await this.flush();
     return saved;
   }
@@ -126,6 +155,34 @@ export class SupabasePlayerStore {
     return fromPlayerRow(row);
   }
 
+  async recordMatchResult({ matchId, winnerId, loserId, playedAt }) {
+    const url = this.createRestUrl('/rpc/record_ranked_match', {});
+    const response = await this.fetch(url, {
+      method: 'POST',
+      headers: this.createHeaders(),
+      body: JSON.stringify({
+        p_match_id: matchId,
+        p_winner_id: winnerId,
+        p_loser_id: loserId,
+        p_played_at: playedAt,
+      }),
+    });
+
+    if (!response.ok) {
+      await throwSupabaseResponseError('record ranked match', response);
+    }
+
+    const result = await readSupabaseJson(response);
+    if (!result?.winner || !result?.loser) {
+      throw new Error('Could not record ranked match: Supabase returned an invalid result');
+    }
+
+    return {
+      winner: fromPlayerRow(result.winner),
+      loser: fromPlayerRow(result.loser),
+    };
+  }
+
   createRestUrl(pathname, params) {
     const url = new URL(`${this.url}/rest/v1${pathname}`);
 
@@ -178,6 +235,20 @@ export class FallbackPlayerStore {
       this.useFallback = true;
       this.onError(error);
       return this.fallback.savePlayer(player);
+    }
+  }
+
+  async recordMatchResult(result) {
+    if (this.useFallback) {
+      return this.fallback.recordMatchResult(result);
+    }
+
+    try {
+      return await this.primary.recordMatchResult(result);
+    } catch (error) {
+      this.useFallback = true;
+      this.onError(error);
+      return this.fallback.recordMatchResult(result);
     }
   }
 }

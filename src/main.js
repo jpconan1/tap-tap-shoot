@@ -40,6 +40,7 @@ import {
   WIN_SOUND_AUDIO,
 } from './audio.js';
 import { RankedClient, RankedUpdateQueue } from './rankedClient.js';
+import { getServerHttpUrl } from './serverUrl.js';
 import { OnlineFlowDirector } from './presentation/onlineFlowDirector.js';
 import { interpretOnlineSnapshot } from './presentation/onlineFlowSequences.js';
 import { getResourcePresentation, shouldShowPickHistoryForVariant } from './variantPresentation.js';
@@ -5601,11 +5602,7 @@ function updateOnlinePlayerCountText() {
 }
 
 function getOnlineStatusUrl() {
-  if (window.location.protocol === 'file:') {
-    return 'http://localhost:8787/api/ranked-status';
-  }
-
-  return '/api/ranked-status';
+  return getServerHttpUrl('/api/ranked-status');
 }
 
 async function loadDebugTools() {
@@ -5628,9 +5625,7 @@ async function loadDebugTools() {
 }
 
 function getServerApiUrl(pathname) {
-  return window.location.protocol === 'file:'
-    ? `http://localhost:8787${pathname}`
-    : pathname;
+  return getServerHttpUrl(pathname);
 }
 
 function beginGameLoop() {

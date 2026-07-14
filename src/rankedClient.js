@@ -1,3 +1,5 @@
+import { getServerSocketUrl } from './serverUrl.js';
+
 const GUEST_SESSION_TOKEN_KEY = 'tapTapShootX.guestSessionToken';
 
 export class RankedClient {
@@ -151,11 +153,7 @@ export class RankedClient {
   }
 
   getSocketUrl() {
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const host = window.location.protocol === 'file:' ? 'localhost:8787' : window.location.host;
-    const url = new URL(`${protocol}//${host}/ws`);
-
-    return url.toString();
+    return getServerSocketUrl('/ws');
   }
 
   getLocalFallbackSocketUrl() {
@@ -188,6 +186,11 @@ export class RankedClient {
 
   handleMessage(message) {
     this.debug('message', { type: message.type, phase: message.phase, matchId: message.matchId });
+
+    if (message.type === 'error') {
+      this.onError(message.message || 'server error');
+      return;
+    }
 
     if (message.type === 'hello') {
       this.hasHello = true;

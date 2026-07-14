@@ -45,3 +45,21 @@ test('client pairs a separate transition event with its authoritative snapshot',
   assert.equal(received[0].snapshot.phase, 'choosing');
   assert.equal(received[0].transition.transitionId, 'variant-set-started');
 });
+
+test('client surfaces server availability errors', () => {
+  const errors = [];
+  const client = new RankedClient({
+    onQueue() {},
+    onSnapshot() {},
+    onClose() {},
+    onError(message) { errors.push(message); },
+  });
+
+  client.handleMessage({
+    type: 'error',
+    code: 'ranked_unavailable',
+    message: 'ranked service temporarily unavailable',
+  });
+
+  assert.deepEqual(errors, ['ranked service temporarily unavailable']);
+});

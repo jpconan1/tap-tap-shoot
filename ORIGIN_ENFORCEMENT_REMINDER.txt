@@ -1,0 +1,16 @@
+WEBSOCKET ORIGIN ENFORCEMENT REMINDER
+
+Before the public release:
+
+1. Open the Render dashboard and review the [ws-origin] summaries in the service logs.
+2. Test every legitimate client, including the Render website and the itch.io build.
+3. Add legitimate origins reported under wouldReject to WS_ALLOWED_ORIGINS.
+4. Investigate unexpected origins. Do not add an origin unless you know which legitimate client produced it.
+5. When the allowlist is confirmed, change this Render environment variable:
+
+   WS_ORIGIN_MODE=enforce
+
+6. Redeploy or restart the Render service.
+7. Retest every supported client and confirm legitimate connections still work.
+
+Until WS_ORIGIN_MODE is set to enforce, unexpected browser origins are only logged. They are not blocked.

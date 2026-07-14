@@ -17,6 +17,10 @@ export function attachWebSocketServer(server, {
   maxConnectionsPerMinute = 30,
   maxMessagesPerSecond = 20,
   trustProxy = false,
+  originMode = 'off',
+  allowedOrigins = [],
+  originSummaryMs = 5 * 60 * 1000,
+  onOriginSummary = (summary) => console.log('[ws-origin]', JSON.stringify(summary)),
   now = () => Date.now(),
 }) {
   let activeConnections = 0;
@@ -27,8 +31,21 @@ export function attachWebSocketServer(server, {
     now,
   });
   const cleanupTimer = setInterval(() => ipLimiter.cleanup(), 60_000);
+  const originPolicy = createWebSocketOriginPolicy({
+    mode: originMode,
+    allowedOrigins,
+    onSummary: onOriginSummary,
+  });
+  const originSummaryTimer = originMode !== 'off' && originSummaryMs > 0
+    ? setInterval(() => originPolicy.flushSummary(), originSummaryMs)
+    : null;
   cleanupTimer.unref?.();
-  server.on('close', () => clearInterval(cleanupTimer));
+  originSummaryTimer?.unref?.();
+  server.on('close', () => {
+    clearInterval(cleanupTimer);
+    clearInterval(originSummaryTimer);
+    originPolicy.flushSummary();
+  });
 
   server.on('upgrade', (request, socket) => {
     if (new URL(request.url, 'http://localhost').pathname !== path) {
@@ -40,6 +57,13 @@ export function attachWebSocketServer(server, {
     const version = request.headers['sec-websocket-version'];
 
     if (!key || version !== '13') {
+      socket.destroy();
+      return;
+    }
+
+    const originAdmission = originPolicy.check(request.headers.origin);
+    if (!originAdmission.ok) {
+      socket.write('HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n');
       socket.destroy();
       return;
     }
@@ -83,6 +107,82 @@ export function attachWebSocketServer(server, {
     });
     onConnection(connection, request);
   });
+}
+
+export function createWebSocketOriginPolicy({
+  mode = 'off',
+  allowedOrigins = [],
+  onSummary = () => {},
+  maxObservedOrigins = 25,
+} = {}) {
+  const normalizedMode = ['off', 'report', 'enforce'].includes(mode) ? mode : 'off';
+  const allowlist = new Set(allowedOrigins.map(normalizeOrigin).filter(Boolean));
+  let counts = createOriginCounts();
+
+  return {
+    check(receivedOrigin) {
+      if (normalizedMode === 'off') {
+        return { ok: true, status: 'off' };
+      }
+
+      const origin = normalizeOrigin(Array.isArray(receivedOrigin) ? receivedOrigin[0] : receivedOrigin);
+      if (!origin) {
+        counts.missing += 1;
+        return { ok: true, status: 'missing' };
+      }
+
+      if (allowlist.has(origin)) {
+        counts.allowed += 1;
+        incrementOrigin(counts.origins, origin, maxObservedOrigins);
+        return { ok: true, status: 'allowed' };
+      }
+
+      counts.wouldReject += 1;
+      incrementOrigin(counts.origins, origin, maxObservedOrigins);
+      return {
+        ok: normalizedMode !== 'enforce',
+        status: normalizedMode === 'enforce' ? 'rejected' : 'wouldReject',
+      };
+    },
+    flushSummary() {
+      const total = counts.allowed + counts.missing + counts.wouldReject;
+      if (total === 0) {
+        return null;
+      }
+
+      const summary = {
+        mode: normalizedMode,
+        allowed: counts.allowed,
+        missing: counts.missing,
+        wouldReject: counts.wouldReject,
+        origins: Object.fromEntries(counts.origins),
+      };
+      counts = createOriginCounts();
+      onSummary(summary);
+      return summary;
+    },
+  };
+}
+
+function normalizeOrigin(value) {
+  if (typeof value !== 'string' || !value.trim() || value === 'null') {
+    return null;
+  }
+
+  try {
+    return new URL(value).origin;
+  } catch {
+    return value.trim().slice(0, 200);
+  }
+}
+
+function createOriginCounts() {
+  return { allowed: 0, missing: 0, wouldReject: 0, origins: new Map() };
+}
+
+function incrementOrigin(origins, origin, maxObservedOrigins) {
+  const key = origins.has(origin) || origins.size < maxObservedOrigins ? origin : '(other)';
+  origins.set(key, (origins.get(key) ?? 0) + 1);
 }
 
 function createWebSocketConnection(socket, {
