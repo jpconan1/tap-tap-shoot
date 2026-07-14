@@ -4,6 +4,7 @@ import test from 'node:test';
 import { DEFAULT_RATING, updateRatings } from '../server/elo.js';
 import { MemoryPlayerStore } from '../server/playerStore.js';
 import { RankedDuelService } from '../server/rankedDuel.js';
+import { getAllowDebugWinGame } from '../server/index.js';
 import { createRoundState } from '../src/engine/gameState.js';
 import { DEFAULT_VARIANT_ID, VARIANT_IDS } from '../src/engine/moves.js';
 
@@ -170,14 +171,14 @@ test('submitted moves resolve immediately when both players lock in', async () =
   assert.equal(lastMessage(p2).revealedMoves.p2, 'stab');
 });
 
-test('skip game awards the current variant game to the sender without ending the match', async () => {
-  const { service, p1 } = await createMatchedService();
+test('debug win game awards the current variant game when explicitly enabled', async () => {
+  const { service, p1 } = await createMatchedService({ allowDebugWinGame: true });
   const room = onlyRoom(service);
   room.remainingVariants = [VARIANT_IDS.tapTapShootY, VARIANT_IDS.fireballWar];
   room.variantId = VARIANT_IDS.tapTapShootY;
   room.phase = 'choosing';
 
-  service.receive(p1.session, { type: 'skipGame' });
+  service.receive(p1.session, { type: 'debugWinGame' });
 
   assert.equal(room.gameWins.p1, 1);
   assert.equal(room.gameWins.p2, 0);
@@ -191,14 +192,48 @@ test('skip game awards the current variant game to the sender without ending the
   assert.equal(room.winner, null);
 });
 
-test('skip game can win the match when the sender takes a second game', async () => {
-  const { service, p2 } = await createMatchedService();
+test('debug win game is disabled by default and old skip command stays dead', async () => {
+  const { service, p1 } = await createMatchedService();
+  const room = onlyRoom(service);
+  room.remainingVariants = [VARIANT_IDS.tapTapShootY, VARIANT_IDS.fireballWar];
+  room.phase = 'choosing';
+
+  service.receive(p1.session, { type: 'debugWinGame' });
+  service.receive(p1.session, { type: 'skipGame' });
+
+  assert.deepEqual(room.gameWins, { p1: 0, p2: 0 });
+  assert.equal(room.phase, 'choosing');
+});
+
+test('hello only advertises debug win game when server enables it', async () => {
+  const disabled = await connectTestPlayer(createTestService(), 'disabled');
+  const enabled = await connectTestPlayer(createTestService({ allowDebugWinGame: true }), 'enabled');
+
+  assert.equal(disabled.messages[0].debugTools.winGame, false);
+  assert.equal(enabled.messages[0].debugTools.winGame, true);
+  assert.equal(disabled.messages[0].debugTools.revealComputerMove, false);
+  assert.equal(enabled.messages[0].debugTools.revealComputerMove, true);
+  assert.equal(disabled.messages[0].debugTools.sceneGallery, false);
+  assert.equal(enabled.messages[0].debugTools.sceneGallery, true);
+});
+
+test('production cannot enable debug win game', () => {
+  assert.equal(getAllowDebugWinGame({ ALLOW_DEBUG_WIN_GAME: 'true' }), true);
+  assert.equal(getAllowDebugWinGame({}), false);
+  assert.throws(
+    () => getAllowDebugWinGame({ NODE_ENV: 'production', ALLOW_DEBUG_WIN_GAME: 'true' }),
+    /cannot be enabled in production/,
+  );
+});
+
+test('debug win game can win the match when explicitly enabled', async () => {
+  const { service, p2 } = await createMatchedService({ allowDebugWinGame: true });
   const room = onlyRoom(service);
   room.remainingVariants = [VARIANT_IDS.tapTapShootY, VARIANT_IDS.fireballWar];
   room.gameWins.p2 = 1;
   room.phase = 'choosing';
 
-  service.receive(p2.session, { type: 'skipGame' });
+  service.receive(p2.session, { type: 'debugWinGame' });
 
   assert.equal(room.gameWins.p2, 2);
   assert.equal(room.phase, 'gameOver');
@@ -563,6 +598,7 @@ function createTestService({
   noSelectionGraceMs = 1000,
   noContestWaitingMs = 1000,
   noContestCountdownMs = 1000,
+  allowDebugWinGame = false,
 } = {}) {
   return new RankedDuelService({
     playerStore: store,
@@ -572,6 +608,7 @@ function createTestService({
     noSelectionGraceMs,
     noContestWaitingMs,
     noContestCountdownMs,
+    allowDebugWinGame,
     now,
     createId: createIncrementingId(),
   });

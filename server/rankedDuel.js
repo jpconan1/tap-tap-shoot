@@ -34,6 +34,7 @@ export class RankedDuelService {
     noContestCountdownMs = READY_WAITING_COUNTDOWN_MS,
     turnMs = DEFAULT_TURN_MS,
     revealMs = DEFAULT_REVEAL_MS,
+    allowDebugWinGame = false,
     now = () => Date.now(),
     createId = randomUUID,
     onError = () => {},
@@ -45,6 +46,7 @@ export class RankedDuelService {
     this.noContestCountdownMs = noContestCountdownMs;
     this.turnMs = turnMs;
     this.revealMs = revealMs;
+    this.allowDebugWinGame = allowDebugWinGame;
     this.now = now;
     this.createId = createId;
     this.onError = onError;
@@ -53,8 +55,8 @@ export class RankedDuelService {
     this.rooms = new Map();
   }
 
-  async connect(client, requestedPlayerId) {
-    const playerId = requestedPlayerId || this.createId();
+  async connect(client, authenticatedPlayerId, sessionToken) {
+    const playerId = authenticatedPlayerId || this.createId();
     const player = await this.playerStore.getPlayer(playerId);
     const session = {
       id: this.createId(),
@@ -73,6 +75,12 @@ export class RankedDuelService {
       rating: player.rating,
       wins: player.wins,
       losses: player.losses,
+      sessionToken,
+      debugTools: {
+        winGame: this.allowDebugWinGame,
+        revealComputerMove: this.allowDebugWinGame,
+        sceneGallery: this.allowDebugWinGame,
+      },
     });
 
     return session;
@@ -110,8 +118,8 @@ export class RankedDuelService {
       return;
     }
 
-    if (message.type === 'skipGame') {
-      this.skipGame(session);
+    if (message.type === 'debugWinGame') {
+      this.debugWinGame(session);
     }
   }
 
@@ -647,7 +655,11 @@ export class RankedDuelService {
     this.beginRoundOver(room);
   }
 
-  skipGame(session) {
+  debugWinGame(session) {
+    if (!this.allowDebugWinGame) {
+      return;
+    }
+
     const room = this.rooms.get(session.roomId);
 
     if (!room || room.pendingNextVariant || room.pendingTiebreaker || !['choosing', 'revealed', 'roundOver'].includes(room.phase)) {

@@ -6,6 +6,7 @@ import { readFile } from 'node:fs/promises';
 import { FallbackPlayerStore, JsonPlayerStore, SupabasePlayerStore } from './playerStore.js';
 import { RankedDuelService } from './rankedDuel.js';
 import { attachWebSocketServer } from './webSocket.js';
+import { createGuestTokenServiceFromEnv } from './guestToken.js';
 
 const DEFAULT_ROOT = process.cwd();
 const PUBLIC_TYPES = new Map([
@@ -25,10 +26,12 @@ export function createTapTapShootServer({
   playerStore = createPlayerStore({ env, root }),
   rankedDuel = new RankedDuelService({
     playerStore,
+    allowDebugWinGame: getAllowDebugWinGame(env),
     onError(error) {
       console.error('Ranked service failed:', getErrorMessage(error));
     },
   }),
+  guestTokens = createGuestTokenServiceFromEnv(env),
 } = {}) {
   const server = createServer(createStaticRequestHandler({ root, rankedDuel }));
 
@@ -38,34 +41,58 @@ export function createTapTapShootServer({
     maxMessageBytes: Number(env.WS_MAX_MESSAGE_BYTES ?? 16 * 1024),
     maxBufferedBytes: Number(env.WS_MAX_BUFFERED_BYTES ?? 256 * 1024),
     heartbeatMs: Number(env.WS_HEARTBEAT_MS ?? 30 * 1000),
-    onConnection(connection, request) {
-      const params = new URL(request.url, `http://${request.headers.host}`).searchParams;
-      rankedDuel.connect(connection, params.get('playerId')).then((session) => {
-        connection.onMessage((raw) => {
-          try {
-            const result = rankedDuel.receive(session, JSON.parse(raw));
-
-            if (result?.catch) {
-              result.catch((error) => {
-                console.error('Ranked message failed:', getErrorMessage(error));
-                connection.send(JSON.stringify({ type: 'error', message: 'server error' }));
-              });
-            }
-          } catch (error) {
-            console.error('Bad ranked message:', getErrorMessage(error));
-            connection.send(JSON.stringify({ type: 'error', message: 'bad message' }));
-          }
-        });
-        connection.onClose(() => rankedDuel.disconnect(session));
-      }).catch((error) => {
-        console.error('Ranked connection failed:', getErrorMessage(error));
-        connection.send(JSON.stringify({ type: 'error', message: 'server error' }));
-        connection.close();
-      });
+    onConnection(connection) {
+      attachRankedConnection(connection, { rankedDuel, guestTokens });
     },
   });
 
   return { server, rankedDuel };
+}
+
+export function attachRankedConnection(connection, { rankedDuel, guestTokens, authenticationMs = 10_000 }) {
+  let session = null;
+  let authenticating = false;
+  const authenticationTimer = setTimeout(() => connection.close(), authenticationMs);
+  authenticationTimer.unref?.();
+
+  connection.onMessage(async (raw) => {
+    try {
+      const message = JSON.parse(raw);
+
+      if (!session) {
+        if (authenticating || message?.type !== 'authenticateGuest') {
+          return;
+        }
+        authenticating = true;
+        const identity = guestTokens.authenticate(message.token);
+        session = await rankedDuel.connect(connection, identity.playerId, identity.token);
+        clearTimeout(authenticationTimer);
+        return;
+      }
+
+      await rankedDuel.receive(session, message);
+    } catch (error) {
+      console.error('Ranked message failed:', getErrorMessage(error));
+      connection.send(JSON.stringify({ type: 'error', message: 'server error' }));
+      connection.close();
+    }
+  });
+  connection.onClose(() => {
+    clearTimeout(authenticationTimer);
+    if (session) {
+      rankedDuel.disconnect(session);
+    }
+  });
+}
+
+export function getAllowDebugWinGame(env = process.env) {
+  const enabled = env.ALLOW_DEBUG_WIN_GAME === 'true';
+
+  if (enabled && env.NODE_ENV === 'production') {
+    throw new Error('ALLOW_DEBUG_WIN_GAME cannot be enabled in production');
+  }
+
+  return enabled;
 }
 
 export function createPlayerStore({ env = process.env, root = DEFAULT_ROOT } = {}) {
@@ -97,6 +124,15 @@ export function createStaticRequestHandler({ root = DEFAULT_ROOT, rankedDuel } =
     if (url.pathname === '/api/ranked-status') {
       writeJson(response, {
         playersOnline: rankedDuel.getOnlinePlayerCount(),
+      });
+      return;
+    }
+
+    if (url.pathname === '/api/debug-tools') {
+      writeJson(response, {
+        winGame: Boolean(rankedDuel.allowDebugWinGame),
+        revealComputerMove: Boolean(rankedDuel.allowDebugWinGame),
+        sceneGallery: Boolean(rankedDuel.allowDebugWinGame),
       });
       return;
     }

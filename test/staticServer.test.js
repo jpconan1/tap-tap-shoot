@@ -33,6 +33,11 @@ test('static server only serves public game files', async () => {
     assert.deepEqual(JSON.parse((await request(handler, '/api/ranked-status')).body), {
       playersOnline: 0,
     });
+    assert.deepEqual(JSON.parse((await request(handler, '/api/debug-tools')).body), {
+      winGame: false,
+      revealComputerMove: false,
+      sceneGallery: false,
+    });
 
     assert.equal((await request(handler, '/.env')).statusCode, 404);
     assert.equal((await request(handler, '/server/index.js')).statusCode, 404);

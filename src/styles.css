@@ -1,6 +1,6 @@
 @font-face {
-  font-family: "Pangolin";
-  src: url("../assets/Pangolin-Regular.ttf") format("truetype");
+  font-family: "Architects Daughter";
+  src: url("../assets/ArchitectsDaughter-Regular.ttf") format("truetype");
   font-weight: 400;
   font-style: normal;
   font-display: swap;
@@ -41,7 +41,7 @@ body {
   background-position: center;
   background-size: cover;
   color: var(--ink);
-  font-family: "Pangolin", "Comic Sans MS", "Marker Felt", "Trebuchet MS", system-ui, sans-serif;
+  font-family: "Architects Daughter", "Comic Sans MS", "Marker Felt", "Trebuchet MS", system-ui, sans-serif;
   -webkit-touch-callout: none;
   user-select: none;
 }
@@ -1561,7 +1561,7 @@ canvas {
   height: 256px;
   min-height: 0;
   color: var(--ink);
-  font-family: "Pangolin", "Comic Sans MS", "Marker Felt", "Trebuchet MS", system-ui, sans-serif;
+  font-family: "Architects Daughter", "Comic Sans MS", "Marker Felt", "Trebuchet MS", system-ui, sans-serif;
   font-size: 44px;
   font-weight: 850;
   line-height: 1.24;

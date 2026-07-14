@@ -1,4 +1,4 @@
-const RANKED_PLAYER_ID_KEY = 'tapTapShootX.rankedPlayerId';
+const GUEST_SESSION_TOKEN_KEY = 'tapTapShootX.guestSessionToken';
 
 export class RankedClient {
   constructor({ onQueue, onSnapshot, onClose, onError = () => {} }) {
@@ -7,8 +7,9 @@ export class RankedClient {
     this.onClose = onClose;
     this.onError = onError;
     this.socket = null;
-    this.playerId = readLocalStorage(RANKED_PLAYER_ID_KEY);
+    this.sessionToken = readLocalStorage(GUEST_SESSION_TOKEN_KEY);
     this.transitionsByRevision = new Map();
+    this.debugTools = createDisabledDebugTools();
   }
 
   connect(displayName = '', variantId = 'tapTapShootY') {
@@ -18,18 +19,20 @@ export class RankedClient {
     this.hasHello = false;
     this.didTryLocalFallback = false;
     this.transitionsByRevision.clear();
+    this.debugTools = createDisabledDebugTools();
 
     const socketUrl = this.getSocketUrl();
     this.openSocket(socketUrl);
   }
 
   openSocket(socketUrl) {
-    this.debug('connect', { socketUrl, playerId: this.playerId, displayName: this.displayName });
+    this.debug('connect', { socketUrl, displayName: this.displayName });
     const socket = new WebSocket(socketUrl);
     this.socket = socket;
 
     socket.addEventListener('open', () => {
       this.debug('open', { socketUrl });
+      socket.send(JSON.stringify({ type: 'authenticateGuest', token: this.sessionToken }));
     });
 
     socket.addEventListener('message', (event) => {
@@ -120,8 +123,9 @@ export class RankedClient {
     return true;
   }
 
-  skipGame(snapshot) {
+  debugWinGame(snapshot) {
     if (
+      !this.debugTools.winGame ||
       !this.socket ||
       this.socket.readyState !== WebSocket.OPEN ||
       !snapshot ||
@@ -132,7 +136,7 @@ export class RankedClient {
       return false;
     }
 
-    this.send({ type: 'skipGame', matchId: snapshot.matchId });
+    this.send({ type: 'debugWinGame', matchId: snapshot.matchId });
     return true;
   }
 
@@ -151,19 +155,11 @@ export class RankedClient {
     const host = window.location.protocol === 'file:' ? 'localhost:8787' : window.location.host;
     const url = new URL(`${protocol}//${host}/ws`);
 
-    if (this.playerId) {
-      url.searchParams.set('playerId', this.playerId);
-    }
-
     return url.toString();
   }
 
   getLocalFallbackSocketUrl() {
     const url = new URL('ws://localhost:8787/ws');
-
-    if (this.playerId) {
-      url.searchParams.set('playerId', this.playerId);
-    }
 
     return url.toString();
   }
@@ -196,8 +192,14 @@ export class RankedClient {
     if (message.type === 'hello') {
       this.hasHello = true;
       this.playerId = message.playerId;
+      this.sessionToken = message.sessionToken;
+      this.debugTools = {
+        winGame: message.debugTools?.winGame === true,
+        revealComputerMove: message.debugTools?.revealComputerMove === true,
+        sceneGallery: message.debugTools?.sceneGallery === true,
+      };
       this.debug('hello', { playerId: this.playerId, rating: message.rating });
-      writeLocalStorage(RANKED_PLAYER_ID_KEY, this.playerId);
+      writeLocalStorage(GUEST_SESSION_TOKEN_KEY, this.sessionToken);
       this.send({ type: 'joinRanked', displayName: this.displayName, variantId: this.variantId });
       return;
     }
@@ -284,4 +286,12 @@ function writeLocalStorage(key, value) {
   } catch {
     // Ranked still works for this tab; it just cannot persist the player id.
   }
+}
+
+function createDisabledDebugTools() {
+  return {
+    winGame: false,
+    revealComputerMove: false,
+    sceneGallery: false,
+  };
 }

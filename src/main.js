@@ -438,6 +438,11 @@ let rankedQueueError = null;
 let rankedDisconnectReturnTimer = null;
 let rankedDisplayName = readStoredDisplayName();
 let onlinePlayerCount = null;
+let debugTools = {
+  winGame: false,
+  revealComputerMove: false,
+  sceneGallery: false,
+};
 let onlineStatusTimer = null;
 let findingMatchStep = 0;
 let findingMatchTimer = null;
@@ -528,10 +533,11 @@ async function boot() {
   const preloadPromise = preloadGameAssets().catch((error) => {
     console.warn('Could not preload all game assets', error);
   });
+  const debugToolsPromise = loadDebugTools();
 
   const minimumLoadingPromise = loadingImagesPromise.then(() => waitMsWithoutToken(LOADING_DURATION_MS));
 
-  await Promise.all([preloadPromise, minimumLoadingPromise, gameLayoutPromise]);
+  await Promise.all([preloadPromise, minimumLoadingPromise, gameLayoutPromise, debugToolsPromise]);
   stopLoadingScreen(loadingScreen, loadingImages);
   await waitForLoadingStart(loadingScreen);
 
@@ -895,7 +901,7 @@ function preloadGameFont() {
     return Promise.resolve();
   }
 
-  return document.fonts.load('16px Pangolin').then(() => undefined, () => undefined);
+  return document.fonts.load('16px "Architects Daughter"').then(() => undefined, () => undefined);
 }
 
 async function loadGameLayoutForVariant(variantId) {
@@ -1583,9 +1589,15 @@ function renderMatchFoundScreen() {
 function renderScoreboardScreen() {
   const localName = rankedSnapshot?.players?.[rankedSnapshot.playerKey]?.displayName ?? rankedDisplayName;
   const opponentName = rankedSnapshot?.players?.[rankedSnapshot.opponentKey]?.displayName ?? 'Opponent';
-  const orderedVariantIds = (rankedSnapshot?.variantPickOrder ?? [])
+  const pickedVariantIds = (rankedSnapshot?.variantPickOrder ?? [])
     .map((playerKey) => rankedSnapshot?.variantPicks?.[playerKey])
     .filter(Boolean);
+  const completedVariantIds = (rankedSnapshot?.gameResults ?? [])
+    .map((result) => result.variantId)
+    .filter(Boolean);
+  const orderedVariantIds = completedVariantIds.length >= 2
+    ? completedVariantIds
+    : pickedVariantIds;
   const [firstVariantId, secondVariantId] = orderedVariantIds.length >= 2
     ? orderedVariantIds
     : rankedSnapshot?.remainingVariants ?? [];
@@ -2427,13 +2439,15 @@ function renderTitleScreen() {
         ${renderTitleBoilButton()}
       </div>
 
-      <button class="text-link scene-gallery-link" data-action="scene-gallery" type="button">Scene gallery</button>
+      ${debugTools.sceneGallery
+        ? '<button class="text-link scene-gallery-link" data-action="scene-gallery" type="button">Scene gallery</button>'
+        : ''}
     </section>
   `;
 
   app.querySelector('[data-action="play"]').addEventListener('click', startGameFromTitle);
   app.querySelector('[data-action="ranked"]').addEventListener('click', startRankedFromTitle);
-  app.querySelector('[data-action="scene-gallery"]').addEventListener('click', () => {
+  app.querySelector('[data-action="scene-gallery"]')?.addEventListener('click', () => {
     screen = 'scene-gallery';
     render();
   });
@@ -2444,6 +2458,12 @@ function renderTitleScreen() {
 }
 
 function renderSceneGallery() {
+  if (!debugTools.sceneGallery) {
+    screen = 'title';
+    render();
+    return;
+  }
+
   requestMusicTrack('title');
   const groups = buildSceneGalleryGroups();
 
@@ -3484,7 +3504,12 @@ function renderPlayerIdentity(playerId) {
 }
 
 function renderComputerDebugLine(playerId) {
-  if (playerId !== 'p2' || playMode !== 'local' || getCurrentVariantId() !== VARIANT_IDS.fireballWar) {
+  if (
+    !debugTools.revealComputerMove
+    || playerId !== 'p2'
+    || playMode !== 'local'
+    || getCurrentVariantId() !== VARIANT_IDS.fireballWar
+  ) {
     return '';
   }
 
@@ -5352,15 +5377,16 @@ function submitRankedContinue() {
 
 function renderSkipGameButton() {
   return playMode === 'online'
+    && rankedClient.debugTools.winGame
     && !rankedSnapshot?.pendingNextVariant
     && !rankedSnapshot?.pendingTiebreaker
     && ['choosing', 'revealed', 'roundOver'].includes(rankedSnapshot?.phase)
-    ? '<button class="ghost" data-action="skip-game">Skip game</button>'
+    ? '<button class="ghost" data-action="skip-game">Debug: win game</button>'
     : '';
 }
 
 function skipRankedGame() {
-  rankedClient.skipGame(rankedSnapshot);
+  rankedClient.debugWinGame(rankedSnapshot);
 }
 
 function leaveRanked() {
@@ -5565,6 +5591,31 @@ function getOnlineStatusUrl() {
   }
 
   return '/api/ranked-status';
+}
+
+async function loadDebugTools() {
+  try {
+    const response = await fetch(getServerApiUrl('/api/debug-tools'), { cache: 'no-store' });
+
+    if (!response.ok) {
+      return;
+    }
+
+    const received = await response.json();
+    debugTools = {
+      winGame: received.winGame === true,
+      revealComputerMove: received.revealComputerMove === true,
+      sceneGallery: received.sceneGallery === true,
+    };
+  } catch {
+    // Debug tools remain disabled when server config cannot be loaded.
+  }
+}
+
+function getServerApiUrl(pathname) {
+  return window.location.protocol === 'file:'
+    ? `http://localhost:8787${pathname}`
+    : pathname;
 }
 
 function beginGameLoop() {

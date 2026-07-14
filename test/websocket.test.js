@@ -5,6 +5,10 @@ import test from 'node:test';
 import { MemoryPlayerStore } from '../server/playerStore.js';
 import { RankedDuelService } from '../server/rankedDuel.js';
 import { attachWebSocketServer } from '../server/webSocket.js';
+import { attachRankedConnection } from '../server/index.js';
+import { createGuestTokenService } from '../server/guestToken.js';
+
+const TOKEN_SECRET = 'websocket-test-secret-that-is-longer-than-32-characters';
 
 test('WebSocket clients can connect, queue, and receive match state', async (t) => {
   const service = new RankedDuelService({
@@ -19,11 +23,10 @@ test('WebSocket clients can connect, queue, and receive match state', async (t) 
 
   attachWebSocketServer(server, {
     path: '/ws',
-    onConnection(connection, request) {
-      const params = new URL(request.url, `http://${request.headers.host}`).searchParams;
-      service.connect(connection, params.get('playerId')).then((session) => {
-        connection.onMessage((raw) => service.receive(session, JSON.parse(raw)));
-        connection.onClose(() => service.disconnect(session));
+    onConnection(connection) {
+      attachRankedConnection(connection, {
+        rankedDuel: service,
+        guestTokens: createGuestTokenService({ secret: TOKEN_SECRET }),
       });
     },
   });
@@ -39,13 +42,15 @@ test('WebSocket clients can connect, queue, and receive match state', async (t) 
     throw error;
   }
   const { port } = server.address();
-  const p1 = new WebSocket(`ws://127.0.0.1:${port}/ws?playerId=p1`);
-  const p2 = new WebSocket(`ws://127.0.0.1:${port}/ws?playerId=p2`);
+  const p1 = new WebSocket(`ws://127.0.0.1:${port}/ws`);
+  const p2 = new WebSocket(`ws://127.0.0.1:${port}/ws`);
   const p1Hello = waitForType(p1, 'hello');
   const p2Hello = waitForType(p2, 'hello');
 
   try {
     await Promise.all([waitForOpen(p1), waitForOpen(p2)]);
+    p1.send(JSON.stringify({ type: 'authenticateGuest', token: null }));
+    p2.send(JSON.stringify({ type: 'authenticateGuest', token: null }));
     assert.equal((await p1Hello).rating, 1000);
     assert.equal((await p2Hello).rating, 1000);
 
@@ -77,13 +82,12 @@ test('WebSocket closes oversized messages without killing server', async (t) => 
 
   attachWebSocketServer(server, {
     path: '/ws',
-    maxMessageBytes: 128,
+    maxMessageBytes: 512,
     heartbeatMs: 0,
-    onConnection(connection, request) {
-      const params = new URL(request.url, `http://${request.headers.host}`).searchParams;
-      service.connect(connection, params.get('playerId')).then((session) => {
-        connection.onMessage((raw) => service.receive(session, JSON.parse(raw)));
-        connection.onClose(() => service.disconnect(session));
+    onConnection(connection) {
+      attachRankedConnection(connection, {
+        rankedDuel: service,
+        guestTokens: createGuestTokenService({ secret: TOKEN_SECRET }),
       });
     },
   });
@@ -100,22 +104,24 @@ test('WebSocket closes oversized messages without killing server', async (t) => 
   }
 
   const { port } = server.address();
-  const socket = new WebSocket(`ws://127.0.0.1:${port}/ws?playerId=p1`);
+  const socket = new WebSocket(`ws://127.0.0.1:${port}/ws`);
   const hello = waitForType(socket, 'hello');
 
   try {
     await waitForOpen(socket);
+    socket.send(JSON.stringify({ type: 'authenticateGuest', token: null }));
     await hello;
     socket.send(JSON.stringify({
       type: 'joinRanked',
-      padding: 'x'.repeat(512),
+      padding: 'x'.repeat(1024),
     }));
     await waitForClose(socket);
 
-    const nextSocket = new WebSocket(`ws://127.0.0.1:${port}/ws?playerId=p2`);
+    const nextSocket = new WebSocket(`ws://127.0.0.1:${port}/ws`);
     const nextHello = waitForType(nextSocket, 'hello');
     try {
       await waitForOpen(nextSocket);
+      nextSocket.send(JSON.stringify({ type: 'authenticateGuest', token: null }));
       assert.equal((await nextHello).rating, 1000);
     } finally {
       nextSocket.close();
