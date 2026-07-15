@@ -1,6 +1,25 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
+test('boot preload waits for a user gesture before creating WebAudio context', async () => {
+  let contextsCreated = 0;
+
+  globalThis.window = {
+    AudioContext: class {
+      constructor() {
+        contextsCreated += 1;
+      }
+    },
+    addEventListener() {},
+  };
+  globalThis.Audio = class {};
+
+  const audio = await import(`../src/audio.js?gesture-preload-test=${Date.now()}`);
+  await audio.preloadSceneAudio();
+
+  assert.equal(contextsCreated, 0);
+});
+
 test('Tap Tap Shoot X scene audio starts through WebAudio', async () => {
   let starts = 0;
 

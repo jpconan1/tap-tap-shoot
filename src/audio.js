@@ -8,7 +8,6 @@ export const WIN_SOUND_AUDIO = 'win_sound.mp3';
 const SCENE_AUDIO = Object.freeze({
   shooting: 'gunshot.mp3',
   stabbing: 'stab.mp3',
-  hiding: 'nothing.mp3',
   clash: 'clash.mp3',
   collision: 'collision.mp3',
   counterstab: 'counterstab.mp3',
@@ -459,6 +458,14 @@ function preloadSceneAudioInBackground() {
 }
 
 export function preloadSceneAudio() {
+  // Creating an AudioContext before a user gesture can leave it permanently
+  // blocked on deployed origins in stricter browsers. Audio is enabled from
+  // the title-screen control, which creates and resumes the context directly
+  // inside that gesture before loading buffers.
+  if (!soundEnabled && !musicEnabled) {
+    return Promise.resolve();
+  }
+
   const audioFiles = getAudioFiles();
   let context = null;
 
