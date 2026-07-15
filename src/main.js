@@ -47,6 +47,7 @@ import { GameFlowDirector } from './presentation/gameFlowDirector.js';
 import { getResourcePresentation, shouldShowPickHistoryForVariant } from './variantPresentation.js';
 import { resolveReadyScene, resolveScene, swapScenePerspective } from './sceneResolver.js';
 import { VARIANT_SELECT_PAGE_SIZE, VARIANT_SELECT_VARIANTS } from './variantSelectConfig.js';
+import nameGeneratorData from './nameGeneratorData.json' with { type: 'json' };
 import {
   DOODLE_FRAME_RATE,
   DOODLE_FRAME_COUNT,
@@ -162,62 +163,6 @@ const MUSIC_VOLUME_KEY = 'tapTapShootX.musicVolume';
 const SFX_VOLUME_KEY = 'tapTapShootX.sfxVolume';
 const DEFAULT_RANKED_DISPLAY_NAME = 'Guest';
 const MAX_RANKED_DISPLAY_NAME_LENGTH = 50;
-const NAME_PREFIXES = Object.freeze([
-  'Steely',
-  'Mega',
-  'Supa',
-  'Ultra',
-  'Omega',
-  'SSJ',
-  'Sneaky',
-  'Sharp',
-  'Gung-Ho',
-  'Fidgety',
-  'Slippery',
-  'Thick',
-  'Tsar',
-  'Stabby',
-  'Gunslinger',
-  'Baby',
-  "Ol'",
-  'King',
-  'Grandmaster',
-]);
-const NAME_MAINS = Object.freeze([
-  'Pete',
-  'Vega',
-  'Samwise',
-  'Paul',
-  'Goku',
-  'Niki',
-  'Louise',
-  'Frank',
-  'Clark',
-  'Hippo',
-  'Gizmo',
-  'Alexander',
-  'Burger',
-]);
-const NAME_SUFFIXES = Object.freeze([
-  ', Certified Fraud',
-  'the Chill',
-  ', Reborn',
-  'Marks',
-  'Dodge',
-  ', Counterer',
-  ', Doodler',
-  'Bigups',
-  'the Stank',
-  ', Harasser',
-  'Waters',
-  'Rigby',
-  'Conan',
-  'Cooney',
-  'Clever',
-  'K. Rool',
-  'Parker',
-  '####',
-]);
 const DEFAULT_MOVE_BUTTON_DOODLES = Object.freeze({
   rock: 'rock-paper-scissors/rock_button',
   paper: 'rock-paper-scissors/paper_button',
@@ -1131,9 +1076,9 @@ function sanitizeDisplayName(value) {
 }
 
 function generateDisplayName() {
-  const prefix = pickRandom(NAME_PREFIXES);
-  const main = pickRandom(NAME_MAINS);
-  const suffix = pickRandom(NAME_SUFFIXES).replace('####', generateDigitString(4));
+  const prefix = pickRandom(nameGeneratorData.prefixes);
+  const main = pickRandom(nameGeneratorData.mains);
+  const suffix = pickRandom(nameGeneratorData.suffixes).replace('####', generateDigitString(4));
   const pattern = Math.floor(Math.random() * 4);
   const parts = [
     [prefix, main, suffix],
@@ -1142,14 +1087,14 @@ function generateDisplayName() {
     [prefix, suffix],
   ][pattern];
   const spacedName = parts.join(' ').replace(' ,', ',');
-  const separator = spacedName.includes(',') ? ' ' : pickRandom([' ', '_', '-']);
+  const separator = spacedName.includes(',') ? ' ' : pickRandom(nameGeneratorData.separators);
   const name = spacedName.replaceAll(' ', separator);
 
   if (Math.random() < 0.75) {
     return name;
   }
 
-  return Math.random() < 0.5 ? `xXx_${name}_xXx` : `-${name}-`;
+  return pickRandom(nameGeneratorData.brackets).replace('{name}', name);
 }
 
 function pickRandom(items) {
