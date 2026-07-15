@@ -120,7 +120,6 @@ const BULLET_SLOT_COUNT = MAX_BULLETS;
 const LAST_NUMBERED_TURN = 21;
 const FRAME_WIDTH = 960;
 const FRAME_HEIGHT = 540;
-const FRAME_BOTTOM_GUTTER = 36;
 const VARIANT_LAYOUT_URLS = Object.freeze({
   [VARIANT_IDS.tapTapShootY]: './assets/tap-tap-shoot-y/tap-tap-shoot-y-layout.json',
   [VARIANT_IDS.rockPaperScissors]: './assets/rock-paper-scissors/rock-paper-scissors-layout.json',
@@ -1053,7 +1052,7 @@ function finiteLayoutNumber(value, fallback) {
 
 function updateFrameScale() {
   const availableWidth = window.innerWidth;
-  const availableHeight = Math.max(1, window.innerHeight - FRAME_BOTTOM_GUTTER);
+  const availableHeight = Math.max(1, window.innerHeight);
   const frameWidth = gameLayout?.width ?? FRAME_WIDTH;
   const frameHeight = gameLayout?.height ?? FRAME_HEIGHT;
   const fitScale = Math.min(availableWidth / frameWidth, availableHeight / frameHeight);
