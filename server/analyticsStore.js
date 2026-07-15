@@ -25,6 +25,7 @@ export class MemoryAnalyticsStore extends NullAnalyticsStore {
 
 export class SupabaseAnalyticsStore extends NullAnalyticsStore {
   constructor({ url, secretKey, serviceRoleKey, fetchImpl = fetch }) {
+    super();
     this.secretKey = secretKey ?? serviceRoleKey;
     this.fetch = fetchImpl;
     if (!url || !this.secretKey) throw new Error('SupabaseAnalyticsStore requires a url and secret key');
