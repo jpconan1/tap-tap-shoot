@@ -11,6 +11,7 @@ import {
 } from '../src/engine/moves.js';
 import { MemoryPlayerStore } from './playerStore.js';
 import { shouldAutoAdvanceRound } from '../src/presentation/gameFlowPolicies.js';
+import { NullAnalyticsStore } from './analyticsStore.js';
 
 const MAX_TIMEOUT_STRIKES = 3;
 const DEFAULT_COUNTDOWN_MS = 3000;
@@ -28,6 +29,7 @@ const MAX_DISPLAY_NAME_LENGTH = 50;
 export class RankedDuelService {
   constructor({
     playerStore = new MemoryPlayerStore(),
+    analyticsStore = new NullAnalyticsStore(),
     countdownMs = DEFAULT_COUNTDOWN_MS,
     noSelectionGraceMs = NO_SELECTION_GRACE_MS,
     noContestWaitingMs = NO_CONTEST_WAITING_MS,
@@ -40,6 +42,8 @@ export class RankedDuelService {
     onError = () => {},
   } = {}) {
     this.playerStore = playerStore;
+    this.analyticsStore = analyticsStore;
+    this.analyticsQueue = Promise.resolve();
     this.countdownMs = countdownMs;
     this.noSelectionGraceMs = noSelectionGraceMs;
     this.noContestWaitingMs = noContestWaitingMs;
@@ -215,6 +219,7 @@ export class RankedDuelService {
   }
 
   createRoom(p1Session, p2Session) {
+    const startedAt = new Date(this.now()).toISOString();
     const room = {
       id: this.createId(),
       revision: 0,
@@ -252,11 +257,22 @@ export class RankedDuelService {
       winner: null,
       ratings: null,
       variantId: DEFAULT_VARIANT_ID,
+      startedAt,
+      analyticsGameNumber: 1,
+      analyticsRoundNumber: 1,
+      analyticsTurnCount: 0,
+      analyticsRoundTurnNumber: 0,
     };
 
     p1Session.roomId = room.id;
     p2Session.roomId = room.id;
     this.rooms.set(room.id, room);
+    this.track('recordMatchStarted', {
+      matchId: room.id,
+      startedAt,
+      p1Id: p1Session.player.id,
+      p2Id: p2Session.player.id,
+    });
     this.broadcastRoom(room);
     this.setRoomTimer(room, () => this.beginVariantSelection(room), this.countdownMs);
     return room;
@@ -313,6 +329,14 @@ export class RankedDuelService {
       [playerKey]: normalizedVariantId,
     };
     room.variantPickOrder = [...room.variantPickOrder, playerKey];
+    this.track('recordVariantPick', {
+      matchId: room.id,
+      selectionRound: room.variantSelectionRound,
+      playerSlot: playerKey,
+      variantId: normalizedVariantId,
+      pickOrder: room.variantPickOrder.length,
+      pickedAt: new Date(this.now()).toISOString(),
+    });
     this.send(session, 'variantPickAccepted', { variantId: normalizedVariantId });
     this.broadcastRoom(room);
 
@@ -332,6 +356,10 @@ export class RankedDuelService {
     room.gameWins = createEmptyScore();
     room.gameResults = [];
     room.roundWins = createEmptyScore();
+    room.analyticsGameNumber = 1;
+    room.analyticsRoundNumber = 1;
+    room.analyticsTurnCount = 0;
+    room.analyticsRoundTurnNumber = 0;
     room.pendingNextVariant = false;
     room.variantId = room.remainingVariants[0] ?? DEFAULT_VARIANT_ID;
     room.roundState = createRoundState({ variantId: room.variantId });
@@ -351,6 +379,10 @@ export class RankedDuelService {
     room.remainingVariants = [tiebreakerVariant];
     room.currentVariantIndex = 0;
     room.roundWins = createEmptyScore();
+    room.analyticsGameNumber = room.gameResults.length + 1;
+    room.analyticsRoundNumber = 1;
+    room.analyticsTurnCount = 0;
+    room.analyticsRoundTurnNumber = 0;
     room.pendingNextVariant = false;
     room.variantId = tiebreakerVariant;
     room.roundState = createRoundState({ variantId: room.variantId });
@@ -459,6 +491,20 @@ export class RankedDuelService {
 
     room.roundState = turn.state;
     room.phase = 'revealed';
+    room.analyticsTurnCount += 1;
+    room.analyticsRoundTurnNumber += 1;
+
+    this.track('recordTurn', {
+      matchId: room.id,
+      variantGameNumber: room.analyticsGameNumber,
+      roundNumber: room.analyticsRoundNumber,
+      turnNumber: room.analyticsRoundTurnNumber,
+      variantId: room.variantId,
+      p1Move,
+      p2Move,
+      roundWinnerSlot: room.roundState.winner ?? null,
+      recordedAt: new Date(this.now()).toISOString(),
+    });
 
     if (room.roundState.winner) {
       room.roundWins[room.roundState.winner] += 1;
@@ -561,6 +607,8 @@ export class RankedDuelService {
     }
 
     room.roundState = createRoundState({ variantId: room.variantId });
+    room.analyticsRoundNumber += 1;
+    room.analyticsRoundTurnNumber = 0;
     this.beginChoosing(room);
   }
 
@@ -568,6 +616,10 @@ export class RankedDuelService {
     room.currentVariantIndex += 1;
     room.variantId = room.remainingVariants[room.currentVariantIndex] ?? room.variantId;
     room.roundWins = createEmptyScore();
+    room.analyticsGameNumber = room.gameResults.length + 1;
+    room.analyticsRoundNumber = 1;
+    room.analyticsTurnCount = 0;
+    room.analyticsRoundTurnNumber = 0;
     room.pendingNextVariant = false;
     room.roundState = createRoundState({ variantId: room.variantId });
     this.beginChoosing(room);
@@ -588,6 +640,7 @@ export class RankedDuelService {
       room.winner = null;
       room.ratings = null;
       this.broadcastRoom(room, {}, 'match-ended');
+      this.recordMatchEnd(room, 'no_contest');
       this.releaseRoom(room);
       return;
     }
@@ -660,6 +713,16 @@ export class RankedDuelService {
       roundWins: { ...room.roundWins },
       winner: winnerKey,
     });
+    this.track('recordVariantGame', {
+      matchId: room.id,
+      gameNumber: room.analyticsGameNumber,
+      selectionRound: room.variantSelectionRound,
+      variantId: room.variantId,
+      winnerSlot: winnerKey,
+      roundWins: { ...room.roundWins },
+      turnCount: room.analyticsTurnCount,
+      endedAt: new Date(this.now()).toISOString(),
+    });
 
     if (room.gameWins[winnerKey] >= 2 || room.variantSelectionRound === 2 || room.remainingVariants.length <= 1) {
       this.finishRoom(room, winnerKey);
@@ -721,6 +784,7 @@ export class RankedDuelService {
     }
 
     this.broadcastRoom(room, {}, 'match-ended');
+    this.recordMatchEnd(room, room.noContest ? 'no_contest' : (room.disconnectedPlayerKey ? 'forfeit' : 'completed'));
     this.releaseRoom(room);
   }
 
@@ -769,6 +833,7 @@ export class RankedDuelService {
       room.ratings = null;
       room.aborted = true;
       this.broadcastRoom(room);
+      this.recordMatchEnd(room, 'aborted');
       this.releaseRoom(room);
       return;
     }
@@ -893,6 +958,25 @@ export class RankedDuelService {
     room.players.p1.roomId = null;
     room.players.p2.roomId = null;
     this.rooms.delete(room.id);
+  }
+
+  recordMatchEnd(room, status) {
+    this.track('recordMatchEnded', {
+      matchId: room.id,
+      endedAt: new Date(this.now()).toISOString(),
+      status,
+      winnerSlot: room.winner ?? null,
+      gameWins: { ...room.gameWins },
+      timeoutStrikes: { ...room.timeoutStrikes },
+      disconnectedSlot: room.disconnectedPlayerKey ?? null,
+    });
+  }
+
+  track(method, payload) {
+    this.analyticsQueue = this.analyticsQueue
+      .then(() => this.analyticsStore[method](payload))
+      .catch((error) => this.onError(error));
+    return this.analyticsQueue;
   }
 }
 

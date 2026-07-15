@@ -7,6 +7,7 @@ import { RankedDuelService } from '../server/rankedDuel.js';
 import { getAllowDebugWinGame } from '../server/index.js';
 import { createRoundState } from '../src/engine/gameState.js';
 import { DEFAULT_VARIANT_ID, VARIANT_IDS } from '../src/engine/moves.js';
+import { MemoryAnalyticsStore } from '../server/analyticsStore.js';
 
 test('matchmaking pairs similarly rated players into a ranked room', async () => {
   const service = createTestService();
@@ -63,6 +64,44 @@ test('variant picks are realtime unique and play first picker first', async () =
     p1: VARIANT_IDS.rockPaperScissors,
     p2: VARIANT_IDS.fireballWar,
   });
+});
+
+test('analytics records anonymous match facts, variant picks, turns, games, and completion', async () => {
+  const analyticsStore = new MemoryAnalyticsStore();
+  const { service, p1, p2 } = await createMatchedService({ analyticsStore, revealMs: 1, allowDebugWinGame: true });
+  const room = onlyRoom(service);
+
+  service.beginBanning(room);
+  service.receive(p1.session, { type: 'submitVariantPick', variantId: VARIANT_IDS.tapTapShootY });
+  service.receive(p2.session, { type: 'submitVariantPick', variantId: VARIANT_IDS.fireballWar });
+  room.roundWins.p1 = 2;
+  service.receive(p1.session, { type: 'submitMove', moveId: 'shoot' });
+  service.receive(p2.session, { type: 'submitMove', moveId: 'stab' });
+  await wait(10);
+  service.receive(p1.session, { type: 'submitContinue' });
+  service.receive(p2.session, { type: 'submitContinue' });
+  service.receive(p1.session, { type: 'debugWinGame' });
+  await wait(0);
+  await service.analyticsQueue;
+
+  assert.equal(analyticsStore.matches.length, 1);
+  assert.deepEqual(analyticsStore.matches[0], {
+    matchId: room.id,
+    startedAt: new Date(0).toISOString(),
+    p1Id: 'p1',
+    p2Id: 'p2',
+  });
+  assert.deepEqual(analyticsStore.variantPicks.map(({ variantId, pickOrder }) => ({ variantId, pickOrder })), [
+    { variantId: VARIANT_IDS.tapTapShootY, pickOrder: 1 },
+    { variantId: VARIANT_IDS.fireballWar, pickOrder: 2 },
+  ]);
+  assert.equal(analyticsStore.turns.length, 1);
+  assert.deepEqual(analyticsStore.turns.map(({ variantGameNumber, turnNumber }) => ({ variantGameNumber, turnNumber })), [
+    { variantGameNumber: 1, turnNumber: 1 },
+  ]);
+  assert.equal(analyticsStore.variantGames.length, 2);
+  assert.equal(analyticsStore.matchEnds[0].status, 'completed');
+  assert.equal(analyticsStore.matchEnds[0].winnerSlot, 'p1');
 });
 
 test('room revisions increase and variant start is a separate transition event', async () => {
@@ -637,6 +676,7 @@ function createTestService({
   noContestWaitingMs = 1000,
   noContestCountdownMs = 1000,
   allowDebugWinGame = false,
+  analyticsStore,
 } = {}) {
   return new RankedDuelService({
     playerStore: store,
@@ -647,6 +687,7 @@ function createTestService({
     noContestWaitingMs,
     noContestCountdownMs,
     allowDebugWinGame,
+    analyticsStore,
     now,
     createId: createIncrementingId(),
   });

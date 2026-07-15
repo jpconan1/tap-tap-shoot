@@ -7,6 +7,7 @@ import { FallbackPlayerStore, JsonPlayerStore, SupabasePlayerStore } from './pla
 import { RankedDuelService } from './rankedDuel.js';
 import { attachWebSocketServer } from './webSocket.js';
 import { createGuestTokenServiceFromEnv } from './guestToken.js';
+import { NullAnalyticsStore, SupabaseAnalyticsStore } from './analyticsStore.js';
 
 const DEFAULT_ROOT = process.cwd();
 const PUBLIC_TYPES = new Map([
@@ -29,8 +30,10 @@ export function createTapTapShootServer({
   env = process.env,
   root = DEFAULT_ROOT,
   playerStore = createPlayerStore({ env, root }),
+  analyticsStore = createAnalyticsStore({ env }),
   rankedDuel = new RankedDuelService({
     playerStore,
+    analyticsStore,
     allowDebugWinGame: getAllowDebugWinGame(env),
     onError(error) {
       console.error('Ranked service failed:', getErrorMessage(error));
@@ -59,6 +62,12 @@ export function createTapTapShootServer({
   });
 
   return { server, rankedDuel };
+}
+
+export function createAnalyticsStore({ env = process.env } = {}) {
+  const url = env.SUPABASE_URL;
+  const secretKey = env.SUPABASE_SECRET_KEY ?? env.SUPABASE_SERVICE_ROLE_KEY;
+  return url && secretKey ? new SupabaseAnalyticsStore({ url, secretKey }) : new NullAnalyticsStore();
 }
 
 export function attachRankedConnection(connection, { rankedDuel, guestTokens, authenticationMs = 10_000 }) {
