@@ -17,6 +17,7 @@ const PUBLIC_TYPES = new Map([
   ['.json', 'application/json; charset=utf-8'],
   ['.webp', 'image/webp'],
   ['.mp3', 'audio/mpeg'],
+  ['.png', 'image/png'],
   ['.ttf', 'font/ttf'],
 ]);
 const PUBLIC_PREFIXES = Object.freeze(['assets/', 'src/']);

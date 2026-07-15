@@ -806,7 +806,7 @@ function getGamePreloadDoodles() {
     ...getResourceDoodlesForPreload(),
     ...Array.from({ length: LAST_NUMBERED_TURN + 1 }, (_, turn) => `turn${turn}`),
     'turnlostcount',
-    ...Array.from({ length: 5 }, (_, index) => `w${index + 1}`),
+    ...Array.from({ length: 6 }, (_, index) => `ft5-w${index}`),
     ...Array.from({ length: 4 }, (_, index) => `ft3-win-counter-${index}`),
   ];
 }

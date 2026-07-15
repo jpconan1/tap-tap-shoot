@@ -89,6 +89,42 @@ let soundEnabled = false;
 let musicEnabled = false;
 let musicVolume = 1;
 let sfxVolume = 1;
+let lastMusicDiagnostic = '';
+
+function logAudio(event, details = {}) {
+  console.info(`[audio] ${event}`, details);
+}
+
+function getAudioDiagnosticState(extra = {}) {
+  return {
+    soundEnabled,
+    musicEnabled,
+    desiredMusicTrack,
+    contextState: sceneAudioContext?.state ?? 'none',
+    currentTrack: currentMusicSegment?.trackId ?? null,
+    loadedMusicFiles: getMusicFiles().filter((fileName) => sceneAudioBuffers.has(fileName)),
+    ...extra,
+  };
+}
+
+function logMusicBlocker(reason) {
+  const signature = `${reason}|${sceneAudioContext?.state}|${desiredMusicTrack}|${currentMusicSegment?.trackId}`;
+  if (signature === lastMusicDiagnostic) return;
+  lastMusicDiagnostic = signature;
+  logAudio('music waiting', getAudioDiagnosticState({ reason }));
+}
+
+function getMusicFiles() {
+  return [
+    ...Object.values(MUSIC_TRACKS),
+    ...GAME_LOOP_VARIANTS,
+    ...Object.values(MUSIC_TOPPERS),
+  ];
+}
+
+function isMusicFile(fileName) {
+  return getMusicFiles().includes(fileName);
+}
 
 export function configureAudio(options) {
   getMusicTopperFile = options.getMusicTopperFile;
@@ -108,6 +144,7 @@ export function setMusicEnabled(isEnabled, trackId = null) {
   }
 
   musicEnabled = Boolean(isEnabled);
+  logAudio('music toggled', getAudioDiagnosticState({ requestedTrack: trackId }));
 
   if (!musicEnabled) {
     stopCurrentMusicSegment();
@@ -159,6 +196,7 @@ export function requestMusicTrack(trackId) {
   }
 
   desiredMusicTrack = trackId;
+  logAudio('track requested', getAudioDiagnosticState({ requestedTrack: trackId }));
 
   if (!musicEnabled) {
     stopCurrentMusicSegment();
@@ -437,9 +475,15 @@ export function unlockSceneAudio() {
     return sceneAudioUnlockPromise;
   }
 
+  logAudio('unlock requested', getAudioDiagnosticState());
+
   sceneAudioUnlockPromise = context.resume()
+    .then(() => {
+      logAudio('resume resolved', getAudioDiagnosticState());
+    })
     .catch((error) => {
       console.warn('Could not unlock scene audio context', error);
+      logAudio('resume rejected', getAudioDiagnosticState({ error: String(error) }));
     })
     .then(() => musicEnabled && desiredMusicTrack ? loadMusicTrackBuffers(desiredMusicTrack) : null)
     .then(() => syncMusicTrack())
@@ -614,16 +658,19 @@ function resumeInterruptedMusic(resumeSegment) {
 
 function syncMusicTrack() {
   if (!musicEnabled) {
+    logMusicBlocker('disabled');
     return;
   }
 
   const context = getExistingSceneAudioContext();
 
   if (!context) {
+    logMusicBlocker('no-context');
     return;
   }
 
   if (context.state !== 'running' || !desiredMusicTrack) {
+    logMusicBlocker(context.state !== 'running' ? `context-${context.state}` : 'no-track');
     return;
   }
 
@@ -649,6 +696,7 @@ function syncMusicTrack() {
 
 function startMusicSegment(trackId, startAt, returnTrackId, offset = 0) {
   if (!musicEnabled) {
+    logMusicBlocker('start-disabled');
     return;
   }
 
@@ -668,6 +716,7 @@ function startMusicSegment(trackId, startAt, returnTrackId, offset = 0) {
   }
 
   if (!context || context.state !== 'running' || !buffer) {
+    logMusicBlocker(!context ? 'start-no-context' : context.state !== 'running' ? `start-context-${context.state}` : `buffer-missing:${segmentFileName}`);
     if (segmentFileName) {
       loadSceneAudioBuffer(segmentFileName).then(() => syncMusicTrack());
     }
@@ -694,6 +743,7 @@ function startMusicSegment(trackId, startAt, returnTrackId, offset = 0) {
   source.connect(gain);
   gain.connect(context.destination);
   source.onended = () => {
+    logAudio('segment ended', getAudioDiagnosticState({ trackId, fileName: segmentFileName }));
     if (currentMusicSegment?.source === source) {
       currentMusicSegment = null;
       stopMusicTopperSegment(source);
@@ -705,6 +755,13 @@ function startMusicSegment(trackId, startAt, returnTrackId, offset = 0) {
   };
   source.start(safeStartAt, safeOffset);
   currentMusicSegment = segment;
+  lastMusicDiagnostic = '';
+  logAudio('segment started', getAudioDiagnosticState({
+    trackId,
+    fileName: segmentFileName,
+    duration: buffer.duration,
+    volume: musicVolume,
+  }));
   syncMusicTopperForSegment(segment, safeStartAt, safeOffset);
   scheduleMusicBoundaryCheck();
 }
@@ -978,7 +1035,9 @@ function getSceneAudioContext() {
   }
 
   sceneAudioContext = new AudioContextClass();
+  logAudio('context created', getAudioDiagnosticState());
   sceneAudioContext.addEventListener?.('statechange', () => {
+    logAudio('context state changed', getAudioDiagnosticState());
     if (sceneAudioContext?.state === 'running') {
       syncMusicTrack();
     }
@@ -1025,6 +1084,12 @@ function loadSceneAudioBuffer(fileName) {
       }
 
       sceneAudioBuffers.set(fileName, buffer);
+      if (isMusicFile(fileName)) {
+        logAudio('music buffer loaded', getAudioDiagnosticState({
+          fileName,
+          duration: buffer.duration,
+        }));
+      }
       return buffer;
     })
     .catch((error) => {
