@@ -1443,7 +1443,7 @@ function render() {
 
     <section class="controls">
       ${renderSkipGameButton()}
-      <button class="ghost" data-action="reset">Reset</button>
+      ${renderResetButton()}
     </section>
     ${renderRankedDisconnectNotice()}
   `;
@@ -1454,7 +1454,7 @@ function render() {
   app.querySelector('[data-action="rematch"]')?.addEventListener('click', restartGame);
   app.querySelector('[data-action="quit"]')?.addEventListener('click', quitLocalGame);
   app.querySelector('[data-action="skip-game"]')?.addEventListener('click', skipRankedGame);
-  app.querySelector('[data-action="reset"]').addEventListener('click', restartGame);
+  app.querySelector('[data-action="reset"]')?.addEventListener('click', restartGame);
   app.querySelectorAll('[data-test-opponent-move]').forEach((button) => {
     button.addEventListener('click', () => submitTestOpponentMove(button.dataset.testOpponentMove));
   });
@@ -1768,7 +1768,7 @@ function renderLayoutGameScreen(legalMoves) {
         ${renderReadyWaitingOverlay()}
         <section class="controls layout-controls">
           ${renderSkipGameButton()}
-          <button class="ghost" data-action="reset">Reset</button>
+          ${renderResetButton()}
         </section>
       </div>
     </section>
@@ -1805,6 +1805,10 @@ function installLayoutActionHandlers() {
   app.querySelectorAll('[data-test-opponent-move]').forEach((button) => {
     button.addEventListener('click', () => submitTestOpponentMove(button.dataset.testOpponentMove));
   });
+}
+
+function renderResetButton() {
+  return playMode === 'online' ? '' : '<button class="ghost" data-action="reset">Reset</button>';
 }
 
 function renderGameplayRulesButton() {
