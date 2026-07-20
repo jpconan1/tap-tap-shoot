@@ -1,0 +1,41 @@
+RPS MINUS ONE - QUICK REPORT
+
+RULES
+
+1. Each player reveals two different RPS moves.
+2. Each player simultaneously chooses one revealed move to keep.
+3. The kept moves resolve as normal rock-paper-scissors.
+
+RESULT
+
+The complete game is fair. Under optimal play, each player has 50% value when
+ties count as half a win.
+
+In phase one, each possible pair should be chosen 1/3 of the time:
+
+- rock + paper
+- rock + scissors
+- paper + scissors
+
+EXAMPLE
+
+Player 1 reveals rock + paper.
+Player 2 reveals rock + scissors.
+
+Optimal phase-two strategy:
+
+- Player 1 keeps rock 2/3 and paper 1/3.
+- Player 2 keeps rock 2/3 and scissors 1/3.
+- Player 1's value in this matchup is 2/3.
+
+Paper matters because it beats Player 2's rock. If Player 1 always keeps rock,
+Player 2 can always keep rock and force a tie. Player 1 can punish that choice
+by sometimes keeping paper. Player 2 therefore sometimes keeps scissors to
+punish paper.
+
+VERDICT
+
+The game does not collapse into always choosing rock. Optimal play requires
+random choices. Individual revealed-pair matchups can favor one player 2/3 to
+1/3, but the full game remains fair because the phase-one pair selection is
+also mixed.

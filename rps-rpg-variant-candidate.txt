@@ -1,0 +1,113 @@
+RPS RPG variant candidate
+
+Rules modeled
+- Stats start at 0/0/0.
+- Scores start at 0/0.
+- First to 5 scored rounds wins.
+- At the start of each scored round, both players simultaneously reveal one stat to level up.
+- That level applies before moves.
+- Players then simultaneously reveal one move until somebody scores the round.
+- Sword uses STR.
+- Staff uses INT.
+- Bow uses DEX.
+- Sword/STR beats staff/INT.
+- Staff/INT beats bow/DEX.
+- Bow/DEX beats sword/STR.
+- If moves tie, higher associated stat wins the round.
+- If moves tie and associated stat is equal, nobody scores and moves reveal again.
+
+Generated files
+- Script: nash_str_int_dex.py
+- Full CPU table: str_int_dex_policy.json
+
+Table size
+- Between-round states: 10,385.
+- Level-reveal branches: 93,465.
+- JSON size: about 7.8 MB.
+- State key format: yourScore,cpuScore|yourStr,yourInt,yourDex|cpuStr,cpuInt,cpuDex.
+- Branch key format: yourLeveledStat,cpuLeveledStat.
+
+Starting state
+- Start: score 0-0, stats 0/0/0 each.
+- Game value: about 50%.
+- Perfect level mix: STR 33%, INT 33%, DEX 33%.
+
+Round 1 move mixes after level reveal
+
+You level    CPU levels    CPU move mix
+STR          STR           sword 33%, staff 33%, bow 33%
+STR          INT           sword 50%, bow 50%
+STR          DEX           sword 50%, bow 50%
+INT          STR           sword 50%, staff 50%
+INT          INT           sword 33%, staff 33%, bow 33%
+INT          DEX           sword 50%, staff 50%
+DEX          STR           sword 50%, staff 50%
+DEX          INT           staff 50%, bow 50%
+DEX          DEX           sword 33%, staff 33%, bow 33%
+
+Rule of thumb
+- If both players level the same stat, move choice usually becomes normal 33/33/33 RPS.
+- If players level different stats, avoid the move that loses to the opponent's boosted tied move.
+
+Opponent leveled    Their boosted tie move    Avoid    Usually mix
+STR                 sword                      staff    sword/bow
+INT                 staff                      bow      sword/staff
+DEX                 bow                        sword    staff/bow
+
+Later-game read
+- Strategy is based on current stat ownership, not just last level.
+- A high stat means that move's tie is dangerous.
+- It does not always mean the player should use that move.
+- Often, the right play is to use other moves that punish the opponent's attempt to route around the dangerous tie.
+
+Move mix shapes in full table
+
+Move mix shape      Count
+50/50/0 variants    89,895
+33/33/33            3,075
+46/54/0 variants    495
+
+Level mix shapes in full table
+
+Level mix shape     Count
+100/0/0 variants    9,798
+33/33/33            425
+50/50/0 variants    162
+
+Important design read
+- Leveling is mostly deterministic under perfect play.
+- About 94% of level states are pure 100/0/0 choices.
+- The leveling phase creates readable long-term pressure, but it is less mixed than expected.
+- If the design goal is a strong, readable strategy layer, this may be fine.
+- If the design goal is lots of leveling uncertainty, this ruleset needs another knob.
+
+Possible knobs if leveling should be less deterministic
+- Cap each stat.
+- Make over-leveling wasteful.
+- Reset or decay stats after each round.
+- Hide level-up choices until after move choice.
+- Give each stat a passive effect beyond tie wins.
+- Forbid leveling the same stat twice in a row.
+
+Example lookup
+
+State:
+- Score: You 2, CPU 3.
+- You: STR 2, INT 2, DEX 1.
+- CPU: STR 3, INT 1, DEX 1.
+
+Nash result:
+- Your game value: 31%.
+- You should level INT 100%.
+- CPU should level STR 100%.
+- After that reveal, your move mix is staff 50%, bow 50%.
+- Never sword in that round.
+
+
+Overall
+
+- Charge Block Fireball is compact and produces clean, useful Nash tables.
+- Punch Stab Shoot has funky but explainable move frequencies; original rules look best.
+- Str Int Dex has depth, but hard Nash is more deterministic than it first appears.
+- For hard CPU opponents, all three games should use weighted random from precomputed Nash tables.
+- Never make hard CPU choose the highest-percent option every time. That becomes exploitable.

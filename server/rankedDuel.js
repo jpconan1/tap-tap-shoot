@@ -25,6 +25,9 @@ const INITIAL_SEARCH_SPREAD = 100;
 const SEARCH_SPREAD_PER_SECOND = 75;
 const DEFAULT_DISPLAY_NAME = 'Guest';
 const MAX_DISPLAY_NAME_LENGTH = 50;
+const MAX_CHAT_MESSAGE_LENGTH = 200;
+const MAX_CHAT_HISTORY = 100;
+const DEFAULT_CHALLENGE_MS = 15 * 1000;
 
 export class RankedDuelService {
   constructor({
@@ -39,6 +42,7 @@ export class RankedDuelService {
     allowDebugWinGame = false,
     now = () => Date.now(),
     createId = randomUUID,
+    challengeMs = DEFAULT_CHALLENGE_MS,
     onError = () => {},
   } = {}) {
     this.playerStore = playerStore;
@@ -53,11 +57,14 @@ export class RankedDuelService {
     this.allowDebugWinGame = allowDebugWinGame;
     this.now = now;
     this.createId = createId;
+    this.challengeMs = challengeMs;
     this.onError = onError;
     this.sessions = new Map();
     this.sessionsByPlayerId = new Map();
     this.queue = [];
     this.rooms = new Map();
+    this.chatMessages = [];
+    this.challenges = new Map();
   }
 
   async connect(client, authenticatedPlayerId, sessionToken) {
@@ -78,6 +85,9 @@ export class RankedDuelService {
       client,
       roomId: null,
       queuedAt: null,
+      presence: 'idle',
+      inLobby: false,
+      challengeId: null,
       closed: false,
     };
 
@@ -108,6 +118,51 @@ export class RankedDuelService {
       session.displayName = sanitizeDisplayName(message.displayName);
       session.variantId = normalizeVariantId(message.variantId);
       this.joinRanked(session);
+      return;
+    }
+
+    if (message.type === 'enterLobby') {
+      session.displayName = sanitizeDisplayName(message.displayName);
+      session.inLobby = true;
+      session.presence = 'idle';
+      this.sendLobbyState(session);
+      this.broadcastRoster();
+      return;
+    }
+
+    if (message.type === 'setDisplayName') {
+      session.displayName = sanitizeDisplayName(message.displayName);
+      this.broadcastRoster();
+      return;
+    }
+
+    if (message.type === 'setPresence') {
+      this.setPresence(session, message.presence);
+      return;
+    }
+
+    if (message.type === 'setReady') {
+      this.setReady(session, message.ready === true);
+      return;
+    }
+
+    if (message.type === 'sendChat') {
+      this.sendChat(session, message.text);
+      return;
+    }
+
+    if (message.type === 'challengePlayer') {
+      this.challengePlayer(session, message.playerId);
+      return;
+    }
+
+    if (message.type === 'cancelChallenge') {
+      this.resolveChallenge(session, message.challengeId, 'cancelled');
+      return;
+    }
+
+    if (message.type === 'respondChallenge') {
+      this.resolveChallenge(session, message.challengeId, message.accept === true ? 'accepted' : 'declined');
       return;
     }
 
@@ -142,6 +197,7 @@ export class RankedDuelService {
     }
 
     session.closed = true;
+    this.resolveSessionChallenge(session, 'cancelled');
     this.leaveQueue(session);
     this.sessions.delete(session.id);
 
@@ -152,6 +208,166 @@ export class RankedDuelService {
     if (session.roomId) {
       return this.forfeitRoom(session.roomId, session);
     }
+    this.broadcastRoster();
+  }
+
+  setPresence(session, presence) {
+    if (!session.inLobby || session.roomId || session.challengeId) return;
+    const normalized = presence === 'playing_computer' ? 'playing_computer' : 'idle';
+    this.leaveQueue(session);
+    session.presence = normalized;
+    this.broadcastRoster();
+  }
+
+  setReady(session, ready) {
+    if (!session.inLobby || session.roomId || session.challengeId || session.presence === 'playing_computer') return;
+    if (!ready) {
+      this.leaveQueue(session);
+      session.presence = 'idle';
+      this.broadcastRoster();
+      return;
+    }
+    session.presence = 'ready';
+    this.joinRanked(session);
+    this.broadcastRoster();
+  }
+
+  sendChat(session, value) {
+    if (!session.inLobby) return;
+    const text = sanitizeChatMessage(value);
+    if (!text) return;
+    const message = {
+      id: this.createId(),
+      sentAt: new Date(this.now()).toISOString(),
+      playerId: session.player.id,
+      displayName: session.displayName,
+      text,
+    };
+    this.chatMessages.push(message);
+    if (this.chatMessages.length > MAX_CHAT_HISTORY) this.chatMessages.shift();
+    this.broadcastLobby('chatMessage', { message });
+  }
+
+  challengePlayer(challenger, playerId) {
+    const challenged = this.sessionsByPlayerId.get(playerId);
+    if (!this.isChallengeAvailable(challenger) || !this.isChallengeAvailable(challenged) || challenger === challenged) {
+      this.sendLobbyState(challenger);
+      return;
+    }
+    this.leaveQueue(challenger);
+    this.leaveQueue(challenged);
+    const challenge = {
+      id: this.createId(),
+      challengerId: challenger.player.id,
+      challengedId: challenged.player.id,
+      expiresAt: this.now() + this.challengeMs,
+      timer: null,
+    };
+    challenge.timer = setTimeout(() => this.finishChallenge(challenge, 'expired'), this.challengeMs);
+    challenge.timer.unref?.();
+    this.challenges.set(challenge.id, challenge);
+    challenger.challengeId = challenge.id;
+    challenged.challengeId = challenge.id;
+    challenger.presence = 'idle';
+    challenged.presence = 'idle';
+    this.send(challenged, 'challengeReceived', { challenge: this.getPublicChallenge(challenge) });
+    this.broadcastChallenge(challenge, 'pending');
+    this.broadcastRoster();
+  }
+
+  resolveChallenge(session, challengeId, resolution) {
+    const challenge = this.challenges.get(challengeId);
+    if (!challenge || session.challengeId !== challenge.id) {
+      this.sendLobbyState(session);
+      return;
+    }
+    const isChallenger = session.player.id === challenge.challengerId;
+    const isChallenged = session.player.id === challenge.challengedId;
+    if ((resolution === 'cancelled' && !isChallenger) || (['accepted', 'declined'].includes(resolution) && !isChallenged)) return;
+    this.finishChallenge(challenge, resolution);
+  }
+
+  finishChallenge(challenge, resolution) {
+    if (!this.challenges.has(challenge.id)) return;
+    clearTimeout(challenge.timer);
+    this.challenges.delete(challenge.id);
+    const challenger = this.sessionsByPlayerId.get(challenge.challengerId);
+    const challenged = this.sessionsByPlayerId.get(challenge.challengedId);
+    for (const session of [challenger, challenged]) {
+      if (session?.challengeId === challenge.id) session.challengeId = null;
+    }
+    this.broadcastChallenge(challenge, resolution);
+    if (resolution === 'accepted' && this.isChallengeAvailable(challenger) && this.isChallengeAvailable(challenged)) {
+      this.createRoom(challenger, challenged);
+    }
+    this.broadcastRoster();
+  }
+
+  resolveSessionChallenge(session, resolution) {
+    if (session.challengeId) {
+      const challenge = this.challenges.get(session.challengeId);
+      if (challenge) this.finishChallenge(challenge, resolution);
+    }
+  }
+
+  isChallengeAvailable(session) {
+    return Boolean(session && !session.closed && session.inLobby && !session.roomId && !session.challengeId && session.presence !== 'playing_computer');
+  }
+
+  getPublicChallenge(challenge) {
+    const challenger = this.sessionsByPlayerId.get(challenge.challengerId);
+    const challenged = this.sessionsByPlayerId.get(challenge.challengedId);
+    return {
+      id: challenge.id,
+      challengerId: challenge.challengerId,
+      challengedId: challenge.challengedId,
+      challengerName: challenger?.displayName ?? 'Guest',
+      challengedName: challenged?.displayName ?? 'Guest',
+      challengerRating: challenger?.player.rating ?? null,
+      challengedRating: challenged?.player.rating ?? null,
+      expiresAt: challenge.expiresAt,
+    };
+  }
+
+  broadcastChallenge(challenge, status) {
+    const payload = { challenge: this.getPublicChallenge(challenge), status };
+    for (const playerId of [challenge.challengerId, challenge.challengedId]) {
+      const session = this.sessionsByPlayerId.get(playerId);
+      if (session && !session.closed) this.send(session, 'challengeUpdated', payload);
+    }
+  }
+
+  sendLobbyState(session) {
+    this.send(session, 'lobbyState', {
+      self: this.getPublicPlayer(session),
+      players: this.getPublicRoster(),
+      recentMessages: this.chatMessages,
+      pendingChallenge: session.challengeId ? this.getPublicChallenge(this.challenges.get(session.challengeId)) : null,
+    });
+  }
+
+  broadcastRoster() {
+    this.broadcastLobby('rosterUpdated', { players: this.getPublicRoster() });
+  }
+
+  broadcastLobby(type, payload) {
+    for (const session of this.sessions.values()) {
+      if (!session.closed && session.inLobby) this.send(session, type, payload);
+    }
+  }
+
+  getPublicRoster() {
+    return [...this.sessions.values()].filter((session) => session.inLobby && !session.closed).map((session) => this.getPublicPlayer(session));
+  }
+
+  getPublicPlayer(session) {
+    return {
+      playerId: session.player.id,
+      displayName: session.displayName,
+      rating: session.player.rating,
+      presence: session.roomId ? 'in_ranked_match' : session.challengeId ? 'idle' : session.presence,
+      challengePending: Boolean(session.challengeId),
+    };
   }
 
   joinRanked(session) {
@@ -161,6 +377,7 @@ export class RankedDuelService {
 
     if (!this.queue.includes(session)) {
       session.queuedAt = this.now();
+      session.presence = 'ready';
       this.queue.push(session);
       this.send(session, 'queue', {
         status: 'searching',
@@ -219,6 +436,10 @@ export class RankedDuelService {
   }
 
   createRoom(p1Session, p2Session) {
+    this.resolveSessionChallenge(p1Session, 'cancelled');
+    this.resolveSessionChallenge(p2Session, 'cancelled');
+    p1Session.presence = 'in_ranked_match';
+    p2Session.presence = 'in_ranked_match';
     const startedAt = new Date(this.now()).toISOString();
     const room = {
       id: this.createId(),
@@ -275,6 +496,7 @@ export class RankedDuelService {
     });
     this.broadcastRoom(room);
     this.setRoomTimer(room, () => this.beginVariantSelection(room), this.countdownMs);
+    this.broadcastRoster();
     return room;
   }
 
@@ -957,7 +1179,10 @@ export class RankedDuelService {
     this.clearRoomTimer(room);
     room.players.p1.roomId = null;
     room.players.p2.roomId = null;
+    room.players.p1.presence = 'idle';
+    room.players.p2.presence = 'idle';
     this.rooms.delete(room.id);
+    this.broadcastRoster();
   }
 
   recordMatchEnd(room, status) {
@@ -1016,4 +1241,9 @@ export function sanitizeDisplayName(value) {
   }
 
   return Array.from(normalized).slice(0, MAX_DISPLAY_NAME_LENGTH).join('');
+}
+
+export function sanitizeChatMessage(value) {
+  if (typeof value !== 'string') return '';
+  return Array.from(value.replace(/\s+/g, ' ').trim()).slice(0, MAX_CHAT_MESSAGE_LENGTH).join('');
 }

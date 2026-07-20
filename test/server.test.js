@@ -667,6 +667,80 @@ test('no-contest matches are removed from active rooms', async () => {
   assert.equal(p2.session.roomId, null);
 });
 
+test('lobby presence broadcasts and ready players use ranked matchmaking', async () => {
+  const service = createTestService();
+  const p1 = await connectTestPlayer(service, 'p1');
+  const p2 = await connectTestPlayer(service, 'p2');
+  service.receive(p1.session, { type: 'enterLobby', displayName: 'JP' });
+  service.receive(p2.session, { type: 'enterLobby', displayName: 'Chatman' });
+
+  service.receive(p1.session, { type: 'setReady', ready: true });
+  assert.equal(lastMessage(p2).players.find((player) => player.playerId === 'p1').presence, 'ready');
+  service.receive(p2.session, { type: 'setReady', ready: true });
+
+  assert.equal(service.rooms.size, 1);
+  assert.equal(p1.session.presence, 'in_ranked_match');
+  assert.equal(p2.session.presence, 'in_ranked_match');
+});
+
+test('lobby chat sanitizes messages and keeps the latest 100', async () => {
+  const service = createTestService();
+  const player = await connectTestPlayer(service, 'p1');
+  service.receive(player.session, { type: 'enterLobby', displayName: 'JP' });
+  service.receive(player.session, { type: 'sendChat', text: '  hello   lobby  ' });
+  assert.equal(lastMessage(player).message.text, 'hello lobby');
+
+  for (let index = 0; index < 105; index += 1) service.receive(player.session, { type: 'sendChat', text: String(index) });
+  assert.equal(service.chatMessages.length, 100);
+  assert.equal(service.chatMessages[0].text, '5');
+  assert.equal(service.chatMessages.at(-1).text, '104');
+});
+
+test('idle player can accept direct ranked challenge', async () => {
+  const service = createTestService();
+  const p1 = await connectTestPlayer(service, 'p1');
+  const p2 = await connectTestPlayer(service, 'p2');
+  service.receive(p1.session, { type: 'enterLobby', displayName: 'JP' });
+  service.receive(p2.session, { type: 'enterLobby', displayName: 'Chatman' });
+  service.receive(p1.session, { type: 'challengePlayer', playerId: 'p2' });
+  const challenge = service.challenges.values().next().value;
+
+  service.receive(p2.session, { type: 'respondChallenge', challengeId: challenge.id, accept: true });
+
+  assert.equal(service.challenges.size, 0);
+  assert.equal(service.rooms.size, 1);
+  assert.equal(p1.session.roomId, p2.session.roomId);
+});
+
+test('challenge decline returns both players to idle', async () => {
+  const service = createTestService();
+  const p1 = await connectTestPlayer(service, 'p1');
+  const p2 = await connectTestPlayer(service, 'p2');
+  service.receive(p1.session, { type: 'enterLobby' });
+  service.receive(p2.session, { type: 'enterLobby' });
+  service.receive(p1.session, { type: 'challengePlayer', playerId: 'p2' });
+  const challenge = service.challenges.values().next().value;
+  service.receive(p2.session, { type: 'respondChallenge', challengeId: challenge.id, accept: false });
+
+  assert.equal(p1.session.challengeId, null);
+  assert.equal(p2.session.challengeId, null);
+  assert.equal(service.rooms.size, 0);
+});
+
+test('challenge expires and releases both players', async () => {
+  const service = createTestService({ challengeMs: 2 });
+  const p1 = await connectTestPlayer(service, 'p1');
+  const p2 = await connectTestPlayer(service, 'p2');
+  service.receive(p1.session, { type: 'enterLobby' });
+  service.receive(p2.session, { type: 'enterLobby' });
+  service.receive(p1.session, { type: 'challengePlayer', playerId: 'p2' });
+  await wait(8);
+  assert.equal(service.challenges.size, 0);
+  assert.equal(p1.session.challengeId, null);
+  assert.equal(p2.session.challengeId, null);
+  assert.equal(p1.messages.findLast((message) => message.type === 'challengeUpdated').status, 'expired');
+});
+
 function createTestService({
   store = new MemoryPlayerStore(),
   now = () => 0,
@@ -677,6 +751,7 @@ function createTestService({
   noContestCountdownMs = 1000,
   allowDebugWinGame = false,
   analyticsStore,
+  challengeMs,
 } = {}) {
   return new RankedDuelService({
     playerStore: store,
@@ -688,6 +763,7 @@ function createTestService({
     noContestCountdownMs,
     allowDebugWinGame,
     analyticsStore,
+    challengeMs,
     now,
     createId: createIncrementingId(),
   });

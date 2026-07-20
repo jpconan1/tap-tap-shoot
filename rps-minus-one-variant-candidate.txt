@@ -1,0 +1,184 @@
+RPS MINUS ONE - VARIANT CANDIDATE
+
+STATUS
+
+Strong candidate for the nine-game lineup.
+
+This variant keeps normal RPS recognizable while adding a meaningful second
+decision. Its unique mechanic is staged information: players first choose a
+pair of possible moves, reveal those possibilities, and then secretly choose
+which move to keep.
+
+
+RULES
+
+The game is played first to 6 pips.
+
+Scoring:
+
+- A win awards 2 pips to the winner.
+- A tie awards 1 pip to each player.
+- If both players reach 6 pips together, play sudden-death standard RPS.
+- In sudden death, tied throws repeat until one player wins.
+
+Each round has up to two phases.
+
+PHASE ONE: CHOOSE A PAIR
+
+Each player secretly chooses one of three pairs:
+
+- Rock + Paper
+- Paper + Scissors
+- Scissors + Rock
+
+The pairs reveal simultaneously.
+
+If both players chose the same pair, skip phase two and award both players
+1 pip. Start a new round.
+
+Duplicate pairs such as Rock + Rock are not available. They remove the second
+decision and add no useful play.
+
+PHASE TWO: CHOOSE A MOVE TO KEEP
+
+If the revealed pairs differ, each player sees all four available moves. Each
+player secretly chooses one move from their own pair to keep. The kept moves
+reveal simultaneously and resolve as standard RPS.
+
+- Different moves: winner gains 2 pips.
+- Same move: both players gain 1 pip.
+
+UI should ask which move to KEEP, not which move to remove.
+
+
+PAIR RELATIONSHIP
+
+The phase-one pairs form their own RPS-like cycle:
+
+- Rock + Paper has advantage over Scissors + Rock.
+- Scissors + Rock has advantage over Paper + Scissors.
+- Paper + Scissors has advantage over Rock + Paper.
+
+"Advantage" does not mean an automatic win. It means the advantaged player
+has the stronger phase-two subgame.
+
+The phase-one UI can show the three pairs as three buttons with arrows showing
+this cycle, matching the visual language of the other variants.
+
+
+WHY MATCHING PAIRS SCORE AS A TIE
+
+When both players reveal the same pair, one move weakly dominates the other.
+
+Example: Rock + Paper versus Rock + Paper.
+
+- Keeping Paper against Paper ties.
+- Keeping Paper against Rock wins.
+- Keeping Rock against Paper loses.
+- Keeping Rock against Rock ties.
+
+Both rational players keep Paper, producing a tie. Phase two contains no
+meaningful decision in this case, so the game resolves it immediately and
+awards 1 pip each.
+
+Redoing phase one instead would make many rounds produce no progress and would
+allow deliberate stalling.
+
+
+PHASE-TWO STRATEGY
+
+Example advantaged matchup:
+
+Player A: Rock + Paper
+Player B: Scissors + Rock
+
+Player A's Rock is the safe move:
+
+- Rock versus Rock ties.
+- Rock versus Scissors wins.
+
+The safe move is not always optimal. If Player A always keeps Rock, Player B
+can always keep Rock and force a tie. Player A must sometimes keep Paper to
+punish that response. Player B must sometimes keep Scissors to punish Paper.
+
+Equilibrium strategy for this matchup:
+
+Player A, advantaged:
+
+- Keep safe Rock: 2/3
+- Keep risky Paper: 1/3
+
+Player B, disadvantaged:
+
+- Keep shared Rock: 2/3
+- Keep counter Scissors: 1/3
+
+Immediate outcome probabilities:
+
+- Advantaged player wins: 4/9
+- Tie: 4/9
+- Disadvantaged player wins: 1/9
+
+With a tie valued as half a win, the advantaged player's value is 2/3. The
+advantaged player wins four times as often as the disadvantaged player, but
+ties remain common.
+
+Across the complete game, optimal phase-one play chooses each pair 1/3 of the
+time. The complete game is fair: both players have equal overall value.
+
+
+WHY PHASE-TWO TIES DO NOT REPLAY
+
+Repeating only phase two creates pathological play.
+
+With different pairs, the advantaged player can keep the safe move almost all
+the time and occasionally use the risky move. This can push their eventual win
+probability arbitrarily close to 100%, potentially after many ties.
+
+With matching pairs, rational players can repeat the dominant shared move
+forever, creating a permanent deadlock.
+
+Awarding 1 pip to each player avoids both problems.
+
+
+MATCH LENGTH
+
+Every scored round distributes exactly 2 total pips:
+
+- A decisive round gives 2 to one player.
+- A tied round gives 1 to each player.
+
+Therefore a match lasts at least 3 Minus One rounds and reaches a result or a
+6-6 tiebreak after no more than 6 Minus One rounds.
+
+With evenly mixed pair choices, matching pairs occur about 1/3 of the time and
+skip phase two. A six-round match therefore averages approximately 10 player
+decisions: 6 pair selections plus about 4 keep selections.
+
+This should put the variant near standard RPS first-to-five in total input
+count, but each Minus One decision requires more thought.
+
+
+WHY IT FITS THE PACK
+
+- Standard RPS provides pure reads.
+- Fireball War adds state and resources.
+- RPS RPG adds persistent progression.
+- The positioning game adds spatial decisions.
+- RPS Minus One adds staged information.
+
+It is culturally recognizable, easy to present with the existing RPS UI
+language, mathematically fair, and strategically unintuitive in a promising
+way. A player can identify a safe move without that move automatically being
+optimal.
+
+
+PLAYTEST QUESTIONS
+
+- Does awarding pips make ties feel productive rather than anticlimactic?
+- Is first to 6 the right length in the full ranked-match sequence?
+- Does skipping phase two on matching pairs feel clean and immediate?
+- Can players understand the pair-advantage arrows without needing math?
+- Does the safe-versus-risky phase-two decision become intuitive through play?
+- Does sudden-death standard RPS feel like a satisfying finish at 6-6?
+

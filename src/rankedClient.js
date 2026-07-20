@@ -3,25 +3,32 @@ import { getServerSocketUrl } from './serverUrl.js';
 const GUEST_SESSION_TOKEN_KEY = 'tapTapShootX.guestSessionToken';
 
 export class RankedClient {
-  constructor({ onQueue, onSnapshot, onClose, onError = () => {} }) {
+  constructor({ onQueue = () => {}, onSnapshot, onClose, onError = () => {}, onLobbyState = () => {}, onRoster = () => {}, onChat = () => {}, onChallenge = () => {} }) {
     this.onQueue = onQueue;
     this.onSnapshot = onSnapshot;
     this.onClose = onClose;
     this.onError = onError;
+    this.onLobbyState = onLobbyState;
+    this.onRoster = onRoster;
+    this.onChat = onChat;
+    this.onChallenge = onChallenge;
     this.socket = null;
     this.sessionToken = readLocalStorage(GUEST_SESSION_TOKEN_KEY);
     this.transitionsByRevision = new Map();
     this.debugTools = createDisabledDebugTools();
+    this.shouldReconnect = false;
+    this.reconnectTimer = null;
   }
 
   connect(displayName = '', variantId = 'tapTapShootY') {
-    this.close();
+    this.close(false);
     this.displayName = displayName;
     this.variantId = variantId;
     this.hasHello = false;
     this.didTryLocalFallback = false;
     this.transitionsByRevision.clear();
     this.debugTools = createDisabledDebugTools();
+    this.shouldReconnect = true;
 
     const socketUrl = this.getSocketUrl();
     this.openSocket(socketUrl);
@@ -59,6 +66,10 @@ export class RankedClient {
 
       this.socket = null;
       this.onClose({ code: event.code, reason: event.reason });
+      if (this.shouldReconnect && event.code !== 4001) {
+        clearTimeout(this.reconnectTimer);
+        this.reconnectTimer = setTimeout(() => this.openSocket(this.getSocketUrl()), 1500);
+      }
     });
   }
 
@@ -142,7 +153,9 @@ export class RankedClient {
     return true;
   }
 
-  close() {
+  close(reconnect = false) {
+    this.shouldReconnect = reconnect;
+    clearTimeout(this.reconnectTimer);
     if (!this.socket) {
       return;
     }
@@ -203,7 +216,27 @@ export class RankedClient {
       };
       this.debug('hello', { playerId: this.playerId, rating: message.rating });
       writeLocalStorage(GUEST_SESSION_TOKEN_KEY, this.sessionToken);
-      this.send({ type: 'joinRanked', displayName: this.displayName, variantId: this.variantId });
+      this.send({ type: 'enterLobby', displayName: this.displayName });
+      return;
+    }
+
+    if (message.type === 'lobbyState') {
+      this.onLobbyState(message);
+      return;
+    }
+
+    if (message.type === 'rosterUpdated') {
+      this.onRoster(message.players ?? []);
+      return;
+    }
+
+    if (message.type === 'chatMessage') {
+      this.onChat(message.message);
+      return;
+    }
+
+    if (message.type === 'challengeReceived' || message.type === 'challengeUpdated') {
+      this.onChallenge(message);
       return;
     }
 
@@ -230,6 +263,14 @@ export class RankedClient {
       this.socket.send(JSON.stringify(message));
     }
   }
+
+  setReady(ready) { this.send({ type: 'setReady', ready }); }
+  setPresence(presence) { this.send({ type: 'setPresence', presence }); }
+  setDisplayName(displayName) { this.displayName = displayName; this.send({ type: 'setDisplayName', displayName }); }
+  sendChat(text) { this.send({ type: 'sendChat', text }); }
+  challengePlayer(playerId) { this.send({ type: 'challengePlayer', playerId }); }
+  cancelChallenge(challengeId) { this.send({ type: 'cancelChallenge', challengeId }); }
+  respondChallenge(challengeId, accept) { this.send({ type: 'respondChallenge', challengeId, accept }); }
 
   debug(event, payload = {}) {
     console.debug('[ranked]', event, payload);
