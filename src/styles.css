@@ -460,7 +460,7 @@ canvas {
 .lobby-chat-form input { min-width: 0; padding: 8px; border: 3px solid var(--ink); background: rgba(255,255,255,.38); font: inherit; font-size: 20px; }
 
 /* Shared whiteboard lobby prototype. */
-.lobby-screen { position: relative; display: grid; grid-template-rows: 104px minmax(0,1fr) 66px; place-items: stretch; align-content: stretch; gap: 0; width: 100%; height: 100%; padding: 4px 18px 8px; }
+.lobby-screen { position: relative; display: grid; grid-template-rows: 96px minmax(0,1fr) 58px 76px; place-items: stretch; align-content: stretch; gap: 0; width: 100%; height: 100%; padding: 4px 18px 6px; }
 .lobby-header-art { z-index: 5; display: block; width: 307px; height: 115px; margin: -2px auto -9px; pointer-events: none; }
 .lobby-workspace { position: relative; width: 100%; min-width: 0; min-height: 0; overflow: hidden; }
 .whiteboard-frame { position: absolute; inset: 0; width: auto; height: 100%; max-width: 100%; max-height: 100%; margin: auto; aspect-ratio: 840 / 622; min-width: 0; min-height: 0; }
@@ -468,7 +468,9 @@ canvas {
 .whiteboard-paper { z-index: 1; background: #fff; pointer-events: none; }
 .whiteboard-art { position: absolute; inset: 0; z-index: 3; width: 100%; height: 100%; pointer-events: none; }
 .whiteboard-scroll { z-index: 2; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; scrollbar-color: rgba(29,27,24,.35) transparent; scrollbar-width: thin; }
-.whiteboard-canvas { display: block; width: 100%; height: auto; min-height: 100%; image-rendering: auto; touch-action: pan-y; cursor: grab; }
+.whiteboard-text-canvas, .whiteboard-canvas { display: block; width: 100%; height: auto; min-height: 100%; image-rendering: auto; }
+.whiteboard-text-canvas { position: absolute; top: 0; left: 0; z-index: 1; pointer-events: none; }
+.whiteboard-canvas { position: relative; z-index: 2; touch-action: pan-y; cursor: grab; }
 .whiteboard-canvas[data-tool="marker"] { touch-action: none; cursor: crosshair; }
 .whiteboard-canvas[data-tool="erase"] { touch-action: none; cursor: cell; }
 .whiteboard-new-marks { position: absolute; right: 8%; bottom: 11%; z-index: 4; padding: 3px 9px; border: 2px solid var(--ink); border-radius: 14px; background: var(--yellow); font: inherit; cursor: pointer; }
@@ -480,12 +482,17 @@ canvas {
 .lobby-roster-panel .lobby-player-row { min-height: 46px; margin-bottom: 5px; padding: 5px 8px; }
 .lobby-roster-panel .lobby-player-row span { font-size: 17px; }
 .lobby-roster-panel .lobby-player-row small { max-width: 100%; overflow: hidden; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
-.lobby-bottom-rail { z-index: 5; display: grid; grid-template-columns: auto minmax(0,1fr) 74px 48px 48px; gap: 6px; align-items: center; min-width: 0; }
+.lobby-bottom-rail { z-index: 5; display: grid; grid-template-columns: auto minmax(0,1fr) 48px; gap: 6px; align-items: center; min-width: 0; }
 .lobby-bottom-rail .lobby-ready, .lobby-bottom-rail .lobby-settings, .lobby-roster-toggle, .lobby-bottom-rail .lobby-chat-form button, .whiteboard-tools button { border: 3px solid var(--ink); border-radius: 4px; background: rgba(255,255,255,.55); color: var(--ink); font: inherit; font-weight: 900; cursor: pointer; }
 .lobby-bottom-rail .lobby-ready { height: 52px; min-height: 0; font-size: 18px; }
 .lobby-bottom-rail .lobby-ready.is-ready { background: var(--red); color: #fff8e5; }
 .lobby-bottom-rail .lobby-settings, .lobby-roster-toggle { width: 48px; height: 52px; font-size: 21px; }
 .lobby-roster-toggle { display: block; }
+.lobby-action-row { z-index: 5; display: flex; align-items: center; justify-content: center; gap: 10px; min-width: 0; }
+.lobby-sheet-action { width: 148px; height: 74px; padding: 0; border: 0; background: transparent; cursor: pointer; }
+.lobby-sheet-action-art { display: block; width: 100%; height: 100%; pointer-events: none; }
+.lobby-sheet-action:hover, .lobby-sheet-action:focus-visible { transform: translateY(-2px) rotate(-.5deg); }
+.lobby-sheet-action.is-active { filter: drop-shadow(0 4px 0 var(--red)); transform: translateY(-3px); }
 .whiteboard-tools { display: flex; gap: 4px; align-items: center; }
 .whiteboard-tools button { position: relative; width: 34px; height: 46px; padding: 0; }
 .whiteboard-tools button.is-selected { transform: translateY(-5px) rotate(-2deg); box-shadow: 0 4px 0 var(--yellow); }
@@ -503,18 +510,20 @@ canvas {
   .lobby-screen .title-logo { top: 0; left: 8px; width: 180px; height: 129px; }
   .lobby-panel { width: 72%; height: 100%; }
   .lobby-chat-drawer { width: 86%; }
-  .lobby-screen { grid-template-rows: 90px minmax(0,1fr) 112px; padding: 4px 8px 7px; }
+  .lobby-screen { grid-template-rows: 82px minmax(0,1fr) 104px 108px; padding: 4px 8px 5px; }
   .lobby-header-art { width: 270px; height: 101px; }
   .lobby-workspace { position: relative; }
   .whiteboard-frame { width: auto; height: 100%; max-width: 100%; margin: auto; }
-  .lobby-roster-panel { top: 86px; right: 6px; bottom: 116px; width: min(260px,76%); transform: translateX(110%); }
+  .lobby-roster-panel { top: 78px; right: 6px; bottom: 214px; width: min(260px,76%); transform: translateX(110%); }
   .lobby-roster-panel.is-open { transform: translateX(0); }
-  .lobby-bottom-rail { grid-template-columns: auto minmax(0,1fr) 54px 46px; grid-template-rows: 48px 56px; }
+  .lobby-bottom-rail { grid-template-columns: auto minmax(0,1fr) 46px; grid-template-rows: 44px 54px; }
   .whiteboard-tools { grid-column: 1 / -1; justify-content: center; }
   .whiteboard-tools button { height: 40px; }
   .lobby-bottom-rail .lobby-ready { width: 54px; }
   .lobby-roster-toggle { display: block; }
   .lobby-bottom-rail .lobby-chat-form { grid-column: 1 / 3; }
+  .lobby-action-row { gap: 5px; }
+  .lobby-sheet-action { width: 210px; height: 105px; }
 }
 
 .ranked-disconnect-notice {

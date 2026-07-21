@@ -2595,8 +2595,9 @@ function renderLobbyScreen() {
       <div class="lobby-workspace">
         <div class="whiteboard-frame">
           <div class="whiteboard-paper" aria-hidden="true"></div>
-          <canvas class="sprite-canvas whiteboard-art" data-doodle="whiteboard" data-frame-width="840" data-frame-height="622" width="840" height="622" aria-hidden="true"></canvas>
+          <img class="whiteboard-art" src="./assets/whiteboard.webp" width="840" height="622" alt="">
           <div class="whiteboard-scroll" tabindex="0" aria-label="Shared lobby whiteboard">
+            <canvas class="whiteboard-text-canvas" aria-hidden="true"></canvas>
             <canvas class="whiteboard-canvas"></canvas>
           </div>
           <button class="whiteboard-new-marks" data-action="board-bottom" type="button" hidden>new marks ↓</button>
@@ -2604,7 +2605,6 @@ function renderLobbyScreen() {
         <aside class="lobby-roster-panel ${lobbyRosterOpen ? 'is-open' : ''}">
           <header class="lobby-heading"><strong>ONLINE</strong><span>${lobbyConnected ? lobbyPlayers.length : '…'}</span></header>
           <div class="lobby-roster" role="list">
-            <button class="lobby-player-row computer" data-player-id="computer" type="button"><span>Computer</span><small>Play variants</small></button>
             ${roster.map(renderLobbyPlayerRow).join('')}
           </div>
         </aside>
@@ -2616,9 +2616,12 @@ function renderLobbyScreen() {
           <button class="eraser-tool ${lobbyBoardTool === 'erase' ? 'is-selected' : ''}" data-board-tool="erase" type="button" aria-label="Eraser">▰</button>
         </div>
         <form class="lobby-chat-form"><input name="message" maxlength="200" autocomplete="off" aria-label="Chat message"><button type="submit">Send</button></form>
-        <button class="lobby-ready ${lobbySelf?.presence === 'ready' ? 'is-ready' : ''}" data-action="toggle-ready" type="button" aria-pressed="${lobbySelf?.presence === 'ready'}">${lobbySelf?.presence === 'ready' ? 'READY' : 'PLAY'}</button>
         <button class="lobby-roster-toggle" data-action="toggle-roster" type="button" aria-label="Players">☰</button>
-        <button class="lobby-settings" data-action="settings" type="button" aria-label="Settings">⚙</button>
+      </div>
+      <div class="lobby-action-row">
+        ${renderLobbySheetAction('play-computer', 'title/playvcom_button', 'Practice versus computer')}
+        ${renderLobbySheetAction('toggle-ready', 'match_button', 'Play a match', lobbySelf?.presence === 'ready')}
+        ${renderLobbySheetAction('settings', 'settings_button', 'Settings')}
       </div>
       ${renderLobbyOverlay()}
       ${renderOpenCurtainBorder()}
@@ -2627,11 +2630,16 @@ function renderLobbyScreen() {
 
   app.querySelectorAll('[data-player-id]').forEach((button) => button.addEventListener('click', () => openLobbyPlayer(button.dataset.playerId)));
   app.querySelector('[data-action="toggle-ready"]')?.addEventListener('click', () => rankedClient.setReady(lobbySelf?.presence !== 'ready'));
+  app.querySelector('[data-action="play-computer"]')?.addEventListener('click', () => openLobbyPlayer('computer'));
   app.querySelector('[data-action="settings"]')?.addEventListener('click', () => { lobbySelectedPlayerId = lobbySelf?.playerId; render(); });
   app.querySelector('[data-action="toggle-roster"]')?.addEventListener('click', () => { lobbyRosterOpen = !lobbyRosterOpen; app.querySelector('.lobby-roster-panel')?.classList.toggle('is-open', lobbyRosterOpen); });
   installLobbyOverlayHandlers();
   mountSpriteRenderers(app.querySelectorAll('.sprite-canvas'));
   mountLobbyWhiteboard();
+}
+
+function renderLobbySheetAction(action, doodle, label, pressed = false) {
+  return `<button class="lobby-sheet-action ${pressed ? 'is-active' : ''}" data-action="${action}" type="button" aria-label="${label}"${action === 'toggle-ready' ? ` aria-pressed="${pressed}"` : ''}><canvas class="sprite-canvas lobby-sheet-action-art" data-doodle="${doodle}" data-frame-width="256" data-frame-height="128" width="256" height="128" aria-hidden="true"></canvas></button>`;
 }
 
 function renderLobbyPlayerRow(player) {
@@ -2772,6 +2780,7 @@ function mountLobbyWhiteboard() {
   if (!canvas || !scroll) return;
   canvas.dataset.tool = lobbyBoardTool;
   drawLobbyBoard(canvas);
+  animateLobbyBoardDrawings(canvas);
   requestAnimationFrame(() => { scroll.scrollTop = scroll.scrollHeight; updateLobbyNewMarksButton(); });
   canvas.addEventListener('pointerdown', beginLobbyBoardStroke);
   canvas.addEventListener('pointermove', continueLobbyBoardStroke);
@@ -2814,8 +2823,6 @@ function finishLobbyBoardStroke(event) {
   if (lobbyPendingBoardTop !== null) {
     applyLobbyBoardTrim(lobbyPendingBoardTop);
     lobbyPendingBoardTop = null;
-  } else {
-    drawLobbyBoard(event.currentTarget);
   }
 }
 
@@ -2862,32 +2869,88 @@ function updateLobbyNewMarksButton(forceVisible = false) {
 
 function drawLobbyBoard(canvas, preview = null) {
   const height = Math.ceil(Math.max(lobbyBoard.viewHeight, lobbyBoard.nextY - lobbyBoard.top));
-  if (canvas.width !== lobbyBoard.width) canvas.width = lobbyBoard.width;
-  if (canvas.height !== height) canvas.height = height;
-  canvas.style.height = `${(height / lobbyBoard.viewHeight) * 100}%`;
-  const context = canvas.getContext('2d');
-  context.clearRect(0, 0, canvas.width, canvas.height);
-  [...lobbyBoard.operations, ...(preview ? [preview] : [])].forEach((operation) => drawLobbyBoardOperation(context, operation));
+  const textCanvas = app.querySelector('.whiteboard-text-canvas');
+  [canvas, textCanvas].filter(Boolean).forEach((layer) => {
+    if (layer.width !== lobbyBoard.width) layer.width = lobbyBoard.width;
+    if (layer.height !== height) layer.height = height;
+    layer.style.height = `${(height / lobbyBoard.viewHeight) * 100}%`;
+  });
+  if (textCanvas) drawLobbyBoardTextLayer(textCanvas, preview);
+  drawLobbyBoardDrawingLayer(canvas, preview, getLobbyBoardBoilFrame());
 }
 
-function drawLobbyBoardOperation(context, operation) {
-  if (operation.kind === 'text') {
-    drawLobbyBoardText(context, operation.message);
-    return;
-  }
+function drawLobbyBoardTextLayer(canvas, preview = null) {
+  const context = canvas.getContext('2d');
+  context.clearRect(0, 0, canvas.width, canvas.height);
+  [...lobbyBoard.operations, ...(preview?.tool === 'erase' ? [preview] : [])].forEach((operation) => {
+    if (operation.kind === 'text') drawLobbyBoardText(context, operation.message);
+    else if (operation.kind === 'erase') drawLobbyBoardPath(context, operation, 0, false);
+  });
+}
+
+function drawLobbyBoardDrawingLayer(canvas, preview = null, boilFrame = 0) {
+  const context = canvas.getContext('2d');
+  context.clearRect(0, 0, canvas.width, canvas.height);
+  [...lobbyBoard.operations, ...(preview ? [preview] : [])].forEach((operation) => {
+    if (operation.kind !== 'text') drawLobbyBoardPath(context, operation, boilFrame, isBoilEnabled);
+  });
+}
+
+function drawLobbyBoardPath(context, operation, boilFrame, shouldBoil) {
   const points = operation.points ?? [];
   if (points.length < 2) return;
   context.save();
   context.globalCompositeOperation = operation.kind === 'erase' || operation.tool === 'erase' ? 'destination-out' : 'source-over';
   context.strokeStyle = getLobbyBoardColor(operation.color);
-  context.lineWidth = operation.width ?? (operation.kind === 'erase' || operation.tool === 'erase' ? 24 : 5);
+  const isEraser = operation.kind === 'erase' || operation.tool === 'erase';
+  context.lineWidth = (operation.width ?? (isEraser ? 24 : 5)) + (shouldBoil ? getLobbyBoardBoilOffset(operation, -1, 'w', boilFrame) * .35 : 0);
   context.lineCap = 'round';
   context.lineJoin = 'round';
   context.beginPath();
-  context.moveTo(points[0].x, points[0].y - lobbyBoard.top);
-  points.slice(1).forEach((point) => context.lineTo(point.x, point.y - lobbyBoard.top));
+  const first = getBoiledLobbyBoardPoint(points[0], operation, 0, boilFrame, shouldBoil);
+  context.moveTo(first.x, first.y - lobbyBoard.top);
+  points.slice(1).forEach((point, index) => {
+    const boiled = getBoiledLobbyBoardPoint(point, operation, index + 1, boilFrame, shouldBoil);
+    context.lineTo(boiled.x, boiled.y - lobbyBoard.top);
+  });
   context.stroke();
   context.restore();
+}
+
+function animateLobbyBoardDrawings(canvas) {
+  let previousFrame = -1;
+  function tick() {
+    if (!canvas.isConnected) return;
+    const frame = getLobbyBoardBoilFrame();
+    if (frame !== previousFrame) {
+      previousFrame = frame;
+      drawLobbyBoardDrawingLayer(canvas, lobbyActiveStroke, frame);
+    }
+    requestAnimationFrame(tick);
+  }
+  requestAnimationFrame(tick);
+}
+
+function getLobbyBoardBoilFrame() {
+  return isBoilEnabled ? Math.floor((performance.now() / 1000) * DOODLE_FRAME_RATE) % DOODLE_FRAME_COUNT : 0;
+}
+
+function getBoiledLobbyBoardPoint(point, operation, index, frame, shouldBoil) {
+  if (!shouldBoil) return point;
+  return {
+    x: point.x + getLobbyBoardBoilOffset(operation, index, 'x', frame) * 1.15,
+    y: point.y + getLobbyBoardBoilOffset(operation, index, 'y', frame) * 1.15,
+  };
+}
+
+function getLobbyBoardBoilOffset(operation, index, axis, frame) {
+  const key = `${operation.id ?? 'preview'}:${index}:${axis}:${frame}`;
+  let hash = 2166136261;
+  for (let characterIndex = 0; characterIndex < key.length; characterIndex += 1) {
+    hash ^= key.charCodeAt(characterIndex);
+    hash = Math.imul(hash, 16777619);
+  }
+  return ((hash >>> 0) % 2001) / 1000 - 1;
 }
 
 function drawLobbyBoardText(context, message) {
