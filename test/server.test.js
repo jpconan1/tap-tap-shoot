@@ -696,6 +696,50 @@ test('lobby chat sanitizes messages and keeps the latest 100', async () => {
   assert.equal(service.chatMessages.at(-1).text, '104');
 });
 
+test('lobby whiteboard assigns colored text rows and shares validated strokes', async () => {
+  const service = createTestService();
+  const p1 = await connectTestPlayer(service, 'p1');
+  const p2 = await connectTestPlayer(service, 'p2');
+  service.receive(p1.session, { type: 'enterLobby', displayName: 'JP' });
+  service.receive(p2.session, { type: 'enterLobby', displayName: 'Chatman' });
+
+  service.receive(p1.session, { type: 'sendChat', text: 'hello', color: 'red' });
+  const chat = lastMessage(p2).message;
+  assert.equal(chat.color, 'red');
+  assert.equal(chat.rowY, 34);
+  assert.equal(chat.rowSpan, 1);
+
+  service.receive(p1.session, {
+    type: 'sendBoardStroke',
+    color: 'not-a-color',
+    points: [{ x: -10, y: -10 }, { x: 900, y: 9999 }],
+  });
+  const stroke = lastMessage(p2).operation;
+  assert.equal(lastMessage(p2).type, 'boardOperation');
+  assert.equal(stroke.color, 'black');
+  assert.deepEqual(stroke.points, [{ x: 0, y: 0 }, { x: 760, y: 1575 }]);
+
+  const snapshot = service.getBoardSnapshot();
+  assert.equal(snapshot.operations.length, 2);
+  assert.equal(snapshot.width, 760);
+});
+
+test('whiteboard erasers are shared and excessive stroke bursts are ignored', async () => {
+  const service = createTestService();
+  const p1 = await connectTestPlayer(service, 'p1');
+  const p2 = await connectTestPlayer(service, 'p2');
+  service.receive(p1.session, { type: 'enterLobby', displayName: 'JP' });
+  service.receive(p2.session, { type: 'enterLobby', displayName: 'Chatman' });
+
+  for (let index = 0; index < 20; index += 1) {
+    service.receive(p1.session, { type: 'sendBoardErase', points: [{ x: 1, y: 1 }, { x: 2, y: 2 }] });
+  }
+
+  assert.equal(service.boardOperations.length, 12);
+  assert.equal(service.boardOperations[0].kind, 'erase');
+  assert.equal(lastMessage(p2).operation.width, 24);
+});
+
 test('idle player can accept direct ranked challenge', async () => {
   const service = createTestService();
   const p1 = await connectTestPlayer(service, 'p1');

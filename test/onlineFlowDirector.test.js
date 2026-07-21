@@ -212,11 +212,11 @@ test('match-result continue curtain-wipes to the final scoreboard', async () => 
   assert.deepEqual(log, ['close', 'show:scoreboard', 'reattach', 'open']);
 });
 
-test('main menu curtain-wipes from scoreboard to title', async () => {
+test('main menu curtain-wipes from scoreboard to lobby', async () => {
   const log = [];
   const director = createDirector(log);
 
-  await director.play('RETURN_TO_TITLE', { snapshot: {}, previousPhase: 'gameOver' });
+  await director.play('RETURN_TO_LOBBY', { snapshot: {}, previousPhase: 'gameOver' });
 
-  assert.deepEqual(log, ['close', 'exit-ranked', 'show:title', 'reattach', 'open']);
+  assert.deepEqual(log, ['close', 'exit-ranked', 'show:lobby', 'reattach', 'open']);
 });

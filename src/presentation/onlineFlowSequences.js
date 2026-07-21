@@ -63,10 +63,10 @@ export const ONLINE_FLOW_SEQUENCE = Object.freeze({
     Object.freeze({ type: 'show', stage: 'scoreboard' }),
     Object.freeze({ type: 'openCurtains' }),
   ]),
-  RETURN_TO_TITLE: Object.freeze([
+  RETURN_TO_LOBBY: Object.freeze([
     Object.freeze({ type: 'closeCurtains' }),
     Object.freeze({ type: 'exitRanked' }),
-    Object.freeze({ type: 'show', stage: 'title' }),
+    Object.freeze({ type: 'show', stage: 'lobby' }),
     Object.freeze({ type: 'openCurtains' }),
   ]),
 });

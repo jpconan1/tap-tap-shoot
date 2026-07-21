@@ -28,6 +28,15 @@ const MAX_DISPLAY_NAME_LENGTH = 50;
 const MAX_CHAT_MESSAGE_LENGTH = 200;
 const MAX_CHAT_HISTORY = 100;
 const DEFAULT_CHALLENGE_MS = 15 * 1000;
+const BOARD_WIDTH = 760;
+const BOARD_VIEW_HEIGHT = 450;
+const BOARD_MAX_HEIGHT = BOARD_VIEW_HEIGHT * 3.5;
+const BOARD_ROW_HEIGHT = 30;
+const BOARD_TEXT_COLUMNS = 74;
+const BOARD_MAX_OPERATIONS = 800;
+const BOARD_MAX_POINTS = 180;
+const BOARD_STROKES_PER_SECOND = 12;
+const BOARD_COLORS = Object.freeze(['black', 'red', 'blue', 'green']);
 
 export class RankedDuelService {
   constructor({
@@ -64,6 +73,9 @@ export class RankedDuelService {
     this.queue = [];
     this.rooms = new Map();
     this.chatMessages = [];
+    this.boardOperations = [];
+    this.boardTop = 0;
+    this.boardNextY = 34;
     this.challenges = new Map();
   }
 
@@ -88,6 +100,7 @@ export class RankedDuelService {
       presence: 'idle',
       inLobby: false,
       challengeId: null,
+      boardStrokeTimes: [],
       closed: false,
     };
 
@@ -147,7 +160,12 @@ export class RankedDuelService {
     }
 
     if (message.type === 'sendChat') {
-      this.sendChat(session, message.text);
+      this.sendChat(session, message.text, message.color);
+      return;
+    }
+
+    if (message.type === 'sendBoardStroke' || message.type === 'sendBoardErase') {
+      this.sendBoardStroke(session, message, message.type === 'sendBoardErase' ? 'erase' : 'stroke');
       return;
     }
 
@@ -232,20 +250,84 @@ export class RankedDuelService {
     this.broadcastRoster();
   }
 
-  sendChat(session, value) {
+  sendChat(session, value, requestedColor) {
     if (!session.inLobby) return;
     const text = sanitizeChatMessage(value);
     if (!text) return;
+    const color = normalizeBoardColor(requestedColor);
+    const rowSpan = Math.max(1, Math.min(3, Math.ceil((session.displayName.length + text.length + 2) / BOARD_TEXT_COLUMNS)));
     const message = {
       id: this.createId(),
       sentAt: new Date(this.now()).toISOString(),
       playerId: session.player.id,
       displayName: session.displayName,
       text,
+      color,
+      rowY: this.boardNextY,
+      rowSpan,
     };
+    this.boardNextY += rowSpan * BOARD_ROW_HEIGHT;
     this.chatMessages.push(message);
     if (this.chatMessages.length > MAX_CHAT_HISTORY) this.chatMessages.shift();
+    this.boardOperations.push({ kind: 'text', id: message.id, message });
     this.broadcastLobby('chatMessage', { message });
+    this.trimBoard();
+    this.enforceBoardOperationLimit();
+  }
+
+  sendBoardStroke(session, value, tool) {
+    if (!session.inLobby || !this.allowBoardStroke(session)) return;
+    const points = sanitizeBoardPoints(value.points, this.boardTop, this.boardTop + BOARD_MAX_HEIGHT);
+    if (points.length < 2) return;
+    const operation = {
+      kind: tool,
+      id: this.createId(),
+      playerId: session.player.id,
+      color: tool === 'erase' ? null : normalizeBoardColor(value.color),
+      width: tool === 'erase' ? 24 : 5,
+      points,
+    };
+    this.boardOperations.push(operation);
+    this.broadcastLobby('boardOperation', { operation });
+    this.enforceBoardOperationLimit();
+  }
+
+  allowBoardStroke(session) {
+    const cutoff = this.now() - 1000;
+    session.boardStrokeTimes = session.boardStrokeTimes.filter((time) => time > cutoff);
+    if (session.boardStrokeTimes.length >= BOARD_STROKES_PER_SECOND) return false;
+    session.boardStrokeTimes.push(this.now());
+    return true;
+  }
+
+  trimBoard() {
+    const overflow = this.boardNextY - this.boardTop - BOARD_MAX_HEIGHT;
+    if (overflow <= 0) return;
+    const amount = Math.ceil(overflow / BOARD_ROW_HEIGHT) * BOARD_ROW_HEIGHT;
+    this.boardTop += amount;
+    this.boardOperations = this.boardOperations.filter((operation) => operationTouchesBoard(operation, this.boardTop));
+    this.broadcastLobby('boardTrim', { top: this.boardTop });
+  }
+
+  enforceBoardOperationLimit() {
+    if (this.boardOperations.length <= BOARD_MAX_OPERATIONS) return;
+    this.boardOperations = [];
+    this.chatMessages = [];
+    this.boardTop = 0;
+    this.boardNextY = 34;
+    this.broadcastLobby('boardReset', { board: this.getBoardSnapshot() });
+  }
+
+  getBoardSnapshot() {
+    return {
+      width: BOARD_WIDTH,
+      viewHeight: BOARD_VIEW_HEIGHT,
+      maxHeight: BOARD_MAX_HEIGHT,
+      rowHeight: BOARD_ROW_HEIGHT,
+      top: this.boardTop,
+      nextY: this.boardNextY,
+      operations: this.boardOperations,
+    };
   }
 
   challengePlayer(challenger, playerId) {
@@ -342,6 +424,7 @@ export class RankedDuelService {
       self: this.getPublicPlayer(session),
       players: this.getPublicRoster(),
       recentMessages: this.chatMessages,
+      board: this.getBoardSnapshot(),
       pendingChallenge: session.challengeId ? this.getPublicChallenge(this.challenges.get(session.challengeId)) : null,
     });
   }
@@ -1246,4 +1329,26 @@ export function sanitizeDisplayName(value) {
 export function sanitizeChatMessage(value) {
   if (typeof value !== 'string') return '';
   return Array.from(value.replace(/\s+/g, ' ').trim()).slice(0, MAX_CHAT_MESSAGE_LENGTH).join('');
+}
+
+function normalizeBoardColor(value) {
+  return BOARD_COLORS.includes(value) ? value : 'black';
+}
+
+function sanitizeBoardPoints(value, minY, maxY) {
+  if (!Array.isArray(value)) return [];
+  return value.slice(0, BOARD_MAX_POINTS).flatMap((point) => {
+    if (!point || !Number.isFinite(point.x) || !Number.isFinite(point.y)) return [];
+    return [{
+      x: Math.round(Math.max(0, Math.min(BOARD_WIDTH, point.x)) * 10) / 10,
+      y: Math.round(Math.max(minY, Math.min(maxY, point.y)) * 10) / 10,
+    }];
+  });
+}
+
+function operationTouchesBoard(operation, top) {
+  if (operation.kind === 'text') {
+    return operation.message.rowY + (operation.message.rowSpan * BOARD_ROW_HEIGHT) > top;
+  }
+  return operation.points?.some((point) => point.y >= top);
 }

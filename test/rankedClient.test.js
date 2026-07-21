@@ -64,7 +64,7 @@ test('client surfaces server availability errors', () => {
   assert.deepEqual(errors, ['ranked service temporarily unavailable']);
 });
 
-test('client routes lobby, roster, chat, and challenge events', () => {
+test('client routes lobby, roster, chat, whiteboard, and challenge events', () => {
   const events = [];
   const client = new RankedClient({
     onSnapshot() {},
@@ -72,11 +72,17 @@ test('client routes lobby, roster, chat, and challenge events', () => {
     onLobbyState(message) { events.push(['lobby', message.self.playerId]); },
     onRoster(players) { events.push(['roster', players.length]); },
     onChat(message) { events.push(['chat', message.text]); },
+    onBoardOperation(operation) { events.push(['board', operation.kind]); },
+    onBoardTrim(top) { events.push(['trim', top]); },
+    onBoardReset(board) { events.push(['reset', board.top]); },
     onChallenge(message) { events.push(['challenge', message.status]); },
   });
   client.handleMessage({ type: 'lobbyState', self: { playerId: 'p1' }, players: [] });
   client.handleMessage({ type: 'rosterUpdated', players: [{}, {}] });
   client.handleMessage({ type: 'chatMessage', message: { text: 'yo' } });
+  client.handleMessage({ type: 'boardOperation', operation: { kind: 'stroke' } });
+  client.handleMessage({ type: 'boardTrim', top: 30 });
+  client.handleMessage({ type: 'boardReset', board: { top: 0 } });
   client.handleMessage({ type: 'challengeUpdated', status: 'pending', challenge: {} });
-  assert.deepEqual(events, [['lobby', 'p1'], ['roster', 2], ['chat', 'yo'], ['challenge', 'pending']]);
+  assert.deepEqual(events, [['lobby', 'p1'], ['roster', 2], ['chat', 'yo'], ['board', 'stroke'], ['trim', 30], ['reset', 0], ['challenge', 'pending']]);
 });

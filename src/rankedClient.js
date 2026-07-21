@@ -3,7 +3,7 @@ import { getServerSocketUrl } from './serverUrl.js';
 const GUEST_SESSION_TOKEN_KEY = 'tapTapShootX.guestSessionToken';
 
 export class RankedClient {
-  constructor({ onQueue = () => {}, onSnapshot, onClose, onError = () => {}, onLobbyState = () => {}, onRoster = () => {}, onChat = () => {}, onChallenge = () => {} }) {
+  constructor({ onQueue = () => {}, onSnapshot, onClose, onError = () => {}, onLobbyState = () => {}, onRoster = () => {}, onChat = () => {}, onBoardOperation = () => {}, onBoardTrim = () => {}, onBoardReset = () => {}, onChallenge = () => {} }) {
     this.onQueue = onQueue;
     this.onSnapshot = onSnapshot;
     this.onClose = onClose;
@@ -11,6 +11,9 @@ export class RankedClient {
     this.onLobbyState = onLobbyState;
     this.onRoster = onRoster;
     this.onChat = onChat;
+    this.onBoardOperation = onBoardOperation;
+    this.onBoardTrim = onBoardTrim;
+    this.onBoardReset = onBoardReset;
     this.onChallenge = onChallenge;
     this.socket = null;
     this.sessionToken = readLocalStorage(GUEST_SESSION_TOKEN_KEY);
@@ -235,6 +238,21 @@ export class RankedClient {
       return;
     }
 
+    if (message.type === 'boardOperation') {
+      this.onBoardOperation(message.operation);
+      return;
+    }
+
+    if (message.type === 'boardTrim') {
+      this.onBoardTrim(message.top);
+      return;
+    }
+
+    if (message.type === 'boardReset') {
+      this.onBoardReset(message.board);
+      return;
+    }
+
     if (message.type === 'challengeReceived' || message.type === 'challengeUpdated') {
       this.onChallenge(message);
       return;
@@ -267,7 +285,9 @@ export class RankedClient {
   setReady(ready) { this.send({ type: 'setReady', ready }); }
   setPresence(presence) { this.send({ type: 'setPresence', presence }); }
   setDisplayName(displayName) { this.displayName = displayName; this.send({ type: 'setDisplayName', displayName }); }
-  sendChat(text) { this.send({ type: 'sendChat', text }); }
+  sendChat(text, color = 'black') { this.send({ type: 'sendChat', text, color }); }
+  sendBoardStroke(points, color = 'black') { this.send({ type: 'sendBoardStroke', points, color }); }
+  sendBoardErase(points) { this.send({ type: 'sendBoardErase', points }); }
   challengePlayer(playerId) { this.send({ type: 'challengePlayer', playerId }); }
   cancelChallenge(challengeId) { this.send({ type: 'cancelChallenge', challengeId }); }
   respondChallenge(challengeId, accept) { this.send({ type: 'respondChallenge', challengeId, accept }); }

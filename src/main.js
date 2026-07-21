@@ -61,6 +61,7 @@ import {
   mountReadyWaitingOverlays,
   mountWaitingDotsOverlays,
   mountSpriteRenderers,
+  mountNineSliceRenderers,
   closeCurtainWipe,
   openCurtainWipe,
   pauseRendererClock,
@@ -71,6 +72,7 @@ import {
   resumeRendererClock,
   setBoilEnabled,
 } from './renderer.js';
+import { createAlertSystem } from './alertSystem.js';
 
 const BEAT_MS = 750;
 const BAN_ANIMATION_DURATION_MS = 7 * 58;
@@ -120,6 +122,8 @@ const BULLET_SLOT_COUNT = MAX_BULLETS;
 const LAST_NUMBERED_TURN = 21;
 const FRAME_WIDTH = 960;
 const FRAME_HEIGHT = 540;
+const PORTRAIT_FRAME_WIDTH = 540;
+const PORTRAIT_FRAME_HEIGHT = 960;
 const VARIANT_LAYOUT_URLS = Object.freeze({
   [VARIANT_IDS.tapTapShootY]: './assets/tap-tap-shoot-y/tap-tap-shoot-y-layout.json',
   [VARIANT_IDS.rockPaperScissors]: './assets/rock-paper-scissors/rock-paper-scissors-layout.json',
@@ -155,6 +159,14 @@ const PAPER_BACKGROUND_URL = './assets/crumpled_paper_background.webp';
 const TITLE_MUSIC_SLIDER_URL = './assets/title/Music_slider_sheet.webp';
 const TITLE_SFX_SLIDER_URL = './assets/title/sfx_slider_sheet.webp';
 const TITLE_GRADIENT_SLIDER_URL = './assets/title/graidant_slider_sheet.webp';
+const TITLE_ALERT_SHOWCASE = Object.freeze([
+  Object.freeze({ width: 320, height: 150, label: '320 by 150 alert', message: '320 × 150' }),
+  Object.freeze({ width: 440, height: 190, label: '440 by 190 alert', message: '440 × 190' }),
+  Object.freeze({ width: 560, height: 240, label: '560 by 240 alert', message: '560 × 240' }),
+  Object.freeze({ width: 700, height: 310, label: '700 by 310 alert', message: '700 × 310' }),
+  Object.freeze({ width: 840, height: 400, label: '840 by 400 alert', message: '840 × 400' }),
+]);
+const ENABLE_TITLE_ALERT_SHOWCASE = false;
 const ONLINE_STATUS_POLL_MS = 5000;
 const RANKED_DISPLAY_NAME_KEY = 'tapTapShootX.rankedDisplayName';
 const BOIL_ENABLED_KEY = 'tapTapShootX.boilEnabled';
@@ -331,6 +343,12 @@ const COMPUTER_VARIANTS = VARIANT_SELECT_VARIANTS;
 const COMPUTER_VARIANT_IDS = Object.freeze(COMPUTER_VARIANTS.map((variant) => variant.id));
 
 const app = document.querySelector('#app');
+const alertSystem = createAlertSystem({
+  root: app,
+  mountSprites: mountSpriteRenderers,
+  mountNineSlices: mountNineSliceRenderers,
+});
+let hasShownTitleAlertShowcase = false;
 
 function getSharpCanvasContext(canvas) {
   const context = canvas?.getContext('2d');
@@ -399,9 +417,14 @@ let lobbyMessages = [];
 let lobbyChallenge = null;
 let lobbyChallengeStatus = null;
 let lobbySelectedPlayerId = null;
-let lobbyChatOpen = false;
 let lobbyUnreadCount = 0;
 let lobbyConnected = false;
+let lobbyBoard = createEmptyLobbyBoard();
+let lobbyBoardTool = 'scroll';
+let lobbyMarkerColor = 'black';
+let lobbyRosterOpen = false;
+let lobbyActiveStroke = null;
+let lobbyPendingBoardTop = null;
 let tutorialSlideIndex = 0;
 let tutorialTipsSlideIndex = 0;
 let tutorialStageMode = 'slide';
@@ -427,6 +450,9 @@ const rankedClient = new RankedClient({
   onLobbyState: handleLobbyState,
   onRoster: handleLobbyRoster,
   onChat: handleLobbyChat,
+  onBoardOperation: handleLobbyBoardOperation,
+  onBoardTrim: handleLobbyBoardTrim,
+  onBoardReset: handleLobbyBoardReset,
   onChallenge: handleLobbyChallenge,
 });
 const onlineFlowDirector = new OnlineFlowDirector({
@@ -473,7 +499,8 @@ setMusicVolume(musicVolume);
 setSfxVolume(sfxVolume);
 
 updateFrameScale();
-window.addEventListener('resize', updateFrameScale);
+window.addEventListener('resize', handleViewportResize);
+window.visualViewport?.addEventListener('resize', handleViewportResize);
 window.addEventListener('keydown', handleGlobalKeydown);
 installAudioUnlockListeners();
 boot();
@@ -515,7 +542,7 @@ async function boot() {
 
   try {
     unlockSceneAudio();
-    screen = 'online-name';
+    screen = 'title';
     await playWipeTransition(() => render());
   } catch (error) {
     console.error('Could not render title screen', error);
@@ -964,6 +991,9 @@ function normalizeStatefulGameLayout(payload) {
   const frame = payload.frame ?? payload.landscape?.frame ?? {};
   const width = Math.max(1, finiteLayoutNumber(frame.width, FRAME_WIDTH));
   const height = Math.max(1, finiteLayoutNumber(frame.height, FRAME_HEIGHT));
+  const portraitFrame = payload.portraitFrame ?? {};
+  const portraitWidth = Math.max(1, finiteLayoutNumber(portraitFrame.width, PORTRAIT_FRAME_WIDTH));
+  const portraitHeight = Math.max(1, finiteLayoutNumber(portraitFrame.height, PORTRAIT_FRAME_HEIGHT));
   const rawStates = payload.states;
   const normalizedStates = new Map();
 
@@ -978,6 +1008,9 @@ function normalizeStatefulGameLayout(payload) {
       width: Math.max(1, finiteLayoutNumber(stateDefinition.frame?.width, width)),
       height: Math.max(1, finiteLayoutNumber(stateDefinition.frame?.height, height)),
       slots: normalizeGameLayoutSlots(stateDefinition.elements),
+      portraitWidth,
+      portraitHeight,
+      portraitSlots: normalizeGameLayoutSlots(stateDefinition.portraitElements),
     });
   }
 
@@ -988,6 +1021,9 @@ function normalizeStatefulGameLayout(payload) {
       width,
       height,
       slots: new Map(),
+      portraitWidth,
+      portraitHeight,
+      portraitSlots: new Map(),
     });
   }
 
@@ -995,6 +1031,8 @@ function normalizeStatefulGameLayout(payload) {
     variant: String(payload.variant || 'Tap Tap Shoot Y'),
     width,
     height,
+    portraitWidth,
+    portraitHeight,
     states: resolveGameLayoutStates(normalizedStates),
   };
 }
@@ -1058,7 +1096,65 @@ function resolveGameLayoutState(stateId, states, resolved, stack) {
     width: stateDefinition.width,
     height: stateDefinition.height,
     slots,
+    portraitWidth: stateDefinition.portraitWidth,
+    portraitHeight: stateDefinition.portraitHeight,
+    portraitSlots: resolvePortraitLayoutSlots(stateDefinition, slots),
   };
+}
+
+function resolvePortraitLayoutSlots(stateDefinition, landscapeSlots) {
+  if (stateDefinition.portraitSlots?.size) {
+    return stateDefinition.portraitSlots;
+  }
+
+  return createFallbackPortraitSlots(landscapeSlots);
+}
+
+function createFallbackPortraitSlots(landscapeSlots) {
+  const slots = new Map();
+  const add = (key, x, y, width, height, zIndex = 1) => {
+    if (landscapeSlots.has(key)) slots.set(key, { x, y, width, height, zIndex });
+  };
+
+  add('p1-info', 14, 16, 190, 72, 20);
+  add('p2-info', 336, 16, 190, 72, 20);
+  add('p1-win-label', 8, 88, 128, 64, 20);
+  add('p1-win-counter', 104, 94, 64, 64, 21);
+  add('p2-win-label', 404, 88, 128, 64, 20);
+  add('p2-win-counter', 372, 94, 64, 64, 21);
+  add('turn-counter', 142, 76, 256, 128, 22);
+  add('scene', 14, 190, 512, 256, 5);
+
+  add('p1-you-picked', 18, 448, 128, 64, 12);
+  add('p1-previous-move-icon', 136, 448, 64, 64, 13);
+  add('p2-they-picked', 340, 448, 150, 64, 12);
+  add('p2-previous-move-icon', 286, 448, 64, 64, 13);
+
+  const resourceKeys = [...landscapeSlots.keys()].filter((key) => /^(p1|p2)-.+-slot-\d+$/.test(key));
+  for (const playerId of ['p1', 'p2']) {
+    const playerKeys = resourceKeys.filter((key) => key.startsWith(`${playerId}-`)).sort();
+    playerKeys.forEach((key, index) => {
+      const row = Math.floor(index / 3);
+      const column = index % 3;
+      const x = playerId === 'p1' ? 18 + (column * 48) : 378 + (column * 48);
+      add(key, x, 524 + (row * 48), 48, 48, 14);
+    });
+  }
+
+  add('rules-button', 214, 526, 112, 56, 24);
+
+  const buttonKeys = [...landscapeSlots.keys()]
+    .filter((key) => key.endsWith('-button') && !['rules-button', 'continue-button', 'quit-button'].includes(key))
+    .sort((a, b) => (landscapeSlots.get(a)?.x ?? 0) - (landscapeSlots.get(b)?.x ?? 0));
+  buttonKeys.forEach((key, index) => {
+    const lastOddButton = buttonKeys.length % 2 && index === buttonKeys.length - 1;
+    const x = lastOddButton ? 150 : (index % 2 === 0 ? 25 : 295);
+    add(key, x, 610 + (Math.floor(index / 2) * 116), 220, 110, 30 + index);
+  });
+
+  add('continue-button', 142, 700, 256, 128, 30);
+  add('quit-button', 142, 824, 256, 128, 31);
+  return slots;
 }
 
 function finiteLayoutNumber(value, fallback) {
@@ -1066,14 +1162,65 @@ function finiteLayoutNumber(value, fallback) {
   return Number.isFinite(number) ? Math.round(number) : fallback;
 }
 
+function getViewportSize() {
+  const bodyStyle = getComputedStyle(document.body);
+  const leftInset = parseFloat(bodyStyle.paddingLeft) || 0;
+  const rightInset = parseFloat(bodyStyle.paddingRight) || 0;
+  const topInset = parseFloat(bodyStyle.paddingTop) || 0;
+  const bottomInset = parseFloat(bodyStyle.paddingBottom) || 0;
+  const visualViewport = window.visualViewport;
+  const viewportWidth = visualViewport?.width ?? window.innerWidth;
+  const viewportHeight = visualViewport?.height ?? window.innerHeight;
+  const width = Math.max(1, viewportWidth - leftInset - rightInset);
+  const height = Math.max(1, viewportHeight - topInset - bottomInset);
+  return {
+    width,
+    height,
+    centerX: (visualViewport?.offsetLeft ?? 0) + leftInset + (width / 2),
+    centerY: (visualViewport?.offsetTop ?? 0) + topInset + (height / 2),
+  };
+}
+
+function shouldUsePortraitLayout() {
+  const viewport = getViewportSize();
+  return screen === 'playing' && viewport.height > viewport.width;
+}
+
+function getViewportFrame() {
+  if (shouldUsePortraitLayout()) {
+    return {
+      width: gameLayout?.portraitWidth ?? PORTRAIT_FRAME_WIDTH,
+      height: gameLayout?.portraitHeight ?? PORTRAIT_FRAME_HEIGHT,
+      mode: 'portrait',
+    };
+  }
+
+  return {
+    width: gameLayout?.width ?? FRAME_WIDTH,
+    height: gameLayout?.height ?? FRAME_HEIGHT,
+    mode: 'landscape',
+  };
+}
+
 function updateFrameScale() {
-  const availableWidth = window.innerWidth;
-  const availableHeight = Math.max(1, window.innerHeight);
-  const frameWidth = gameLayout?.width ?? FRAME_WIDTH;
-  const frameHeight = gameLayout?.height ?? FRAME_HEIGHT;
+  const viewport = getViewportSize();
+  const { width: frameWidth, height: frameHeight, mode } = getViewportFrame();
+  const availableWidth = viewport.width;
+  const availableHeight = viewport.height;
   const fitScale = Math.min(availableWidth / frameWidth, availableHeight / frameHeight);
-  const scale = fitScale < 1 ? fitScale : Math.max(1, Math.floor(fitScale));
+  const scale = Math.max(0.01, fitScale);
+  app.style.width = `${frameWidth}px`;
+  app.style.height = `${frameHeight}px`;
+  app.style.setProperty('--viewport-center-x', `${viewport.centerX}px`);
+  app.style.setProperty('--viewport-center-y', `${viewport.centerY}px`);
+  app.dataset.viewportMode = mode;
   app.style.setProperty('--ui-scale', scale.toFixed(4));
+}
+
+function handleViewportResize() {
+  const previousMode = app.dataset.viewportMode;
+  updateFrameScale();
+  if (previousMode && previousMode !== app.dataset.viewportMode && app.childElementCount) render();
 }
 
 function sanitizeDisplayName(value) {
@@ -1385,12 +1532,19 @@ function resumePausableTimers() {
 }
 
 function render() {
+  updateFrameScale();
+
   if (screen !== 'playing') {
     gameplayRulesOpen = false;
   }
 
   if (screen === 'title') {
     renderTitleScreen();
+    return;
+  }
+
+  if (screen === 'lobby') {
+    renderLobbyScreen();
     return;
   }
 
@@ -1401,11 +1555,6 @@ function render() {
 
   if (screen === 'opponent-select') {
     renderOpponentSelectScreen();
-    return;
-  }
-
-  if (screen === 'online-name') {
-    renderOnlineNameScreen();
     return;
   }
 
@@ -1621,7 +1770,7 @@ function renderScoreboardScreen() {
     </section>
   `;
   app.querySelector('[data-action="continue"]')?.addEventListener('click', submitRankedContinue);
-  app.querySelector('[data-action="main-menu"]')?.addEventListener('click', wipeToTitleFromScoreboard);
+  app.querySelector('[data-action="main-menu"]')?.addEventListener('click', wipeToLobbyFromScoreboard);
   mountSpriteRenderers(app.querySelectorAll('.sprite-canvas'));
   mountReadyWaitingOverlays(app.querySelectorAll('.scoreboard-ready'));
 }
@@ -1685,10 +1834,10 @@ async function showFinalRankedScoreboard() {
   isTransitioning = false;
 }
 
-async function wipeToTitleFromScoreboard() {
+async function wipeToLobbyFromScoreboard() {
   if (isTransitioning) return;
   isTransitioning = true;
-  await onlineFlowDirector.play('RETURN_TO_TITLE', {
+  await onlineFlowDirector.play('RETURN_TO_LOBBY', {
     snapshot: rankedSnapshot,
     previousPhase: rankedSnapshot?.phase,
   });
@@ -2073,13 +2222,22 @@ function isRankedMatchWon() {
 }
 
 function getActiveGameLayout() {
-  return gameLayout?.states.get(activeLayoutStateId)
+  const layout = gameLayout?.states.get(activeLayoutStateId)
     ?? gameLayout?.states.get(DEFAULT_LAYOUT_STATE_ID)
     ?? {
       width: gameLayout?.width ?? FRAME_WIDTH,
       height: gameLayout?.height ?? FRAME_HEIGHT,
       slots: new Map(),
     };
+
+  if (!shouldUsePortraitLayout()) return layout;
+
+  return {
+    ...layout,
+    width: layout.portraitWidth ?? gameLayout?.portraitWidth ?? PORTRAIT_FRAME_WIDTH,
+    height: layout.portraitHeight ?? gameLayout?.portraitHeight ?? PORTRAIT_FRAME_HEIGHT,
+    slots: layout.portraitSlots ?? new Map(),
+  };
 }
 
 function getLayoutStateId(legalMoves) {
@@ -2425,50 +2583,55 @@ function shouldClearStageForCountdown() {
     || (playMode === 'online' && rankedSnapshot?.phase === 'roundOver' && Boolean(readyWaiting));
 }
 
-function renderTitleScreen() {
+function renderLobbyScreen() {
   stopFindingMatchTicker();
   stopOnlineStatusPolling();
   requestMusicTrack('title');
 
   const roster = orderLobbyPlayers(lobbyPlayers);
-  const latestMessage = lobbyMessages.at(-1);
   app.innerHTML = `
     <section class="title-screen lobby-screen" aria-label="Online lobby">
-      <canvas
-        class="sprite-canvas title-logo"
-        data-doodle="new-logo-rev-2-alpha"
-        data-frame-width="${TITLE_LOGO_FRAME_WIDTH}"
-        data-frame-height="${TITLE_LOGO_FRAME_HEIGHT}"
-        width="${TITLE_LOGO_FRAME_WIDTH}"
-        height="${TITLE_LOGO_FRAME_HEIGHT}"
-        aria-label="Super Rock Paper Scissors Online"
-      ></canvas>
-
-      <div class="lobby-panel">
-        <header class="lobby-heading"><strong>ONLINE</strong><span>${lobbyConnected ? `${lobbyPlayers.length} human${lobbyPlayers.length === 1 ? '' : 's'}` : 'Reconnecting…'}</span></header>
-        <div class="lobby-roster" role="list">
-          <button class="lobby-player-row computer" data-player-id="computer" type="button"><span>Computer</span><small>Play variants</small></button>
-          ${roster.map(renderLobbyPlayerRow).join('')}
+      <canvas class="sprite-canvas lobby-header-art" data-doodle="lobby-header" data-frame-width="465" data-frame-height="174" width="465" height="174" aria-label="Lobby"></canvas>
+      <div class="lobby-workspace">
+        <div class="whiteboard-frame">
+          <div class="whiteboard-paper" aria-hidden="true"></div>
+          <canvas class="sprite-canvas whiteboard-art" data-doodle="whiteboard" data-frame-width="840" data-frame-height="622" width="840" height="622" aria-hidden="true"></canvas>
+          <div class="whiteboard-scroll" tabindex="0" aria-label="Shared lobby whiteboard">
+            <canvas class="whiteboard-canvas"></canvas>
+          </div>
+          <button class="whiteboard-new-marks" data-action="board-bottom" type="button" hidden>new marks ↓</button>
         </div>
-        <div class="lobby-controls">
-          <button class="lobby-ready ${lobbySelf?.presence === 'ready' ? 'is-ready' : ''}" data-action="toggle-ready" type="button" aria-pressed="${lobbySelf?.presence === 'ready'}">${lobbySelf?.presence === 'ready' ? 'READY — searching' : 'READY TO PLAY'}</button>
-          <button class="lobby-settings" data-action="settings" type="button" aria-label="Settings">⚙</button>
+        <aside class="lobby-roster-panel ${lobbyRosterOpen ? 'is-open' : ''}">
+          <header class="lobby-heading"><strong>ONLINE</strong><span>${lobbyConnected ? lobbyPlayers.length : '…'}</span></header>
+          <div class="lobby-roster" role="list">
+            <button class="lobby-player-row computer" data-player-id="computer" type="button"><span>Computer</span><small>Play variants</small></button>
+            ${roster.map(renderLobbyPlayerRow).join('')}
+          </div>
+        </aside>
+      </div>
+      <div class="lobby-bottom-rail">
+        <div class="whiteboard-tools" role="group" aria-label="Whiteboard tools">
+          <button class="scroll-tool ${lobbyBoardTool === 'scroll' ? 'is-selected' : ''}" data-board-tool="scroll" type="button" aria-label="Scroll board">↕</button>
+          ${['black', 'red', 'blue', 'green'].map((color) => `<button class="marker-tool marker-${color} ${lobbyBoardTool === 'marker' && lobbyMarkerColor === color ? 'is-selected' : ''}" data-board-tool="${color}" type="button" aria-label="${color} marker"></button>`).join('')}
+          <button class="eraser-tool ${lobbyBoardTool === 'erase' ? 'is-selected' : ''}" data-board-tool="erase" type="button" aria-label="Eraser">▰</button>
         </div>
-        <button class="lobby-chat-ticker" data-action="open-chat" type="button">
-          <span>${latestMessage ? `<strong>${escapeHtml(latestMessage.displayName)}:</strong> ${escapeHtml(latestMessage.text)}` : 'Chat is quiet.'}</span>
-          ${lobbyUnreadCount ? `<b class="lobby-unread">${lobbyUnreadCount}</b>` : ''}
-        </button>
+        <form class="lobby-chat-form"><input name="message" maxlength="200" autocomplete="off" aria-label="Chat message"><button type="submit">Send</button></form>
+        <button class="lobby-ready ${lobbySelf?.presence === 'ready' ? 'is-ready' : ''}" data-action="toggle-ready" type="button" aria-pressed="${lobbySelf?.presence === 'ready'}">${lobbySelf?.presence === 'ready' ? 'READY' : 'PLAY'}</button>
+        <button class="lobby-roster-toggle" data-action="toggle-roster" type="button" aria-label="Players">☰</button>
+        <button class="lobby-settings" data-action="settings" type="button" aria-label="Settings">⚙</button>
       </div>
       ${renderLobbyOverlay()}
+      ${renderOpenCurtainBorder()}
     </section>
   `;
 
   app.querySelectorAll('[data-player-id]').forEach((button) => button.addEventListener('click', () => openLobbyPlayer(button.dataset.playerId)));
   app.querySelector('[data-action="toggle-ready"]')?.addEventListener('click', () => rankedClient.setReady(lobbySelf?.presence !== 'ready'));
-  app.querySelector('[data-action="open-chat"]')?.addEventListener('click', openLobbyChat);
   app.querySelector('[data-action="settings"]')?.addEventListener('click', () => { lobbySelectedPlayerId = lobbySelf?.playerId; render(); });
+  app.querySelector('[data-action="toggle-roster"]')?.addEventListener('click', () => { lobbyRosterOpen = !lobbyRosterOpen; app.querySelector('.lobby-roster-panel')?.classList.toggle('is-open', lobbyRosterOpen); });
   installLobbyOverlayHandlers();
   mountSpriteRenderers(app.querySelectorAll('.sprite-canvas'));
+  mountLobbyWhiteboard();
 }
 
 function renderLobbyPlayerRow(player) {
@@ -2484,7 +2647,6 @@ function orderLobbyPlayers(players) {
 }
 
 function renderLobbyOverlay() {
-  if (lobbyChatOpen) return renderLobbyChatDrawer();
   if (lobbyChallenge) return renderLobbyChallengeOverlay();
   if (!lobbySelectedPlayerId) return '';
   const player = lobbyPlayers.find((entry) => entry.playerId === lobbySelectedPlayerId);
@@ -2500,10 +2662,6 @@ function renderLobbyChallengeOverlay() {
   return `<div class="lobby-overlay"><div class="lobby-dialog"><h2>${lobbyChallengeStatus === 'pending' ? (incoming ? 'Ranked challenge' : 'Challenge sent') : escapeHtml(lobbyChallengeStatus ?? '')}</h2><p>${escapeHtml(name)}</p>${lobbyChallengeStatus === 'pending' ? (incoming ? '<button data-action="accept-challenge">Accept</button><button data-action="decline-challenge">Decline</button>' : '<button data-action="cancel-challenge">Cancel</button>') : '<button data-action="close-challenge">Close</button>'}</div></div>`;
 }
 
-function renderLobbyChatDrawer() {
-  return `<div class="lobby-chat-drawer"><header><h2>Lobby chat</h2><button data-action="close-chat" type="button">Close</button></header><div class="lobby-chat-messages">${lobbyMessages.map((message) => `<p><strong>${escapeHtml(message.displayName)}</strong> ${escapeHtml(message.text)}</p>`).join('')}</div><form class="lobby-chat-form"><input name="message" maxlength="200" autocomplete="off" aria-label="Chat message"><button type="submit">Send</button></form></div>`;
-}
-
 function openLobbyPlayer(playerId) {
   if (playerId === 'computer') {
     rankedClient.setReady(false);
@@ -2515,20 +2673,11 @@ function openLobbyPlayer(playerId) {
   render();
 }
 
-function openLobbyChat() {
-  lobbyChatOpen = true;
-  lobbyUnreadCount = 0;
-  render();
-  const messages = app.querySelector('.lobby-chat-messages');
-  if (messages) messages.scrollTop = messages.scrollHeight;
-  app.querySelector('.lobby-chat-form input')?.focus();
-}
-
 function installLobbyOverlayHandlers() {
   app.querySelector('[data-action="close-overlay"]')?.addEventListener('click', () => { lobbySelectedPlayerId = null; render(); });
   app.querySelector('[data-action="challenge-player"]')?.addEventListener('click', () => rankedClient.challengePlayer(lobbySelectedPlayerId));
-  app.querySelector('[data-action="close-chat"]')?.addEventListener('click', () => { lobbyChatOpen = false; render(); });
-  app.querySelector('.lobby-chat-form')?.addEventListener('submit', (event) => { event.preventDefault(); const input = event.currentTarget.elements.message; rankedClient.sendChat(input.value); input.value = ''; input.focus(); });
+  app.querySelector('.lobby-chat-form')?.addEventListener('submit', (event) => { event.preventDefault(); const input = event.currentTarget.elements.message; rankedClient.sendChat(input.value, lobbyMarkerColor); input.value = ''; input.focus(); });
+  app.querySelectorAll('[data-board-tool]').forEach((button) => button.addEventListener('click', () => selectLobbyBoardTool(button.dataset.boardTool)));
   app.querySelector('.lobby-rename-form')?.addEventListener('submit', (event) => { event.preventDefault(); rankedDisplayName = sanitizeDisplayName(new FormData(event.currentTarget).get('displayName')); writeStoredDisplayName(rankedDisplayName); rankedClient.setDisplayName(rankedDisplayName); lobbySelectedPlayerId = null; });
   app.querySelector('[data-action="accept-challenge"]')?.addEventListener('click', () => rankedClient.respondChallenge(lobbyChallenge.id, true));
   app.querySelector('[data-action="decline-challenge"]')?.addEventListener('click', () => rankedClient.respondChallenge(lobbyChallenge.id, false));
@@ -2544,30 +2693,233 @@ function handleLobbyState(message) {
   lobbySelf = message.self;
   lobbyPlayers = message.players ?? [];
   lobbyMessages = message.recentMessages ?? [];
+  lobbyBoard = message.board ?? createEmptyLobbyBoard();
   lobbyChallenge = message.pendingChallenge ?? null;
   lobbyChallengeStatus = lobbyChallenge ? 'pending' : null;
-  if (screen === 'online-name') screen = 'title';
+  if (screen === 'title') screen = 'lobby';
   render();
 }
 
 function handleLobbyRoster(players) {
   lobbyPlayers = players;
   lobbySelf = players.find((player) => player.playerId === rankedClient.playerId) ?? lobbySelf;
-  if (screen === 'title') render();
+  if (screen === 'lobby') render();
 }
 
 function handleLobbyChat(message) {
   if (!message) return;
-  lobbyMessages.push(message);
+  const normalizedMessage = {
+    ...message,
+    color: ['black', 'red', 'blue', 'green'].includes(message.color) ? message.color : 'black',
+    rowY: Number.isFinite(message.rowY) ? message.rowY : lobbyBoard.nextY,
+    rowSpan: Number.isFinite(message.rowSpan) ? message.rowSpan : Math.max(1, Math.min(3, Math.ceil(((message.displayName?.length ?? 0) + (message.text?.length ?? 0) + 2) / 74))),
+  };
+  lobbyMessages.push(normalizedMessage);
   if (lobbyMessages.length > 100) lobbyMessages.shift();
-  if (!lobbyChatOpen || screen !== 'title') lobbyUnreadCount += 1;
-  if (screen === 'title') {
-    const messages = app.querySelector('.lobby-chat-messages');
-    const nearBottom = messages && messages.scrollHeight - messages.scrollTop - messages.clientHeight < 40;
-    render();
-    const nextMessages = app.querySelector('.lobby-chat-messages');
-    if (nearBottom && nextMessages) nextMessages.scrollTop = nextMessages.scrollHeight;
+  lobbyBoard.operations.push({ kind: 'text', id: normalizedMessage.id, message: normalizedMessage });
+  lobbyBoard.nextY = Math.max(lobbyBoard.nextY, normalizedMessage.rowY + (normalizedMessage.rowSpan * lobbyBoard.rowHeight));
+  if (screen !== 'lobby') lobbyUnreadCount += 1;
+  updateLobbyBoard(true);
+}
+
+function handleLobbyBoardOperation(operation) {
+  if (!operation) return;
+  lobbyBoard.operations.push(operation);
+  updateLobbyBoard(true);
+}
+
+function handleLobbyBoardTrim(top) {
+  if (!Number.isFinite(top)) return;
+  if (lobbyActiveStroke) {
+    lobbyPendingBoardTop = top;
+    return;
   }
+  applyLobbyBoardTrim(top);
+}
+
+function handleLobbyBoardReset(board) {
+  lobbyBoard = board ?? createEmptyLobbyBoard();
+  lobbyPendingBoardTop = null;
+  updateLobbyBoard(true);
+}
+
+function createEmptyLobbyBoard() {
+  return { width: 760, viewHeight: 450, maxHeight: 1575, rowHeight: 30, top: 0, nextY: 34, operations: [] };
+}
+
+function selectLobbyBoardTool(tool) {
+  if (['black', 'red', 'blue', 'green'].includes(tool)) {
+    lobbyMarkerColor = tool;
+    lobbyBoardTool = 'marker';
+  } else if (tool === 'erase' || tool === 'scroll') {
+    lobbyBoardTool = tool;
+  }
+  app.querySelectorAll('[data-board-tool]').forEach((button) => {
+    const selected = lobbyBoardTool === 'scroll'
+      ? button.dataset.boardTool === 'scroll'
+      : lobbyBoardTool === 'erase'
+        ? button.dataset.boardTool === 'erase'
+        : button.dataset.boardTool === lobbyMarkerColor;
+    button.classList.toggle('is-selected', selected);
+  });
+  const canvas = app.querySelector('.whiteboard-canvas');
+  if (canvas) canvas.dataset.tool = lobbyBoardTool;
+}
+
+function mountLobbyWhiteboard() {
+  const canvas = app.querySelector('.whiteboard-canvas');
+  const scroll = app.querySelector('.whiteboard-scroll');
+  if (!canvas || !scroll) return;
+  canvas.dataset.tool = lobbyBoardTool;
+  drawLobbyBoard(canvas);
+  requestAnimationFrame(() => { scroll.scrollTop = scroll.scrollHeight; updateLobbyNewMarksButton(); });
+  canvas.addEventListener('pointerdown', beginLobbyBoardStroke);
+  canvas.addEventListener('pointermove', continueLobbyBoardStroke);
+  canvas.addEventListener('pointerup', finishLobbyBoardStroke);
+  canvas.addEventListener('pointercancel', finishLobbyBoardStroke);
+  scroll.addEventListener('scroll', updateLobbyNewMarksButton);
+  app.querySelector('[data-action="board-bottom"]')?.addEventListener('click', () => {
+    scroll.scrollTo({ top: scroll.scrollHeight, behavior: 'smooth' });
+  });
+}
+
+function beginLobbyBoardStroke(event) {
+  if (lobbyBoardTool === 'scroll' || event.button > 0) return;
+  const canvas = event.currentTarget;
+  canvas.setPointerCapture(event.pointerId);
+  lobbyActiveStroke = { pointerId: event.pointerId, tool: lobbyBoardTool, color: lobbyMarkerColor, points: [getLobbyBoardPoint(event, canvas)] };
+  event.preventDefault();
+}
+
+function continueLobbyBoardStroke(event) {
+  if (!lobbyActiveStroke || lobbyActiveStroke.pointerId !== event.pointerId) return;
+  const point = getLobbyBoardPoint(event, event.currentTarget);
+  const previous = lobbyActiveStroke.points.at(-1);
+  if (Math.hypot(point.x - previous.x, point.y - previous.y) < 1.5) return;
+  lobbyActiveStroke.points.push(point);
+  if (lobbyActiveStroke.points.length > 180) finishLobbyBoardStroke(event);
+  else drawLobbyBoard(event.currentTarget, lobbyActiveStroke);
+  event.preventDefault();
+}
+
+function finishLobbyBoardStroke(event) {
+  if (!lobbyActiveStroke || lobbyActiveStroke.pointerId !== event.pointerId) return;
+  const stroke = lobbyActiveStroke;
+  lobbyActiveStroke = null;
+  event.currentTarget.releasePointerCapture?.(event.pointerId);
+  if (stroke.points.length > 1) {
+    if (stroke.tool === 'erase') rankedClient.sendBoardErase(stroke.points);
+    else rankedClient.sendBoardStroke(stroke.points, stroke.color);
+  }
+  if (lobbyPendingBoardTop !== null) {
+    applyLobbyBoardTrim(lobbyPendingBoardTop);
+    lobbyPendingBoardTop = null;
+  } else {
+    drawLobbyBoard(event.currentTarget);
+  }
+}
+
+function getLobbyBoardPoint(event, canvas) {
+  const rect = canvas.getBoundingClientRect();
+  return {
+    x: Math.max(0, Math.min(lobbyBoard.width, ((event.clientX - rect.left) / rect.width) * lobbyBoard.width)),
+    y: lobbyBoard.top + Math.max(0, Math.min(canvas.height, ((event.clientY - rect.top) / rect.height) * canvas.height)),
+  };
+}
+
+function applyLobbyBoardTrim(top) {
+  const scroll = app.querySelector('.whiteboard-scroll');
+  const oldTop = lobbyBoard.top;
+  const oldScrollTop = scroll?.scrollTop ?? 0;
+  lobbyBoard.top = top;
+  lobbyBoard.operations = lobbyBoard.operations.filter((operation) => operation.kind !== 'text'
+    ? operation.points?.some((point) => point.y >= top)
+    : operation.message.rowY + (operation.message.rowSpan * lobbyBoard.rowHeight) > top);
+  updateLobbyBoard(false);
+  if (scroll && oldScrollTop > 0) {
+    const pixelsPerUnit = scroll.scrollHeight / Math.max(lobbyBoard.viewHeight, lobbyBoard.nextY - oldTop);
+    scroll.scrollTop = Math.max(0, oldScrollTop - ((top - oldTop) * pixelsPerUnit));
+  }
+}
+
+function updateLobbyBoard(followNewContent) {
+  if (screen !== 'lobby') return;
+  const canvas = app.querySelector('.whiteboard-canvas');
+  const scroll = app.querySelector('.whiteboard-scroll');
+  if (!canvas || !scroll) return;
+  const nearBottom = scroll.scrollHeight - scroll.scrollTop - scroll.clientHeight < 45;
+  drawLobbyBoard(canvas, lobbyActiveStroke);
+  if (followNewContent && nearBottom) requestAnimationFrame(() => { scroll.scrollTop = scroll.scrollHeight; updateLobbyNewMarksButton(); });
+  else if (followNewContent) updateLobbyNewMarksButton(true);
+}
+
+function updateLobbyNewMarksButton(forceVisible = false) {
+  const scroll = app.querySelector('.whiteboard-scroll');
+  const button = app.querySelector('.whiteboard-new-marks');
+  if (!scroll || !button) return;
+  button.hidden = !forceVisible && scroll.scrollHeight - scroll.scrollTop - scroll.clientHeight < 45;
+}
+
+function drawLobbyBoard(canvas, preview = null) {
+  const height = Math.ceil(Math.max(lobbyBoard.viewHeight, lobbyBoard.nextY - lobbyBoard.top));
+  if (canvas.width !== lobbyBoard.width) canvas.width = lobbyBoard.width;
+  if (canvas.height !== height) canvas.height = height;
+  canvas.style.height = `${(height / lobbyBoard.viewHeight) * 100}%`;
+  const context = canvas.getContext('2d');
+  context.clearRect(0, 0, canvas.width, canvas.height);
+  [...lobbyBoard.operations, ...(preview ? [preview] : [])].forEach((operation) => drawLobbyBoardOperation(context, operation));
+}
+
+function drawLobbyBoardOperation(context, operation) {
+  if (operation.kind === 'text') {
+    drawLobbyBoardText(context, operation.message);
+    return;
+  }
+  const points = operation.points ?? [];
+  if (points.length < 2) return;
+  context.save();
+  context.globalCompositeOperation = operation.kind === 'erase' || operation.tool === 'erase' ? 'destination-out' : 'source-over';
+  context.strokeStyle = getLobbyBoardColor(operation.color);
+  context.lineWidth = operation.width ?? (operation.kind === 'erase' || operation.tool === 'erase' ? 24 : 5);
+  context.lineCap = 'round';
+  context.lineJoin = 'round';
+  context.beginPath();
+  context.moveTo(points[0].x, points[0].y - lobbyBoard.top);
+  points.slice(1).forEach((point) => context.lineTo(point.x, point.y - lobbyBoard.top));
+  context.stroke();
+  context.restore();
+}
+
+function drawLobbyBoardText(context, message) {
+  const color = getLobbyBoardColor(message.color);
+  const prefix = `${message.displayName}: `;
+  const lines = wrapLobbyBoardText(context, `${prefix}${message.text}`, message.rowSpan);
+  context.save();
+  context.fillStyle = color;
+  context.font = '19px "Architects Daughter", sans-serif';
+  context.textBaseline = 'top';
+  lines.forEach((line, index) => context.fillText(line, 18, message.rowY - lobbyBoard.top + (index * 24), lobbyBoard.width - 36));
+  context.restore();
+}
+
+function wrapLobbyBoardText(context, text, maxLines) {
+  context.font = '19px "Architects Daughter", sans-serif';
+  const words = text.split(' ');
+  const lines = [];
+  let line = '';
+  words.forEach((word) => {
+    const candidate = line ? `${line} ${word}` : word;
+    if (line && context.measureText(candidate).width > lobbyBoard.width - 36 && lines.length < maxLines - 1) {
+      lines.push(line);
+      line = word;
+    } else line = candidate;
+  });
+  lines.push(line);
+  return lines.slice(0, maxLines);
+}
+
+function getLobbyBoardColor(color) {
+  return { black: '#1d1b18', red: '#d7432f', blue: '#2f66b3', green: '#287d54' }[color] ?? '#1d1b18';
 }
 
 function handleLobbyChallenge(message) {
@@ -2578,16 +2930,10 @@ function handleLobbyChallenge(message) {
     lobbyChallenge = null;
     lobbyChallengeStatus = null;
   }
-  if (screen === 'title') render();
+  if (screen === 'lobby') render();
 }
 
 function renderSceneGallery() {
-  if (!debugTools.sceneGallery) {
-    screen = 'title';
-    render();
-    return;
-  }
-
   requestMusicTrack('title');
   const groups = buildSceneGalleryGroups();
 
@@ -2599,9 +2945,9 @@ function renderSceneGallery() {
         <span>Click scene for sound</span>
       </header>
       <div class="scene-gallery-scroll">
-        ${groups.map(({ variantId, entries }) => `
+        ${groups.map(({ variantId, label, entries }) => `
           <section class="scene-gallery-group">
-            <h2>${getVariantLabel(variantId)}</h2>
+            <h2>${label ?? getVariantLabel(variantId)}</h2>
             <div class="scene-gallery-grid">
               ${entries.map(renderSceneGalleryCard).join('')}
             </div>
@@ -2630,7 +2976,7 @@ function renderSceneGallery() {
 }
 
 function buildSceneGalleryGroups() {
-  return Object.values(VARIANT_IDS).map((variantId) => {
+  const variantGroups = Object.values(VARIANT_IDS).map((variantId) => {
     const moveIds = getVariantMoveIds(variantId);
     const resource = getVariantStartResource(variantId);
     const entries = [];
@@ -2672,6 +3018,17 @@ function buildSceneGalleryGroups() {
 
     return { variantId, entries };
   });
+
+  return [
+    {
+      label: 'Poker tests',
+      entries: [
+        { presentation: { kind: 'doodle', name: 'poker-staredown', flip: false }, label: 'Poker staredown', audioScene: '' },
+        { presentation: { kind: 'doodle', name: 'table-cardback-best', flip: false }, label: 'Table cardback', audioScene: '' },
+      ],
+    },
+    ...variantGroups,
+  ];
 }
 
 function renderSceneGalleryCard({ presentation, label, audioScene }) {
@@ -2840,7 +3197,7 @@ function enableAudioFromSlider(kind) {
   isSoundEnabled = true;
   isMusicEnabled = true;
   setSoundEnabled(isSoundEnabled);
-  setMusicEnabled(isMusicEnabled, screen === 'title' ? 'title' : 'game');
+  setMusicEnabled(isMusicEnabled, ['title', 'lobby'].includes(screen) ? 'title' : 'game');
   updateTitleSoundButton();
 
   if (kind === 'music') {
@@ -2964,7 +3321,7 @@ function toggleSound() {
     }
   }
 
-  setMusicEnabled(isMusicEnabled, screen === 'title' ? 'title' : 'game');
+  setMusicEnabled(isMusicEnabled, ['title', 'lobby'].includes(screen) ? 'title' : 'game');
   setSoundEnabled(isSoundEnabled);
   playAudioToggleSound();
   render();
@@ -2987,14 +3344,14 @@ function playAudioToggleSound() {
   unlockSceneAudio();
 }
 
-function renderOnlineNameScreen() {
+function renderTitleScreen() {
   stopFindingMatchTicker();
   requestMusicTrack('title');
 
   app.innerHTML = `
-    <section class="title-screen online-name-screen" aria-label="Online name">
+    <section class="title-screen title-menu-screen" aria-label="Title screen">
       <canvas
-        class="sprite-canvas title-logo online-name-logo"
+        class="sprite-canvas title-logo title-menu-logo"
         data-doodle="new-logo-rev-2-alpha"
         data-frame-width="${TITLE_LOGO_FRAME_WIDTH}"
         data-frame-height="${TITLE_LOGO_FRAME_HEIGHT}"
@@ -3002,10 +3359,11 @@ function renderOnlineNameScreen() {
         height="${TITLE_LOGO_FRAME_HEIGHT}"
         aria-label="Super Rock Paper Scissors Online"
       ></canvas>
+      <button class="text-link scene-gallery-link" data-action="scene-gallery" type="button">Scene gallery</button>
 
-      <form class="online-name-form">
-        <div class="online-name-actions">
-          <button class="play-button online-name-random" data-action="random-name" type="button" aria-label="Random name">
+      <form class="title-menu-form">
+        <div class="title-menu-actions">
+          <button class="play-button title-menu-random" data-action="random-name" type="button" aria-label="Random name">
             <canvas
               class="sprite-canvas play-button-art"
               data-doodle="name_button"
@@ -3016,7 +3374,7 @@ function renderOnlineNameScreen() {
               aria-hidden="true"
             ></canvas>
           </button>
-          <button class="play-button online-name-submit" type="submit" aria-label="Enter lobby">
+          <button class="play-button title-menu-submit" type="submit" aria-label="Enter lobby">
             <canvas
               class="sprite-canvas play-button-art"
               data-doodle="lobby_button"
@@ -3029,8 +3387,8 @@ function renderOnlineNameScreen() {
           </button>
         </div>
         <input
-          id="online-name-input"
-          class="online-name-input"
+          id="title-name-input"
+          class="title-name-input"
           name="displayName"
           maxlength="${MAX_RANKED_DISPLAY_NAME_LENGTH}"
           autocomplete="nickname"
@@ -3040,7 +3398,7 @@ function renderOnlineNameScreen() {
         <p class="online-player-count" aria-live="polite">${renderOnlinePlayerCount()}</p>
       </form>
 
-      <div class="title-audio-actions online-name-audio-actions" aria-label="Settings">
+      <div class="title-audio-actions title-menu-audio-actions" aria-label="Settings">
         ${renderTitleAudioButton('sound', isSoundEnabled)}
         ${renderTitleVolumeSlider('music', musicVolume)}
         ${renderTitleVolumeSlider('sfx', sfxVolume)}
@@ -3049,14 +3407,23 @@ function renderOnlineNameScreen() {
     </section>
   `;
 
-  app.querySelector('.online-name-form').addEventListener('submit', submitOnlineName);
-  app.querySelector('[data-action="random-name"]').addEventListener('click', generateOnlineName);
+  app.querySelector('.title-menu-form').addEventListener('submit', enterLobbyFromTitle);
+  app.querySelector('[data-action="random-name"]').addEventListener('click', generateTitleName);
   app.querySelector('[data-action="toggle-sound"]').addEventListener('click', toggleSound);
   app.querySelector('[data-action="toggle-boil"]').addEventListener('click', toggleBoil);
+  app.querySelector('[data-action="scene-gallery"]').addEventListener('click', () => {
+    screen = 'scene-gallery';
+    render();
+  });
   mountTitleVolumeSliders(app.querySelectorAll('.title-volume-slider'));
   startOnlineStatusPolling();
   mountSpriteRenderers(app.querySelectorAll('.sprite-canvas'));
-  app.querySelector('.online-name-input')?.focus();
+  app.querySelector('.title-name-input')?.focus();
+
+  if (ENABLE_TITLE_ALERT_SHOWCASE && !hasShownTitleAlertShowcase) {
+    hasShownTitleAlertShowcase = true;
+    alertSystem.show(TITLE_ALERT_SHOWCASE);
+  }
 }
 
 function renderTutorialScreen() {
@@ -4840,7 +5207,7 @@ async function quitLocalGame() {
     rankedClient.setPresence('idle');
     resetRoundWins();
     state = createRoundState();
-    screen = 'title';
+    screen = 'lobby';
     turnPhase = 'idle';
     tutorialSlideIndex = 0;
     tutorialTipsSlideIndex = 0;
@@ -4977,50 +5344,7 @@ function getCurrentLegalMoves() {
   return rankedSnapshot.players[rankedSnapshot.playerKey].legalMoves;
 }
 
-async function startRankedFromTitle() {
-  if (isTransitioning) {
-    return;
-  }
-
-  isTransitioning = true;
-  await playCurtainMenuTransition(() => {
-    playMode = 'online';
-    selectedVariantId = DEFAULT_VARIANT_ID;
-    setCachedActiveGameLayoutForVariant(DEFAULT_VARIANT_ID);
-    clearLocalTurnChoice();
-    screen = 'online-name';
-    p1QueuedMove = null;
-    rankedSnapshot = null;
-    rankedUpdateQueue.clear();
-    rankedReadyWaiting = null;
-    rankedRoundAudioKey = null;
-    render();
-  });
-  isTransitioning = false;
-  render();
-}
-
-async function returnToTitleFromOnlineName() {
-  if (isTransitioning) {
-    return;
-  }
-
-  isTransitioning = true;
-  await playCurtainMenuTransition(() => {
-    stopOnlineStatusPolling();
-    screen = 'title';
-    p1QueuedMove = null;
-    rankedSnapshot = null;
-    rankedUpdateQueue.clear();
-    rankedReadyWaiting = null;
-    rankedRoundAudioKey = null;
-    render();
-  });
-  isTransitioning = false;
-  render();
-}
-
-function submitOnlineName(event) {
+async function enterLobbyFromTitle(event) {
   event.preventDefault();
 
   if (isTransitioning) {
@@ -5030,14 +5354,20 @@ function submitOnlineName(event) {
   const formData = new FormData(event.currentTarget);
   rankedDisplayName = sanitizeDisplayName(formData.get('displayName'));
   writeStoredDisplayName(rankedDisplayName);
+  unlockSceneAudio();
+  isTransitioning = true;
+  const curtain = await closeCurtainWipe(app, playCurtainCloseAudio);
   lobbyConnected = false;
   rankedClient.connect(rankedDisplayName, DEFAULT_VARIANT_ID);
-  screen = 'title';
+  screen = 'lobby';
   render();
+  app.append(curtain);
+  await openCurtainWipe(curtain, playCurtainOpenAudio);
+  isTransitioning = false;
 }
 
-function generateOnlineName() {
-  const input = app.querySelector('.online-name-input');
+function generateTitleName() {
+  const input = app.querySelector('.title-name-input');
 
   if (!input) {
     return;
@@ -5081,7 +5411,7 @@ function handleRankedQueue() {
 
 function handleRankedError(message = 'connection failed') {
   rankedConnectionNotice = message;
-  if (screen === 'title') {
+  if (screen === 'lobby') {
     lobbyConnected = false;
     render();
     return;
@@ -5098,12 +5428,12 @@ function handleRankedError(message = 'connection failed') {
 
 function handleRankedClose({ code } = {}) {
   lobbyConnected = false;
-  if (screen === 'title') {
+  if (screen === 'lobby') {
     rankedConnectionNotice = code === 4001 ? 'New connection for this guest. Disconnected.' : 'Reconnecting…';
     render();
     return;
   }
-  if (playMode === 'online' && screen !== 'title') {
+  if (playMode === 'online' && screen !== 'lobby') {
     removeRankedQueueCurtain();
     onlineFlowDirector.cancel();
     gameFlowDirector.cancel();
@@ -5111,7 +5441,7 @@ function handleRankedClose({ code } = {}) {
     rankedReadyWaiting = null;
     if (code === 4001) {
       rankedConnectionNotice = 'New connection for this guest. Disconnected.';
-      screen = 'title';
+      screen = 'lobby';
       rankedSnapshot = null;
       rankedUpdateQueue.clear();
       rankedRoundAudioKey = null;
@@ -5123,7 +5453,7 @@ function handleRankedClose({ code } = {}) {
       render();
       return;
     }
-    screen = 'title';
+    screen = 'lobby';
     rankedSnapshot = null;
     rankedUpdateQueue.clear();
     rankedRoundAudioKey = null;
@@ -5616,7 +5946,7 @@ function leaveRanked() {
   resetRankedSession();
   onlineFlowDirector.cancel();
   gameFlowDirector.cancel();
-  screen = 'title';
+  screen = 'lobby';
   render();
 }
 
@@ -5663,7 +5993,7 @@ async function closeRankedQueueCurtain() {
   isTransitioning = true;
   const curtain = await closeCurtainWipe(app, playCurtainCloseAudio);
   rankedQueueCurtainPromise = null;
-  if (token !== rankedQueueCurtainToken || playMode !== 'online' || screen === 'title') {
+  if (token !== rankedQueueCurtainToken || playMode !== 'online' || screen === 'lobby') {
     curtain.remove();
     rankedQueueCurtainPhase = null;
     isTransitioning = false;
@@ -5769,7 +6099,7 @@ function startOnlineStatusPolling() {
 
   updateOnlineStatus();
   onlineStatusTimer = setInterval(() => {
-    if (screen !== 'online-name') {
+    if (screen !== 'title') {
       stopOnlineStatusPolling();
       return;
     }

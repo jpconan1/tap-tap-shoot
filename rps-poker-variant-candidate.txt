@@ -1,165 +1,127 @@
 RPS POKER - VARIANT CANDIDATE
 
-ALTERNATE NAME
-
-Heads-Up RPS
-
-"Heads-up" means a two-player poker game. This name keeps the poker connection
-while allowing the presentation to remain system-focused rather than using
-literal playing-card or casino imagery. Possible drawback: players unfamiliar
-with poker terminology may not realize that betting is the defining mechanic.
-
 STATUS
 
-Promising candidate for the nine-game lineup.
+Strong playtest candidate.
 
-The original locked-RPS betting concept failed because every RPS move has equal
-intrinsic strength. Bets could only express habits or second thoughts, so calls
-were usually automatic. The community-pair system fixes this. A public random
-pair makes each locked move strong, weak, or volatile before betting begins.
+Two players lock RPS moves before a public community move appears. The
+community move turns each locked move into a known High, Middle, or Low hand.
+Players then check, bet, call, or fold around that private strength.
 
-The locked RPS move functions like a poker hole card. The community pair
-functions like a public board. No private modifier deck or card knowledge is
-required; the entire system comes from the normal RPS triangle.
+Won score chips remain permanent. Players increase the value of the current
+hand instead of wagering chips they already own.
 
 
 MATCH GOAL
 
-- Two players begin with 5 coins each.
-- A player wins the match by possessing all 10 coins.
-- Coins are fictional game resources, not real-money wagers.
+- The first player to collect 5 score chips wins the match.
+- Score chips cannot be lost or wagered.
+- A called bet can award 2 chips and may take a player past 5.
 
 
 HAND SEQUENCE
 
-1. ANTE
-
-- Each player puts 1 coin into the pot.
-- An ante is paid only when starting a new pot.
-- If a showdown ties, the existing pot carries into a fresh hand without
-  another ante.
-
-2. LOCK MOVES
+1. LOCK MOVES
 
 - Each player secretly locks Rock, Paper, or Scissors.
 - Locked moves cannot change during the hand.
 
-3. DEAL THE COMMUNITY PAIR
+2. DEAL THE COMMUNITY MOVE
 
-One of the three different-move pairs is selected uniformly at random and
-revealed publicly:
+- Rock, Paper, or Scissors is selected uniformly at random.
+- The community move is revealed publicly.
+- Both players now know their own hand strength, but not the opponent's.
 
-- Rock + Paper
-- Paper + Scissors
-- Scissors + Rock
-
-4. BETTING ROUND
+3. BETTING ROUND
 
 - One player acts first.
-- The first bettor is chosen randomly for the first hand and alternates every
-  hand afterward, including hands played for a carried pot.
-- Available actions are check, bet, call, raise, and fold.
-- Bets and raises use whole coins.
-- The minimum bet or raise is 1 coin.
-- There is no fixed betting limit, but no player can risk more than the opponent
-  can match. Unmatched excess is never placed into the pot.
-- Raises may continue until a player calls, folds, or becomes all-in.
-- If both players check, proceed directly to the community reveal.
-- If a player folds, the opponent takes the pot. Both locked moves remain
-  secret.
+- The first actor is chosen randomly for the first hand, then alternates every
+  hand.
+- The first actor may check or bet.
+- After a check, the second actor may check or bet.
+- After a bet, the opponent must call or fold.
+- There are no raises or variable bet sizes.
+- A folded locked move remains secret.
 
-5. COMMUNITY REVEAL
+4. RESOLUTION AND SCORING
 
-- If betting reaches a call or check-check, one of the two community moves is
-  selected at random with equal 50% probability.
-- Both players reveal their locked moves.
-- Each locked move resolves independently against the selected community move
-  using normal RPS rules.
+- Check-check: reveal both moves. The better hand gains 1 chip.
+- Bet-fold: do not reveal. The bettor gains 1 chip.
+- Bet-call: reveal both moves. The better hand gains 2 chips.
+- Any tied showdown: both players gain 1 chip.
 
-6. COMPARE RESULTS
+A bet therefore offers double stakes. Folding concedes the normal 1-chip hand.
+Calling accepts the chance to win 2 while risking giving 2 to the bettor.
 
-Results are ranked:
+
+SHOWDOWN RANKING
+
+Each locked move resolves independently against the community move using
+normal RPS rules. Results rank as follows:
 
 - Win beats Tie.
 - Tie beats Loss.
-- Better result takes the entire pot.
-- Equal results carry the entire pot into a fresh hand.
 
-Against one community move, Rock, Paper, and Scissors produce exactly one Win,
-one Tie, and one Loss. Therefore equal results occur when both players locked
-the same move.
+Example community move: Rock.
 
+Locked move    Result against Rock    Hand strength
+Paper          Win                    High
+Rock           Tie                    Middle
+Scissors       Loss                   Low
 
-HAND STRENGTH
+- The move that beats the community is High.
+- The move that matches the community is Middle.
+- The move that loses to the community is Low.
 
-Example community pair: Paper + Rock.
-
-Locked move    If Paper reveals    If Rock reveals    Hand type
-Paper          Tie                 Win                Strong
-Scissors       Win                 Loss               Volatile
-Rock           Loss                Tie                Weak
-
-- Strong hand: can Win or Tie against the community.
-- Weak hand: can Lose or Tie against the community.
-- Volatile hand: can Win or Lose against the community.
-
-Every move is fair before the community pair appears:
-
-- One possible pair makes it strong.
-- One possible pair makes it weak.
-- One possible pair makes it volatile.
-
-"Strong" describes safety against the community. It does not guarantee victory
-against every opponent move.
-
-On the Paper + Rock board:
-
-- Paper beats Rock at showdown regardless of the community reveal.
-- Paper versus Scissors is 50/50.
-- Rock versus Scissors is 50/50.
+Every locked move has an equal chance to become High, Middle, or Low before the
+community move appears.
 
 
 WHY BETTING WORKS
 
-The community pair gives players real private hand strength to bet around.
+- High hands can bet for 2-chip value.
+- Middle hands can bet, check, call bluffs, or fold under pressure.
+- Low hands can check, fold, or bluff.
+- A bet-fold bluff earns the same 1 chip as a normal showdown win.
+- Calling with Low cannot beat any hand. Its best possible result is a tie.
+- Folded moves remain hidden, so bluffs are not automatically exposed.
 
-- Strong hands can make value bets.
-- Weak hands can fold or bluff.
-- Volatile hands can bluff-catch or gamble.
-- The opponent sees the public pair but does not know the locked move.
-- Folded moves remain hidden, so bluffs are not automatically verified.
-
-This creates actual poker situations without a separate deck of secret powers.
+The community move must appear after both players lock. If players could choose
+after seeing it, both could always select High.
 
 
 RPS HABITS STILL MATTER
 
-The original RPS counter cycle survives probabilistically.
+The normal counter cycle survives probabilistically.
 
-If an opponent always locks Rock, always locking Paper is the best response:
+If an opponent always locks Rock, Paper beats it on two of the three possible
+community moves:
 
-- If the final community move is Rock, Paper scores Win while Rock scores Tie.
-- If the final community move is Paper, Paper scores Tie while Rock scores Loss.
-- If the final community move is Scissors, Paper scores Loss while Rock scores
-  Win.
+- Community Rock: Paper is High and Rock is Middle.
+- Community Paper: Paper is Middle and Rock is Low.
+- Community Scissors: Paper is Low and Rock is High.
 
-Across all fair community deals and reveals, Paper beats Rock in 2/3 of
-showdowns. Rock escapes in the remaining 1/3. Habit exploitation is valuable
-without determining every showdown automatically.
+Habit exploitation is valuable without determining every showdown.
 
 
-TIES AND ALL-INS
+TIES AND MATCH POINT
 
-- A tied showdown carries the pot.
-- Players lock fresh moves.
-- A fresh community pair is dealt.
-- No additional ante is paid while the pot is carried.
-- Betting position continues to alternate.
-- A player with no coins outside the pot cannot bet or call.
-- If betting is impossible because a player is all-in, proceed directly through
-  fresh locked moves, community pair, community reveal, and showdown.
-- If both players are all-in and tie, repeat free hands until somebody wins the
-  pot.
+- Any tied showdown awards 1 chip to each player, so every hand advances the
+  match.
+- If a tie makes both players reach 5 together, neither wins yet.
+- Continue sudden-death hands until one player gains chips without the other.
+- During sudden death, a fold or decisive showdown wins the match. Further
+  tied showdowns repeat.
+
+
+MATCH LENGTH
+
+Before simultaneous match point, every hand distributes at least 1 total chip.
+A match therefore reaches a winner or sudden death after no more than 9 hands.
+Repeated sudden-death ties can extend that bound.
+
+A match may end in 3 hands through called 2-chip wins. Most hands require two
+player decisions: one locked move plus one betting action.
 
 
 IMPARTIAL DEALER
@@ -168,60 +130,67 @@ Prototype script:
 
 scripts/rps-poker-dealer.js
 
-Deal a uniformly random community pair:
+Deal one uniformly random community move:
 
-node scripts/rps-poker-dealer.js deal
+node scripts/rps-poker-dealer.js
 
-Randomly select one move from a dealt pair:
-
-node scripts/rps-poker-dealer.js reveal ROCK PAPER
-
-The script uses Node's cryptographic random-number generator and rejects invalid
-or duplicate reveal pairs.
+The script uses Node's cryptographic random-number generator.
 
 
-FAKE PLAYTEST FINDINGS
+PLAYTEST 1: COIN-STACK VERSION
 
-The first test used locked RPS with betting but no community pair.
+The earlier version used 3 coins per round, a 1-coin ante, fixed 1-coin bets, a
+5-coin round threshold, and first-to-2 round scoring.
 
-- Calls were driven mainly by pot odds and stack survival.
-- No move had credible strength.
-- Every bet was effectively a bluff.
-- Small stacks repeatedly removed the betting phase through all-ins.
-- The concept felt like RPS with wagering, not poker.
+- The official match ended 2-0 after 3 hands.
+- An extra round lasted 9 hands.
+- Coin states could reverse repeatedly between 4-2 and 2-4.
+- Betting position strongly constrained decisions at 4-2.
+- Four identical-move ties occurred in the 9-hand extra round.
+- The system required stacks, antes, pots, round wins, match score, a special
+  busted threshold, and split-pot handling.
 
-The community-pair test used 5 coins each, ante 1, unrestricted bet sizes, and
-carried pots.
-
-It produced three recognizable poker situations:
-
-- A weak hand folded to pressure without revealing.
-- A weak hand bluffed and was called by a volatile hand.
-- A weak hand shoved and was called by a strong hand that had it dominated.
-
-The second test ended 10-0 after three pots. The central betting mechanism felt
-valid, but the economy was extremely fast and snowbally.
+Verdict: discard the coin-stack economy. It creates variable length and rules
+weight around the betting mechanism.
 
 
-OPEN QUESTIONS
+PLAYTEST 2: SCORE-CHIP VERSION
 
-- Are 5 starting coins enough for a satisfying match?
-- Do unrestricted raises add useful decisions or just produce tedious one-coin
-  raising?
-- How large is the first-bettor advantage or disadvantage in short matches?
-- Does folding occur often enough under strong play?
-- Does the final random community reveal feel dramatic or arbitrary?
-- Should equal showdown results always carry the pot, or should any cases split
-  it?
-- Does alternating betting position every carried hand feel fair and readable?
-- What player-facing names should replace technical terms such as community
-  pair, community reveal, strong, weak, and volatile?
-- What betting controls make bet sizing fast on mouse, controller, and touch?
+Result: CHATMAN defeated JP 6-1 after 5 hands.
+
+- Every hand contained a bet.
+- Three bets ended in folds, each awarding 1 chip.
+- One called bet tied and awarded 1 chip to each player.
+- One called bet was decisive and awarded 2 chips to the winner.
+- No move was revealed after a fold.
+- The score advanced every hand.
+- Low facing a bet had no winning call outcome; folding was correct.
+- At 1-4, the trailing player bet because a passive loss would also end the
+  match, while a 2-chip win could begin a comeback.
+- The complete match required 10 locked-move decisions and 11 betting actions
+  across both players.
+
+
+PLAYTEST QUESTIONS
+
+- Is betting frequent because it is interesting, or because checking is too
+  weak?
+- Are 1-chip folds and 2-chip called wins the right rewards?
+- Does awarding 1 chip each on a tied showdown feel natural?
+- Does the score-chip presentation support the poker fantasy despite players
+  never risking chips they already own?
+- Is first to 5 consistently the right match length?
+- Does first position have a meaningful advantage or disadvantage?
+- Does the community move feel like fair uncertainty or an arbitrary reversal
+  of the players' underlying RPS matchup?
+- What player-facing terms should replace community move, High, Middle, Low,
+  bet, and call?
 
 
 CURRENT VERDICT
 
-The community-pair system is the core of RPS Poker and should be preserved.
-It turns a locked RPS move into meaningful private information using only the
-existing RPS relationship. The main remaining work is match economy, betting
-flow, interface, and balance rather than finding a reason for betting to exist.
+Score-chip RPS Poker preserves bluffing, calling, folds, hidden information,
+and double-stakes tension without a reversible coin economy. It fits the
+existing permanent-score presentation and guarantees progress every hand. The
+main unresolved question is whether betting choices remain rich once players
+understand that Low cannot win a called showdown.

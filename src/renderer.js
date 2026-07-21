@@ -175,6 +175,7 @@ const CURTAIN_WIPE_STEPS = Object.freeze([
 
 const doodleSheets = new Map();
 let doodleRenderers = [];
+let nineSliceRenderers = [];
 const curtainBoilStops = new WeakMap();
 let rendererPauseStartedAt = null;
 let rendererPausedDuration = 0;
@@ -396,6 +397,23 @@ export function mountSpriteRenderers(canvases) {
   doodleRenderers.forEach(({ canvas, image }) => {
     installSpriteFallback(canvas, image);
   });
+  drawDoodleFrame(getRendererNow(performance.now()));
+  ensureDoodleLoop();
+}
+
+// Draw every slice from one full boil frame. This keeps the hand-drawn edges
+// phase-locked while allowing the middle of the box to grow in either axis.
+export function mountNineSliceRenderers(canvases) {
+  nineSliceRenderers = [...canvases].map((canvas) => ({
+    canvas,
+    context: getSharpContext(canvas),
+    image: loadSpriteSheet(canvas),
+    frameWidth: Number(canvas.dataset.frameWidth),
+    frameHeight: Number(canvas.dataset.frameHeight),
+    inset: Number(canvas.dataset.sliceInset),
+  }));
+
+  nineSliceRenderers.forEach(({ canvas, image }) => installSpriteFallback(canvas, image));
   drawDoodleFrame(getRendererNow(performance.now()));
   ensureDoodleLoop();
 }
@@ -1112,7 +1130,7 @@ function ensureDoodleLoop() {
 }
 
 function drawDoodleFrame(now) {
-  if (!doodleRenderers.length) {
+  if (!doodleRenderers.length && !nineSliceRenderers.length) {
     return;
   }
 
@@ -1144,6 +1162,33 @@ function drawDoodleFrame(now) {
     );
     context.restore();
 
+    canvas.style.backgroundImage = 'none';
+  });
+
+  nineSliceRenderers.forEach(({ canvas, context, image, frameWidth, frameHeight, inset }) => {
+    if (!canvas.isConnected || !image.complete || !image.naturalWidth || !frameWidth || !frameHeight || !inset) {
+      return;
+    }
+
+    context.clearRect(0, 0, canvas.width, canvas.height);
+    const sourceX = [0, inset, frameWidth - inset];
+    const sourceY = [frame * frameHeight, (frame * frameHeight) + inset, ((frame + 1) * frameHeight) - inset];
+    const sourceWidths = [inset, frameWidth - (inset * 2), inset];
+    const sourceHeights = [inset, frameHeight - (inset * 2), inset];
+    const destinationX = [0, inset, canvas.width - inset];
+    const destinationY = [0, inset, canvas.height - inset];
+    const destinationWidths = [inset, canvas.width - (inset * 2), inset];
+    const destinationHeights = [inset, canvas.height - (inset * 2), inset];
+
+    for (let row = 0; row < 3; row += 1) {
+      for (let column = 0; column < 3; column += 1) {
+        context.drawImage(
+          image,
+          sourceX[column], sourceY[row], sourceWidths[column], sourceHeights[row],
+          destinationX[column], destinationY[row], destinationWidths[column], destinationHeights[row],
+        );
+      }
+    }
     canvas.style.backgroundImage = 'none';
   });
 }
