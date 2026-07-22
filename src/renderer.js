@@ -270,11 +270,12 @@ export async function playCurtainWipeTransition(app, onCovered, { playCloseAudio
   overlay.remove();
 }
 
-export async function closeCurtainWipe(app, playCloseAudio = null, overlayClass = '') {
+export async function closeCurtainWipe(app, playCloseAudio = null, overlayClass = '', onCreate = null) {
   await preloadCurtainWipe();
 
   const overlay = createCurtainOverlay(app);
   if (overlayClass) overlay.classList.add(overlayClass);
+  onCreate?.(overlay);
   const closedStep = CURTAIN_WIPE_STEPS.length - 1;
 
   playCloseAudio?.();

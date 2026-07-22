@@ -33,6 +33,27 @@ test('online player two perspective keeps moves and hit result aligned', () => {
   });
 });
 
+test('Tap Tap Shoot X shoot versus stab faces the correct player', () => {
+  for (const [p1Move, p2Move, flip] of [
+    ['shoot', 'stab', false],
+    ['stab', 'shoot', true],
+  ]) {
+    const result = resolveTurn({
+      variantId: 'tapTapShootX',
+      p1Move,
+      p2Move,
+      p1Resource: 1,
+      p2Resource: 1,
+    });
+
+    assert.deepEqual(resolveScene({ variantId: 'tapTapShootX', p1Move, p2Move, result }), {
+      kind: 'doodle',
+      name: 'tap-tap-shoot-x/shoot-kill',
+      flip,
+    });
+  }
+});
+
 test('every variant move pairing resolves symmetrically to an existing scene', () => {
   for (const variantId of VARIANT_ORDER) {
     const moves = getVariantMoveIds(variantId);

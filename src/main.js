@@ -456,7 +456,7 @@ const lobbyWhiteboard = createLobbyWhiteboard({
   frameCount: DOODLE_FRAME_COUNT,
 });
 const onlineFlowDirector = new OnlineFlowDirector({
-  closeCurtains: () => closeCurtainWipe(app, playCurtainCloseAudio, 'online-flow-curtain'),
+  closeCurtains: (onCreate) => closeCurtainWipe(app, playCurtainCloseAudio, 'online-flow-curtain', onCreate),
   openCurtains: (curtain) => openCurtainWipe(curtain, playCurtainOpenAudio),
   reattachCurtain: (curtain) => app.append(curtain),
   spikeWipe: (nextStage) => playWipeTransition(() => {
@@ -1400,6 +1400,7 @@ function resumePausableTimers() {
 function render() {
   updateFrameScale();
   queueMicrotask(syncMatchmakingIndicator);
+  queueMicrotask(() => onlineFlowDirector.syncLayers());
 
   const activePauseMenu = pauseMenu;
   if (activePauseMenu) {
@@ -3464,6 +3465,8 @@ async function showRankedVariantDetail(variantId, sourceButton) {
     actionDoodle: 'select_button',
     slot: Number(selectedButton.dataset.variantSlot),
   });
+  overlay.classList.add('online-flow-foreground');
+  selectedButton.classList.add('online-flow-foreground');
   variantDetailMenu = { curtain: null, overlay, selectedButton, mode: 'online' };
   isTransitioning = false;
 }

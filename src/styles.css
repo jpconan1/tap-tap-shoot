@@ -1443,6 +1443,14 @@ canvas {
   pointer-events: all;
 }
 
+.variant-detail-overlay.online-flow-foreground {
+  z-index: 230;
+}
+
+.variant-button-above-curtain.online-flow-foreground {
+  z-index: 240;
+}
+
 .variant-detail-overlay::before {
   position: absolute;
   top: 28px;

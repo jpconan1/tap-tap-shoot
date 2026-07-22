@@ -4,26 +4,62 @@ export class OnlineFlowDirector {
   constructor({ closeCurtains, openCurtains, reattachCurtain, spikeWipe, waitBeats, waitBanAnimation, revealTiebreaker, commit, show, openingCues, disconnect, exitRanked }) {
     this.effects = { closeCurtains, openCurtains, reattachCurtain, spikeWipe, waitBeats, waitBanAnimation, revealTiebreaker, commit, show, openingCues, disconnect, exitRanked };
     this.curtain = null;
+    this.curtainState = 'open';
+    this.curtainTransition = null;
     this.mailbox = new Map();
     this.runId = 0;
   }
 
   adoptCurtain(curtain) {
     this.curtain = curtain;
+    this.curtainState = curtain ? 'closed' : 'open';
   }
 
   async cover() {
-    if (!this.curtain) this.curtain = await this.effects.closeCurtains();
-    else this.effects.reattachCurtain?.(this.curtain);
+    if (this.curtainState === 'closing') {
+      await this.curtainTransition;
+      return this.curtain;
+    }
+    if (this.curtainState === 'opening') await this.curtainTransition;
+    if (this.curtain) {
+      this.effects.reattachCurtain?.(this.curtain);
+      this.curtainState = 'closed';
+      return this.curtain;
+    }
+
+    this.curtainState = 'closing';
+    const transition = this.effects.closeCurtains((curtain) => {
+      this.curtain = curtain;
+    });
+    this.curtainTransition = transition;
+    const curtain = await transition;
+    if (this.curtainTransition === transition) {
+      this.curtain = curtain;
+      this.curtainState = 'closed';
+      this.curtainTransition = null;
+    }
     return this.curtain;
   }
 
   async reveal() {
-    if (!this.curtain) return;
+    if (this.curtainState === 'closing') await this.curtainTransition;
+    if (!this.curtain || this.curtainState === 'open') return;
+    if (this.curtainState === 'opening') return this.curtainTransition;
     const curtain = this.curtain;
     this.effects.reattachCurtain?.(curtain);
-    await this.effects.openCurtains(curtain);
+    this.curtainState = 'opening';
+    const transition = this.effects.openCurtains(curtain);
+    this.curtainTransition = transition;
+    await transition;
     if (this.curtain === curtain) this.curtain = null;
+    if (this.curtainTransition === transition) {
+      this.curtainState = 'open';
+      this.curtainTransition = null;
+    }
+  }
+
+  syncLayers() {
+    if (this.curtain) this.effects.reattachCurtain?.(this.curtain);
   }
 
   queueAnimation(id, payload) {
@@ -41,6 +77,8 @@ export class OnlineFlowDirector {
     this.mailbox.clear();
     this.curtain?.remove();
     this.curtain = null;
+    this.curtainState = 'open';
+    this.curtainTransition = null;
   }
 
   async play(name, context) {

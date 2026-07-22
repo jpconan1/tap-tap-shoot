@@ -3,11 +3,12 @@ import test from 'node:test';
 
 import { OnlineFlowDirector } from '../src/presentation/onlineFlowDirector.js';
 import { interpretOnlineSnapshot } from '../src/presentation/onlineFlowSequences.js';
+import fs from 'node:fs';
 
 function createDirector(log) {
   const curtain = { isConnected: true, remove() {} };
   return new OnlineFlowDirector({
-    closeCurtains: async () => { log.push('close'); return curtain; },
+    closeCurtains: async (onCreate) => { log.push('close'); onCreate?.(curtain); return curtain; },
     openCurtains: async () => { log.push('open'); },
     reattachCurtain: () => log.push('reattach'),
     spikeWipe: async (stage) => log.push(`spike:${stage}`),
@@ -32,6 +33,35 @@ test('match-found sequence is an editable ordered choreography', async () => {
     'close',
     'commit',
   ]);
+});
+
+test('director owns a closing curtain immediately so renders can reattach it', async () => {
+  const log = [];
+  let finishClose;
+  const curtain = { remove() {} };
+  const director = new OnlineFlowDirector({
+    closeCurtains: (onCreate) => {
+      onCreate(curtain);
+      return new Promise((resolve) => { finishClose = () => resolve(curtain); });
+    },
+    openCurtains: async () => {},
+    reattachCurtain: (value) => log.push(value),
+  });
+
+  const covering = director.cover();
+  director.syncLayers();
+  assert.deepEqual(log, [curtain]);
+  finishClose();
+  await covering;
+  assert.equal(director.curtainState, 'closed');
+});
+
+test('ranked variant details are layered above the owned curtain', () => {
+  const styles = fs.readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
+
+  assert.match(styles, /\.online-flow-curtain\s*{[^}]*z-index:\s*220/s);
+  assert.match(styles, /\.variant-detail-overlay\.online-flow-foreground\s*{[^}]*z-index:\s*230/s);
+  assert.match(styles, /\.variant-button-above-curtain\.online-flow-foreground\s*{[^}]*z-index:\s*240/s);
 });
 
 test('variants-chosen sequence owns scoreboard and spike wipe', async () => {
