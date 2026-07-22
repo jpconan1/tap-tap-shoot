@@ -36,7 +36,7 @@ const BOARD_TEXT_COLUMNS = 74;
 const BOARD_MAX_OPERATIONS = 800;
 const BOARD_MAX_POINTS = 180;
 const BOARD_STROKES_PER_SECOND = 12;
-const BOARD_COLORS = Object.freeze(['black', 'red', 'blue', 'green']);
+const BOARD_COLORS = Object.freeze(['black', 'red', 'blue', 'purple', 'green']);
 
 export class RankedDuelService {
   constructor({
@@ -204,6 +204,11 @@ export class RankedDuelService {
       return;
     }
 
+    if (message.type === 'forfeitMatch') {
+      if (session.roomId && session.roomId === message.matchId) this.forfeitRoom(session.roomId, session);
+      return;
+    }
+
     if (message.type === 'debugWinGame') {
       this.debugWinGame(session);
     }
@@ -231,6 +236,11 @@ export class RankedDuelService {
 
   setPresence(session, presence) {
     if (!session.inLobby || session.roomId || session.challengeId) return;
+    if (this.queue.includes(session)) {
+      session.presence = 'ready';
+      this.broadcastRoster();
+      return;
+    }
     const normalized = presence === 'playing_computer' ? 'playing_computer' : 'idle';
     this.leaveQueue(session);
     session.presence = normalized;
@@ -238,16 +248,41 @@ export class RankedDuelService {
   }
 
   setReady(session, ready) {
-    if (!session.inLobby || session.roomId || session.challengeId || session.presence === 'playing_computer') return;
+    if (!session.inLobby || session.roomId || session.challengeId) return;
     if (!ready) {
       this.leaveQueue(session);
       session.presence = 'idle';
       this.broadcastRoster();
       return;
     }
+    const wasQueued = this.queue.includes(session);
     session.presence = 'ready';
+    if (!wasQueued) this.announceReady(session);
     this.joinRanked(session);
     this.broadcastRoster();
+  }
+
+  announceReady(session) {
+    const text = `${session.displayName} is ready to play!`;
+    const rowSpan = Math.max(1, Math.min(3, Math.ceil(text.length / BOARD_TEXT_COLUMNS)));
+    const message = {
+      id: this.createId(),
+      sentAt: new Date(this.now()).toISOString(),
+      playerId: session.player.id,
+      displayName: '',
+      text,
+      color: 'black',
+      rowY: this.boardNextY,
+      rowSpan,
+      system: true,
+    };
+    this.boardNextY += rowSpan * BOARD_ROW_HEIGHT;
+    this.chatMessages.push(message);
+    if (this.chatMessages.length > MAX_CHAT_HISTORY) this.chatMessages.shift();
+    this.boardOperations.push({ kind: 'text', id: message.id, message });
+    this.broadcastLobby('chatMessage', { message });
+    this.trimBoard();
+    this.enforceBoardOperationLimit();
   }
 
   sendChat(session, value, requestedColor) {
@@ -284,7 +319,7 @@ export class RankedDuelService {
       id: this.createId(),
       playerId: session.player.id,
       color: tool === 'erase' ? null : normalizeBoardColor(value.color),
-      width: tool === 'erase' ? 24 : 5,
+      width: tool === 'erase' ? 120 : 5,
       points,
     };
     this.boardOperations.push(operation);

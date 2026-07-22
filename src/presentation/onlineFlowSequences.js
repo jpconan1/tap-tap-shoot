@@ -1,10 +1,7 @@
 export const ONLINE_FLOW_SEQUENCE = Object.freeze({
   MATCH_FOUND: Object.freeze([
-    Object.freeze({ type: 'commit' }),
-    Object.freeze({ type: 'show', stage: 'match-found' }),
-    Object.freeze({ type: 'openCurtains' }),
-    Object.freeze({ type: 'waitBeats', beats: 2 }),
     Object.freeze({ type: 'closeCurtains' }),
+    Object.freeze({ type: 'commit' }),
   ]),
   VARIANT_SELECTION_STARTED: Object.freeze([
     Object.freeze({ type: 'closeCurtains' }),

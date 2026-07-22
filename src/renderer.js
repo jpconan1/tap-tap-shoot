@@ -239,7 +239,10 @@ export async function playStarburstWipeTransition(app, onCovered, playWipeAudio)
   const coveredStep = 5;
   await animateWipeSteps(overlay, 0, coveredStep);
 
-  onCovered();
+  if (onCovered() === false) {
+    overlay.remove();
+    return;
+  }
 
   overlay = createWipeOverlay(app);
   drawWipeStep(overlay, STARBURST_WIPE_STEPS[coveredStep], performance.now());
@@ -267,10 +270,11 @@ export async function playCurtainWipeTransition(app, onCovered, { playCloseAudio
   overlay.remove();
 }
 
-export async function closeCurtainWipe(app, playCloseAudio = null) {
+export async function closeCurtainWipe(app, playCloseAudio = null, overlayClass = '') {
   await preloadCurtainWipe();
 
   const overlay = createCurtainOverlay(app);
+  if (overlayClass) overlay.classList.add(overlayClass);
   const closedStep = CURTAIN_WIPE_STEPS.length - 1;
 
   playCloseAudio?.();
@@ -291,6 +295,11 @@ export async function openCurtainWipe(overlay, playOpenAudio = null) {
   playOpenAudio?.();
   await animateCurtainSteps(overlay, closedStep - 1, 0);
   overlay.remove();
+}
+
+export function resumeClosedCurtainBoil(overlay) {
+  if (!overlay?.isConnected) return;
+  startCurtainBoil(overlay, CURTAIN_WIPE_STEPS[CURTAIN_WIPE_STEPS.length - 1]);
 }
 
 export function getDoodlePresentation(p1Move, p2Move, { variantId = '' } = {}) {

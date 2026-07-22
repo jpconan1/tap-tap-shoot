@@ -675,12 +675,48 @@ test('lobby presence broadcasts and ready players use ranked matchmaking', async
   service.receive(p2.session, { type: 'enterLobby', displayName: 'Chatman' });
 
   service.receive(p1.session, { type: 'setReady', ready: true });
+  assert.equal(service.chatMessages.at(-1).text, 'JP is ready to play!');
+  assert.equal(service.chatMessages.at(-1).system, true);
   assert.equal(lastMessage(p2).players.find((player) => player.playerId === 'p1').presence, 'ready');
   service.receive(p2.session, { type: 'setReady', ready: true });
 
   assert.equal(service.rooms.size, 1);
   assert.equal(p1.session.presence, 'in_ranked_match');
   assert.equal(p2.session.presence, 'in_ranked_match');
+});
+
+test('ready player stays queued while playing computer and can cancel matchmaking', async () => {
+  const service = createTestService();
+  const player = await connectTestPlayer(service, 'p1');
+  service.receive(player.session, { type: 'enterLobby', displayName: 'JP' });
+
+  service.receive(player.session, { type: 'setReady', ready: true });
+  service.receive(player.session, { type: 'setPresence', presence: 'playing_computer' });
+
+  assert.deepEqual(service.queue, [player.session]);
+  assert.equal(player.session.presence, 'ready');
+  assert.equal(lastMessage(player).players[0].presence, 'ready');
+
+  service.receive(player.session, { type: 'setReady', ready: false });
+  assert.deepEqual(service.queue, []);
+  assert.equal(player.session.presence, 'idle');
+});
+
+test('player playing computer can be matched from the background queue', async () => {
+  const service = createTestService();
+  const p1 = await connectTestPlayer(service, 'p1');
+  const p2 = await connectTestPlayer(service, 'p2');
+  service.receive(p1.session, { type: 'enterLobby', displayName: 'JP' });
+  service.receive(p2.session, { type: 'enterLobby', displayName: 'Chatman' });
+
+  service.receive(p1.session, { type: 'setReady', ready: true });
+  service.receive(p1.session, { type: 'setPresence', presence: 'playing_computer' });
+  service.receive(p2.session, { type: 'setReady', ready: true });
+
+  assert.equal(service.queue.length, 0);
+  assert.equal(service.rooms.size, 1);
+  assert.equal(p1.session.presence, 'in_ranked_match');
+  assert.equal(p1.messages.some((message) => message.type === 'matchState'), true);
 });
 
 test('lobby chat sanitizes messages and keeps the latest 100', async () => {
@@ -719,8 +755,17 @@ test('lobby whiteboard assigns colored text rows and shares validated strokes', 
   assert.equal(stroke.color, 'black');
   assert.deepEqual(stroke.points, [{ x: 0, y: 0 }, { x: 760, y: 1575 }]);
 
+  service.receive(p1.session, { type: 'sendChat', text: 'purple chat', color: 'purple' });
+  assert.equal(lastMessage(p2).message.color, 'purple');
+  service.receive(p1.session, {
+    type: 'sendBoardStroke',
+    color: 'purple',
+    points: [{ x: 10, y: 10 }, { x: 20, y: 20 }],
+  });
+  assert.equal(lastMessage(p2).operation.color, 'purple');
+
   const snapshot = service.getBoardSnapshot();
-  assert.equal(snapshot.operations.length, 2);
+  assert.equal(snapshot.operations.length, 4);
   assert.equal(snapshot.width, 760);
 });
 
@@ -737,7 +782,7 @@ test('whiteboard erasers are shared and excessive stroke bursts are ignored', as
 
   assert.equal(service.boardOperations.length, 12);
   assert.equal(service.boardOperations[0].kind, 'erase');
-  assert.equal(lastMessage(p2).operation.width, 24);
+  assert.equal(lastMessage(p2).operation.width, 120);
 });
 
 test('idle player can accept direct ranked challenge', async () => {

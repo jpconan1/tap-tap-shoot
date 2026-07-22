@@ -69,6 +69,7 @@ import {
   playStarburstWipeTransition,
   preloadDoodleSheets,
   READY_WAITING_SAFE_PHASE_MS,
+  resumeClosedCurtainBoil,
   resumeRendererClock,
   setBoilEnabled,
 } from './renderer.js';
@@ -118,6 +119,16 @@ const TUTORIAL_REVEAL_SLIDE_INDEX = 5;
 const TUTORIAL_TIPS_SLIDE_COUNT = 3;
 const REMATCH_BUTTON_FRAME_WIDTH = 256;
 const REMATCH_BUTTON_FRAME_HEIGHT = 128;
+const LOBBY_BOARD_COLORS = Object.freeze(['black', 'red', 'blue', 'purple', 'green']);
+const LOBBY_BOARD_COLOR_VALUES = Object.freeze({ black: '#191919', red: '#AC3235', blue: '#5703EF', purple: '#821B92', green: '#118040' });
+const LOBBY_BOARD_TOOL_LAYOUT = Object.freeze({
+  black: Object.freeze({ x: 185, y: 591, width: 71, height: 14, heldWidth: 75, heldHeight: 64, hotspotX: 7, hotspotY: 57 }),
+  red: Object.freeze({ x: 260, y: 591, width: 71, height: 14, heldWidth: 75, heldHeight: 64, hotspotX: 7, hotspotY: 57 }),
+  blue: Object.freeze({ x: 335, y: 591, width: 71, height: 14, heldWidth: 75, heldHeight: 64, hotspotX: 7, hotspotY: 57 }),
+  purple: Object.freeze({ x: 410, y: 591, width: 71, height: 14, heldWidth: 75, heldHeight: 64, hotspotX: 7, hotspotY: 57 }),
+  green: Object.freeze({ x: 485, y: 591, width: 71, height: 14, heldWidth: 75, heldHeight: 64, hotspotX: 7, hotspotY: 57 }),
+  erase: Object.freeze({ x: 570, y: 584, width: 67, height: 23, heldWidth: 144, heldHeight: 168, hotspotX: 72, hotspotY: 84 }),
+});
 const BULLET_SLOT_COUNT = MAX_BULLETS;
 const LAST_NUMBERED_TURN = 21;
 const FRAME_WIDTH = 960;
@@ -358,12 +369,6 @@ function getSharpCanvasContext(canvas) {
   return context;
 }
 
-const FINDING_MATCH_DOODLES = Object.freeze([
-  'title/findingmatch',
-  'title/findingmatch1',
-  'title/findingmatch2',
-  'title/findingmatch3',
-]);
 let state = createRoundState();
 let screen = 'title';
 let playMode = 'local';
@@ -371,6 +376,7 @@ let selectedVariantId = DEFAULT_VARIANT_ID;
 let variantSelectPage = 0;
 let variantDifficultyToggleState = 'easy';
 let isTransitioning = false;
+let transitionGeneration = 0;
 let variantDetailMenu = null;
 const completedBanAnimationVariants = new Set();
 let isMusicEnabled = false;
@@ -388,17 +394,14 @@ let p1QueuedMove = null;
 let localTurnChoice = null;
 let localRoundTimedOutPlayer = null;
 let rankedSnapshot = null;
+let ignoredRankedMatchId = null;
+let matchmakingStatus = 'idle';
 const rankedUpdateQueue = new RankedUpdateQueue();
 let pendingSuperAnimation = null;
 let isApplyingRankedSnapshot = false;
 let rankedReadyWaiting = null;
 let rankedReadyWaitingTimer = null;
 let rankedRoundAudioKey = null;
-let rankedQueueCurtain = null;
-let rankedQueueCurtainToken = 0;
-let rankedQueueCurtainPromise = null;
-let rankedQueueCurtainPhase = null;
-let rankedQueueError = null;
 let rankedConnectionNotice = null;
 let rankedDisconnectReturnTimer = null;
 let rankedDisplayName = readStoredDisplayName();
@@ -409,8 +412,6 @@ let debugTools = {
   sceneGallery: false,
 };
 let onlineStatusTimer = null;
-let findingMatchStep = 0;
-let findingMatchTimer = null;
 let lobbySelf = null;
 let lobbyPlayers = [];
 let lobbyMessages = [];
@@ -422,6 +423,7 @@ let lobbyConnected = false;
 let lobbyBoard = createEmptyLobbyBoard();
 let lobbyBoardTool = 'scroll';
 let lobbyMarkerColor = 'black';
+let lobbyToolPointer = null;
 let lobbyRosterOpen = false;
 let lobbyActiveStroke = null;
 let lobbyPendingBoardTop = null;
@@ -456,7 +458,7 @@ const rankedClient = new RankedClient({
   onChallenge: handleLobbyChallenge,
 });
 const onlineFlowDirector = new OnlineFlowDirector({
-  closeCurtains: () => closeCurtainWipe(app, playCurtainCloseAudio),
+  closeCurtains: () => closeCurtainWipe(app, playCurtainCloseAudio, 'online-flow-curtain'),
   openCurtains: (curtain) => openCurtainWipe(curtain, playCurtainOpenAudio),
   reattachCurtain: (curtain) => app.append(curtain),
   spikeWipe: (nextStage) => playWipeTransition(() => {
@@ -502,6 +504,8 @@ updateFrameScale();
 window.addEventListener('resize', handleViewportResize);
 window.visualViewport?.addEventListener('resize', handleViewportResize);
 window.addEventListener('keydown', handleGlobalKeydown);
+window.addEventListener('pointermove', followLobbyBoardTool);
+window.addEventListener('pointerdown', releaseLobbyBoardToolOutside, true);
 installAudioUnlockListeners();
 boot();
 
@@ -802,6 +806,9 @@ function getGamePreloadDoodles() {
     'next_slide_button',
     'Prev_slide_button',
     'quit_button',
+    'leave_button',
+    'stop_button',
+    'burger_button',
     'reload-to-stab_arrow',
     'right_red',
     'down-right_red',
@@ -841,7 +848,6 @@ function getGamePreloadDoodles() {
     'easy_hard_toggle-hard',
     'variant_play_button',
     'select_button',
-    ...FINDING_MATCH_DOODLES,
     ...COMPUTER_VARIANTS.map((variant) => variant.buttonDoodle),
     ...getMoveButtonDoodlesForPreload(),
     ...Object.values(MOVE_ICON_DOODLES),
@@ -1347,6 +1353,33 @@ function handleGlobalKeydown(event) {
     return;
   }
 
+  if (variantDetailMenu) {
+    event.preventDefault();
+    closeVariantDetail();
+    return;
+  }
+
+  if (screen === 'opponent-select' && !isTransitioning) {
+    event.preventDefault();
+    returnToLobbyFromOpponentSelect();
+    return;
+  }
+
+  if (screen === 'lobby' && (lobbySelectedPlayerId || lobbyChallenge)) {
+    event.preventDefault();
+    lobbySelectedPlayerId = null;
+    lobbyChallenge = null;
+    lobbyChallengeStatus = null;
+    render();
+    return;
+  }
+
+  if (screen === 'lobby' && !isTransitioning) {
+    event.preventDefault();
+    openPauseMenu();
+    return;
+  }
+
   if (!canOpenPauseMenu()) {
     return;
   }
@@ -1356,8 +1389,7 @@ function handleGlobalKeydown(event) {
 }
 
 function canOpenPauseMenu() {
-  return screen === 'playing'
-    && (playMode === 'local' || playMode === 'test')
+  return ['lobby', 'playing'].includes(screen)
     && !isTransitioning
     && !pauseMenu;
 }
@@ -1367,19 +1399,20 @@ async function openPauseMenu() {
     return;
   }
 
-  pauseGameplayTimers();
+  const menuScreen = screen;
+  if (menuScreen === 'playing') pauseGameplayTimers();
   isTransitioning = true;
   const curtain = await closeCurtainWipe(app, playCurtainCloseAudio);
 
-  if (screen !== 'playing') {
+  if (screen !== menuScreen) {
     curtain.remove();
     isTransitioning = false;
-    resumeGameplayTimers();
+    if (menuScreen === 'playing') resumeGameplayTimers();
     return;
   }
 
-  const overlay = renderPauseMenu();
-  pauseMenu = { curtain, overlay };
+  const overlay = renderPauseMenu(menuScreen);
+  pauseMenu = { curtain, overlay, screen: menuScreen };
 }
 
 async function closePauseMenu() {
@@ -1392,24 +1425,76 @@ async function closePauseMenu() {
   pauseMenu = null;
   menu.overlay.remove();
   await openCurtainWipe(menu.curtain, playCurtainOpenAudio);
+  mountSpriteRenderers(app.querySelectorAll('.sprite-canvas'));
   isTransitioning = false;
-  resumeGameplayTimers();
+  if (menu.screen === 'playing') resumeGameplayTimers();
 }
 
-function renderPauseMenu() {
+function renderPauseMenu(menuScreen) {
   const overlay = document.createElement('div');
   overlay.className = 'pause-menu-overlay';
   overlay.innerHTML = `
     <div class="pause-menu" role="dialog" aria-modal="true" aria-label="Pause menu">
-      <button class="pause-menu-button" data-pause-action="resume" type="button">Resume</button>
-      <button class="pause-menu-button danger" data-pause-action="quit" type="button">Quit</button>
+      ${renderSettingsControls()}
+      <div class="pause-menu-actions">
+        ${menuScreen === 'lobby'
+          ? renderSheetButton('pause-back', 'back_button_w', 'Back', 'pause-sheet-button')
+          : `${renderSheetButton('pause-quit', 'quit_button', 'Quit', 'pause-sheet-button')}${renderSheetButton('pause-continue', 'continue_button', 'Continue', 'pause-sheet-button')}`}
+        ${matchmakingStatus === 'searching' ? renderSheetButton('pause-stop-matchmaking', 'stop_button', 'Stop matchmaking', 'pause-sheet-button') : ''}
+      </div>
     </div>
   `;
   app.append(overlay);
-  overlay.querySelector('[data-pause-action="resume"]').addEventListener('click', closePauseMenu);
-  overlay.querySelector('[data-pause-action="quit"]').addEventListener('click', quitFromPauseMenu);
-  overlay.querySelector('[data-pause-action="resume"]').focus();
+  installSettingsHandlers(overlay, refreshPauseMenuSettings);
+  overlay.querySelector('[data-action="pause-back"]')?.addEventListener('click', closePauseMenu);
+  overlay.querySelector('[data-action="pause-continue"]')?.addEventListener('click', closePauseMenu);
+  overlay.querySelector('[data-action="pause-quit"]')?.addEventListener('click', renderPauseQuitConfirmation);
+  overlay.querySelector('[data-action="pause-stop-matchmaking"]')?.addEventListener('click', stopMatchmakingFromPauseMenu);
+  mountSpriteRenderers(overlay.querySelectorAll('.sprite-canvas'));
+  if (menuScreen === 'playing') resumeRendererClock();
+  overlay.querySelector('.pause-menu-actions button')?.focus();
   return overlay;
+}
+
+function stopMatchmakingFromPauseMenu(event) {
+  matchmakingStatus = 'idle';
+  rankedClient.setReady(false);
+  event.currentTarget.remove();
+  syncMatchmakingIndicator();
+}
+
+function renderPauseQuitConfirmation() {
+  const menu = pauseMenu;
+  if (!menu || menu.screen !== 'playing') return;
+  menu.overlay.innerHTML = `
+    <div class="pause-menu pause-confirmation" role="alertdialog" aria-modal="true" aria-label="Forfeit game">
+      <p>Forfeit game and return to lobby?</p>
+      <div class="pause-menu-actions">
+        ${renderSheetButton('pause-cancel-quit', 'back_button_w', 'Back', 'pause-sheet-button')}
+        ${renderSheetButton('pause-confirm-quit', 'leave_button', 'Leave', 'pause-sheet-button')}
+      </div>
+    </div>
+  `;
+  menu.overlay.querySelector('[data-action="pause-cancel-quit"]').addEventListener('click', () => {
+    const replacement = renderPauseMenu(menu.screen);
+    menu.overlay.replaceWith(replacement);
+    menu.overlay = replacement;
+  });
+  menu.overlay.querySelector('[data-action="pause-confirm-quit"]').addEventListener('click', quitFromPauseMenu);
+  mountSpriteRenderers(menu.overlay.querySelectorAll('.sprite-canvas'));
+  menu.overlay.querySelector('[data-action="pause-cancel-quit"]').focus();
+}
+
+function refreshPauseMenuSettings() {
+  const controls = pauseMenu?.overlay.querySelector('.settings-controls');
+
+  if (!controls) {
+    return;
+  }
+
+  controls.outerHTML = renderSettingsControls();
+  installSettingsHandlers(pauseMenu.overlay, refreshPauseMenuSettings);
+  mountSpriteRenderers(pauseMenu.overlay.querySelectorAll('.sprite-canvas'));
 }
 
 async function quitFromPauseMenu() {
@@ -1421,12 +1506,36 @@ async function quitFromPauseMenu() {
 
   pauseMenu = null;
   menu.overlay.remove();
-  quitToVariantMenu();
+  if (playMode === 'online') {
+    ignoredRankedMatchId = rankedSnapshot?.matchId ?? null;
+    rankedClient.forfeitMatch(rankedSnapshot);
+    resetRankedSession();
+  } else {
+    resetLocalMatchToLobby();
+  }
+  screen = 'lobby';
   render();
   app.append(menu.curtain);
   await openCurtainWipe(menu.curtain, playCurtainOpenAudio);
   isTransitioning = false;
   resumeGameplayTimers();
+}
+
+function resetLocalMatchToLobby() {
+  requestMusicTrack('title');
+  unlockSceneAudio();
+  loopToken += 1;
+  clearLocalTurnChoice();
+  clearPausableTimers();
+  resetRoundWins();
+  playMode = 'local';
+  turnPhase = 'idle';
+  state = createRoundState();
+  p1QueuedMove = null;
+  rankedSnapshot = null;
+  pendingSuperAnimation = null;
+  stagePresentation = getIdleStagePresentation();
+  rankedClient.setPresence('idle');
 }
 
 function quitToVariantMenu() {
@@ -1533,6 +1642,16 @@ function resumePausableTimers() {
 
 function render() {
   updateFrameScale();
+  queueMicrotask(syncMatchmakingIndicator);
+
+  const activePauseMenu = pauseMenu;
+  if (activePauseMenu) {
+    queueMicrotask(() => {
+      if (pauseMenu !== activePauseMenu) return;
+      app.append(activePauseMenu.curtain, activePauseMenu.overlay);
+      resumeClosedCurtainBoil(activePauseMenu.curtain);
+    });
+  }
 
   if (screen !== 'playing') {
     gameplayRulesOpen = false;
@@ -1555,16 +1674,6 @@ function render() {
 
   if (screen === 'opponent-select') {
     renderOpponentSelectScreen();
-    return;
-  }
-
-  if (screen === 'queue') {
-    renderQueueScreen();
-    return;
-  }
-
-  if (screen === 'match-found') {
-    renderMatchFoundScreen();
     return;
   }
 
@@ -1698,21 +1807,6 @@ function renderRankedBanScreen() {
     }, { once: true });
   });
   mountBanAnimations(app.querySelectorAll('.ranked-ban-animation'));
-}
-
-function renderMatchFoundScreen() {
-  const playerName = rankedSnapshot?.players?.[rankedSnapshot.playerKey]?.displayName ?? rankedDisplayName;
-  const opponentName = rankedSnapshot?.players?.[rankedSnapshot.opponentKey]?.displayName ?? 'Opponent';
-  app.innerHTML = `
-    <section class="online-interstitial match-found-stage" aria-label="Match found">
-      ${renderOpenCurtainBorder()}
-      ${renderStaticDoodle('header-match-found', 759, 512, 'online-interstitial-header')}
-      <div class="match-found-name">${escapeHtml(playerName)}</div>
-      ${renderStaticDoodle('vs-sm', 64, 64, 'match-found-vs')}
-      <div class="match-found-name">${escapeHtml(opponentName)}</div>
-    </section>
-  `;
-  mountSpriteRenderers(app.querySelectorAll('.sprite-canvas'));
 }
 
 function renderScoreboardScreen() {
@@ -2584,13 +2678,12 @@ function shouldClearStageForCountdown() {
 }
 
 function renderLobbyScreen() {
-  stopFindingMatchTicker();
   stopOnlineStatusPolling();
   requestMusicTrack('title');
 
   const roster = orderLobbyPlayers(lobbyPlayers);
   app.innerHTML = `
-    <section class="title-screen lobby-screen" aria-label="Online lobby">
+    <section class="title-screen lobby-screen ${lobbyConnected ? '' : 'is-disconnected'}" aria-label="Online lobby">
       <canvas class="sprite-canvas lobby-header-art" data-doodle="lobby-header" data-frame-width="465" data-frame-height="174" width="465" height="174" aria-label="Lobby"></canvas>
       <div class="lobby-workspace">
         <div class="whiteboard-frame">
@@ -2600,6 +2693,12 @@ function renderLobbyScreen() {
             <canvas class="whiteboard-text-canvas" aria-hidden="true"></canvas>
             <canvas class="whiteboard-canvas"></canvas>
           </div>
+          <button class="whiteboard-tray-return-zone ${lobbyBoardTool === 'scroll' ? '' : 'is-active'}" data-action="return-board-tool" type="button" aria-label="Return whiteboard tool"></button>
+          <div class="whiteboard-tool-tray" role="group" aria-label="Whiteboard tools">
+            ${LOBBY_BOARD_COLORS.map(renderLobbyBoardTool).join('')}
+            ${renderLobbyBoardTool('erase')}
+          </div>
+          ${renderHeldLobbyBoardTool()}
           <button class="whiteboard-new-marks" data-action="board-bottom" type="button" hidden>new marks ↓</button>
         </div>
         <aside class="lobby-roster-panel ${lobbyRosterOpen ? 'is-open' : ''}">
@@ -2610,17 +2709,23 @@ function renderLobbyScreen() {
         </aside>
       </div>
       <div class="lobby-bottom-rail">
-        <div class="whiteboard-tools" role="group" aria-label="Whiteboard tools">
-          <button class="scroll-tool ${lobbyBoardTool === 'scroll' ? 'is-selected' : ''}" data-board-tool="scroll" type="button" aria-label="Scroll board">↕</button>
-          ${['black', 'red', 'blue', 'green'].map((color) => `<button class="marker-tool marker-${color} ${lobbyBoardTool === 'marker' && lobbyMarkerColor === color ? 'is-selected' : ''}" data-board-tool="${color}" type="button" aria-label="${color} marker"></button>`).join('')}
-          <button class="eraser-tool ${lobbyBoardTool === 'erase' ? 'is-selected' : ''}" data-board-tool="erase" type="button" aria-label="Eraser">▰</button>
-        </div>
-        <form class="lobby-chat-form"><input name="message" maxlength="200" autocomplete="off" aria-label="Chat message"><button type="submit">Send</button></form>
-        <button class="lobby-roster-toggle" data-action="toggle-roster" type="button" aria-label="Players">☰</button>
+        <form class="lobby-chat-form">
+          <label class="sprite-input-frame lobby-chat-input-frame">
+            <canvas class="sprite-canvas sprite-input-frame-art" data-doodle="text_frame" data-frame-width="768" data-frame-height="64" width="768" height="64" aria-hidden="true"></canvas>
+            <input name="message" maxlength="200" autocomplete="off" aria-label="Chat message">
+          </label>
+          <button class="lobby-chat-submit" type="submit" aria-label="Send chat message">
+            <canvas class="sprite-canvas lobby-chat-submit-art" data-doodle="chat_button" data-frame-width="128" data-frame-height="64" width="128" height="64" aria-hidden="true"></canvas>
+          </button>
+        </form>
+        <button class="lobby-roster-toggle" data-action="toggle-roster" type="button" aria-label="Players">
+          <canvas class="sprite-canvas lobby-roster-toggle-art" data-doodle="burger_button" data-frame-width="128" data-frame-height="128" width="128" height="128" aria-hidden="true"></canvas>
+        </button>
       </div>
       <div class="lobby-action-row">
+        ${renderLobbySheetAction('back-to-title', 'back_button_w', 'Back to title')}
         ${renderLobbySheetAction('play-computer', 'title/playvcom_button', 'Practice versus computer')}
-        ${renderLobbySheetAction('toggle-ready', 'match_button', 'Play a match', lobbySelf?.presence === 'ready')}
+        ${renderLobbySheetAction('toggle-ready', 'match_button', 'Play a match', matchmakingStatus === 'searching', !lobbyConnected)}
         ${renderLobbySheetAction('settings', 'settings_button', 'Settings')}
       </div>
       ${renderLobbyOverlay()}
@@ -2629,17 +2734,54 @@ function renderLobbyScreen() {
   `;
 
   app.querySelectorAll('[data-player-id]').forEach((button) => button.addEventListener('click', () => openLobbyPlayer(button.dataset.playerId)));
-  app.querySelector('[data-action="toggle-ready"]')?.addEventListener('click', () => rankedClient.setReady(lobbySelf?.presence !== 'ready'));
+  app.querySelector('[data-action="toggle-ready"]')?.addEventListener('click', toggleMatchmaking);
   app.querySelector('[data-action="play-computer"]')?.addEventListener('click', () => openLobbyPlayer('computer'));
-  app.querySelector('[data-action="settings"]')?.addEventListener('click', () => { lobbySelectedPlayerId = lobbySelf?.playerId; render(); });
+  app.querySelector('[data-action="settings"]')?.addEventListener('click', openPauseMenu);
+  app.querySelector('[data-action="back-to-title"]')?.addEventListener('click', returnToTitleFromLobby);
   app.querySelector('[data-action="toggle-roster"]')?.addEventListener('click', () => { lobbyRosterOpen = !lobbyRosterOpen; app.querySelector('.lobby-roster-panel')?.classList.toggle('is-open', lobbyRosterOpen); });
   installLobbyOverlayHandlers();
   mountSpriteRenderers(app.querySelectorAll('.sprite-canvas'));
   mountLobbyWhiteboard();
 }
 
-function renderLobbySheetAction(action, doodle, label, pressed = false) {
-  return `<button class="lobby-sheet-action ${pressed ? 'is-active' : ''}" data-action="${action}" type="button" aria-label="${label}"${action === 'toggle-ready' ? ` aria-pressed="${pressed}"` : ''}><canvas class="sprite-canvas lobby-sheet-action-art" data-doodle="${doodle}" data-frame-width="256" data-frame-height="128" width="256" height="128" aria-hidden="true"></canvas></button>`;
+function toggleMatchmaking() {
+  const searching = matchmakingStatus === 'searching';
+  matchmakingStatus = searching ? 'idle' : 'searching';
+  rankedClient.setReady(!searching);
+  render();
+}
+
+function syncMatchmakingIndicator() {
+  app.querySelector('.matchmaking-indicator')?.remove();
+  if (matchmakingStatus !== 'searching') return;
+  const indicator = document.createElement('div');
+  indicator.className = 'matchmaking-indicator';
+  indicator.setAttribute('role', 'status');
+  indicator.setAttribute('aria-label', 'Waiting for match...');
+  indicator.innerHTML = '<span aria-hidden="true">Waiting for match<span class="matchmaking-dots"></span></span>';
+  app.append(indicator);
+}
+
+function renderLobbyBoardTool(tool) {
+  const layout = LOBBY_BOARD_TOOL_LAYOUT[tool];
+  const selected = tool === 'erase' ? lobbyBoardTool === 'erase' : lobbyBoardTool === 'marker' && lobbyMarkerColor === tool;
+  const file = tool === 'erase' ? 'eraser_sheet.webp' : `${tool === 'purple' ? 'purp' : tool}-marker_sheet.webp`;
+  const label = tool === 'erase' ? 'Eraser' : `${tool} marker`;
+  return `<button class="whiteboard-tray-tool ${selected ? 'is-selected' : ''}" style="--tool-x:${(layout.x / 840) * 100}%;--tool-y:${(layout.y / 622) * 100}%;--tool-w:${(layout.width / 840) * 100}%;--tool-h:${(layout.height / 622) * 100}%" data-board-tool="${tool}" type="button" aria-label="${label}" aria-pressed="${selected}"><canvas class="sprite-canvas" data-doodle-file="${file}" data-frame-width="${layout.width}" data-frame-height="${layout.height}" width="${layout.width}" height="${layout.height}" aria-hidden="true"></canvas></button>`;
+}
+
+function renderHeldLobbyBoardTool() {
+  if (lobbyBoardTool === 'scroll') return '';
+  const tool = lobbyBoardTool === 'erase' ? 'erase' : lobbyMarkerColor;
+  const layout = LOBBY_BOARD_TOOL_LAYOUT[tool];
+  const file = tool === 'erase' ? 'eraser-held_sheet.webp' : `${tool === 'purple' ? 'purp' : tool}_marker-writing_sheet.webp`;
+  const x = lobbyToolPointer?.x ?? layout.x + layout.hotspotX;
+  const y = lobbyToolPointer?.y ?? layout.y + layout.hotspotY;
+  return `<canvas class="sprite-canvas whiteboard-held-tool" style="--pointer-x:${(x / 840) * 100}%;--pointer-y:${(y / 622) * 100}%;--held-w:${(layout.heldWidth / 840) * 100}%;--held-h:${(layout.heldHeight / 622) * 100}%;--hotspot-x:${(layout.hotspotX / layout.heldWidth) * 100}%;--hotspot-y:${(layout.hotspotY / layout.heldHeight) * 100}%" data-doodle-file="${file}" data-frame-width="${layout.heldWidth}" data-frame-height="${layout.heldHeight}" width="${layout.heldWidth}" height="${layout.heldHeight}" aria-hidden="true"></canvas>`;
+}
+
+function renderLobbySheetAction(action, doodle, label, pressed = false, disabled = false) {
+  return `<button class="lobby-sheet-action ${pressed ? 'is-active' : ''}" data-action="${action}" type="button" aria-label="${label}"${action === 'toggle-ready' ? ` aria-pressed="${pressed}"` : ''}${disabled ? ' disabled' : ''}><canvas class="sprite-canvas lobby-sheet-action-art" data-doodle="${doodle}" data-frame-width="256" data-frame-height="128" width="256" height="128" aria-hidden="true"></canvas></button>`;
 }
 
 function renderLobbyPlayerRow(player) {
@@ -2659,7 +2801,7 @@ function renderLobbyOverlay() {
   if (!lobbySelectedPlayerId) return '';
   const player = lobbyPlayers.find((entry) => entry.playerId === lobbySelectedPlayerId);
   if (!player) return '';
-  if (player.playerId === lobbySelf?.playerId) return `<div class="lobby-overlay"><div class="lobby-dialog"><h2>${escapeHtml(player.displayName)}</h2><form class="lobby-rename-form"><input name="displayName" maxlength="50" value="${escapeHtml(player.displayName)}"><button type="submit">Rename</button></form><div class="lobby-audio-settings">${renderTitleAudioButton('sound', isSoundEnabled)}${renderTitleVolumeSlider('music', musicVolume)}${renderTitleVolumeSlider('sfx', sfxVolume)}${renderTitleBoilButton()}</div><button data-action="close-overlay" type="button">Close</button></div></div>`;
+  if (player.playerId === lobbySelf?.playerId) return `<div class="lobby-overlay"><div class="lobby-dialog" role="dialog" aria-modal="true" aria-label="Settings"><h2>Settings</h2>${renderSettingsControls()}<button data-action="close-overlay" type="button">Close</button></div></div>`;
   const canChallenge = player.presence === 'idle' && !player.challengePending;
   return `<div class="lobby-overlay"><div class="lobby-dialog"><h2>${escapeHtml(player.displayName)}</h2><p>Rating ${player.rating}</p><p>${escapeHtml(player.presence.replaceAll('_', ' '))}</p>${canChallenge ? '<button data-action="challenge-player" type="button">Ranked challenge</button>' : ''}<button data-action="close-overlay" type="button">Close</button></div></div>`;
 }
@@ -2672,9 +2814,7 @@ function renderLobbyChallengeOverlay() {
 
 function openLobbyPlayer(playerId) {
   if (playerId === 'computer') {
-    rankedClient.setReady(false);
-    rankedClient.setPresence('playing_computer');
-    startGameFromTitle();
+    openPracticeVariantSelect();
     return;
   }
   lobbySelectedPlayerId = playerId;
@@ -2685,20 +2825,18 @@ function installLobbyOverlayHandlers() {
   app.querySelector('[data-action="close-overlay"]')?.addEventListener('click', () => { lobbySelectedPlayerId = null; render(); });
   app.querySelector('[data-action="challenge-player"]')?.addEventListener('click', () => rankedClient.challengePlayer(lobbySelectedPlayerId));
   app.querySelector('.lobby-chat-form')?.addEventListener('submit', (event) => { event.preventDefault(); const input = event.currentTarget.elements.message; rankedClient.sendChat(input.value, lobbyMarkerColor); input.value = ''; input.focus(); });
-  app.querySelectorAll('[data-board-tool]').forEach((button) => button.addEventListener('click', () => selectLobbyBoardTool(button.dataset.boardTool)));
-  app.querySelector('.lobby-rename-form')?.addEventListener('submit', (event) => { event.preventDefault(); rankedDisplayName = sanitizeDisplayName(new FormData(event.currentTarget).get('displayName')); writeStoredDisplayName(rankedDisplayName); rankedClient.setDisplayName(rankedDisplayName); lobbySelectedPlayerId = null; });
+  app.querySelectorAll('[data-board-tool]').forEach((button) => button.addEventListener('click', (event) => selectLobbyBoardTool(button.dataset.boardTool, event)));
   app.querySelector('[data-action="accept-challenge"]')?.addEventListener('click', () => rankedClient.respondChallenge(lobbyChallenge.id, true));
   app.querySelector('[data-action="decline-challenge"]')?.addEventListener('click', () => rankedClient.respondChallenge(lobbyChallenge.id, false));
   app.querySelector('[data-action="cancel-challenge"]')?.addEventListener('click', () => rankedClient.cancelChallenge(lobbyChallenge.id));
   app.querySelector('[data-action="close-challenge"]')?.addEventListener('click', () => { lobbyChallenge = null; lobbyChallengeStatus = null; render(); });
-  app.querySelector('[data-action="toggle-sound"]')?.addEventListener('click', toggleSound);
-  app.querySelector('[data-action="toggle-boil"]')?.addEventListener('click', toggleBoil);
-  mountTitleVolumeSliders(app.querySelectorAll('.title-volume-slider'));
+  installSettingsHandlers(app);
 }
 
 function handleLobbyState(message) {
   lobbyConnected = true;
   lobbySelf = message.self;
+  matchmakingStatus = message.self?.presence === 'ready' ? 'searching' : matchmakingStatus === 'matched' ? 'matched' : 'idle';
   lobbyPlayers = message.players ?? [];
   lobbyMessages = message.recentMessages ?? [];
   lobbyBoard = message.board ?? createEmptyLobbyBoard();
@@ -2711,6 +2849,7 @@ function handleLobbyState(message) {
 function handleLobbyRoster(players) {
   lobbyPlayers = players;
   lobbySelf = players.find((player) => player.playerId === rankedClient.playerId) ?? lobbySelf;
+  if (lobbySelf && matchmakingStatus !== 'matched') matchmakingStatus = lobbySelf.presence === 'ready' ? 'searching' : 'idle';
   if (screen === 'lobby') render();
 }
 
@@ -2718,7 +2857,7 @@ function handleLobbyChat(message) {
   if (!message) return;
   const normalizedMessage = {
     ...message,
-    color: ['black', 'red', 'blue', 'green'].includes(message.color) ? message.color : 'black',
+    color: LOBBY_BOARD_COLORS.includes(message.color) ? message.color : 'black',
     rowY: Number.isFinite(message.rowY) ? message.rowY : lobbyBoard.nextY,
     rowSpan: Number.isFinite(message.rowSpan) ? message.rowSpan : Math.max(1, Math.min(3, Math.ceil(((message.displayName?.length ?? 0) + (message.text?.length ?? 0) + 2) / 74))),
   };
@@ -2755,23 +2894,79 @@ function createEmptyLobbyBoard() {
   return { width: 760, viewHeight: 450, maxHeight: 1575, rowHeight: 30, top: 0, nextY: 34, operations: [] };
 }
 
-function selectLobbyBoardTool(tool) {
-  if (['black', 'red', 'blue', 'green'].includes(tool)) {
+function selectLobbyBoardTool(tool, event) {
+  const isAlreadySelected = tool === 'erase'
+    ? lobbyBoardTool === 'erase'
+    : lobbyBoardTool === 'marker' && lobbyMarkerColor === tool;
+  if (isAlreadySelected) {
+    releaseLobbyBoardTool();
+    return;
+  }
+  if (LOBBY_BOARD_COLORS.includes(tool)) {
     lobbyMarkerColor = tool;
     lobbyBoardTool = 'marker';
-  } else if (tool === 'erase' || tool === 'scroll') {
+  } else if (tool === 'erase') {
     lobbyBoardTool = tool;
   }
+  updateLobbyToolPointer(event);
   app.querySelectorAll('[data-board-tool]').forEach((button) => {
-    const selected = lobbyBoardTool === 'scroll'
-      ? button.dataset.boardTool === 'scroll'
-      : lobbyBoardTool === 'erase'
-        ? button.dataset.boardTool === 'erase'
-        : button.dataset.boardTool === lobbyMarkerColor;
+    const selected = lobbyBoardTool === 'erase'
+      ? button.dataset.boardTool === 'erase'
+      : button.dataset.boardTool === lobbyMarkerColor;
     button.classList.toggle('is-selected', selected);
+    button.setAttribute('aria-pressed', String(selected));
   });
   const canvas = app.querySelector('.whiteboard-canvas');
   if (canvas) canvas.dataset.tool = lobbyBoardTool;
+  app.querySelector('.whiteboard-tray-return-zone')?.classList.add('is-active');
+  refreshHeldLobbyBoardTool();
+}
+
+function releaseLobbyBoardTool() {
+  if (lobbyBoardTool === 'scroll') return;
+  lobbyBoardTool = 'scroll';
+  lobbyToolPointer = null;
+  app.querySelectorAll('[data-board-tool]').forEach((button) => {
+    button.classList.remove('is-selected');
+    button.setAttribute('aria-pressed', 'false');
+  });
+  const canvas = app.querySelector('.whiteboard-canvas');
+  if (canvas) canvas.dataset.tool = 'scroll';
+  app.querySelector('.whiteboard-tray-return-zone')?.classList.remove('is-active');
+  app.querySelector('.whiteboard-held-tool')?.remove();
+}
+
+function updateLobbyToolPointer(event) {
+  const frame = app.querySelector('.whiteboard-frame');
+  if (!frame || !Number.isFinite(event?.clientX) || !Number.isFinite(event?.clientY)) return;
+  const rect = frame.getBoundingClientRect();
+  lobbyToolPointer = {
+    x: ((event.clientX - rect.left) / rect.width) * 840,
+    y: ((event.clientY - rect.top) / rect.height) * 622,
+  };
+}
+
+function refreshHeldLobbyBoardTool() {
+  app.querySelector('.whiteboard-held-tool')?.remove();
+  const tray = app.querySelector('.whiteboard-tool-tray');
+  if (!tray || lobbyBoardTool === 'scroll') return;
+  tray.insertAdjacentHTML('afterend', renderHeldLobbyBoardTool());
+  mountSpriteRenderers(app.querySelectorAll('.sprite-canvas'));
+}
+
+function followLobbyBoardTool(event) {
+  if (screen !== 'lobby' || lobbyBoardTool === 'scroll') return;
+  updateLobbyToolPointer(event);
+  const held = app.querySelector('.whiteboard-held-tool');
+  if (!held || !lobbyToolPointer) return;
+  held.style.setProperty('--pointer-x', `${(lobbyToolPointer.x / 840) * 100}%`);
+  held.style.setProperty('--pointer-y', `${(lobbyToolPointer.y / 622) * 100}%`);
+}
+
+function releaseLobbyBoardToolOutside(event) {
+  if (screen !== 'lobby' || lobbyBoardTool === 'scroll') return;
+  if (event.target.closest?.('.whiteboard-frame')) return;
+  releaseLobbyBoardTool();
 }
 
 function mountLobbyWhiteboard() {
@@ -2787,6 +2982,7 @@ function mountLobbyWhiteboard() {
   canvas.addEventListener('pointerup', finishLobbyBoardStroke);
   canvas.addEventListener('pointercancel', finishLobbyBoardStroke);
   scroll.addEventListener('scroll', updateLobbyNewMarksButton);
+  app.querySelector('[data-action="return-board-tool"]')?.addEventListener('pointerdown', releaseLobbyBoardTool);
   app.querySelector('[data-action="board-bottom"]')?.addEventListener('click', () => {
     scroll.scrollTo({ top: scroll.scrollHeight, behavior: 'smooth' });
   });
@@ -2884,7 +3080,7 @@ function drawLobbyBoardTextLayer(canvas, preview = null) {
   context.clearRect(0, 0, canvas.width, canvas.height);
   [...lobbyBoard.operations, ...(preview?.tool === 'erase' ? [preview] : [])].forEach((operation) => {
     if (operation.kind === 'text') drawLobbyBoardText(context, operation.message);
-    else if (operation.kind === 'erase') drawLobbyBoardPath(context, operation, 0, false);
+    else if (operation.kind === 'erase' || operation.tool === 'erase') drawLobbyBoardPath(context, operation, 0, false);
   });
 }
 
@@ -2903,7 +3099,7 @@ function drawLobbyBoardPath(context, operation, boilFrame, shouldBoil) {
   context.globalCompositeOperation = operation.kind === 'erase' || operation.tool === 'erase' ? 'destination-out' : 'source-over';
   context.strokeStyle = getLobbyBoardColor(operation.color);
   const isEraser = operation.kind === 'erase' || operation.tool === 'erase';
-  context.lineWidth = (operation.width ?? (isEraser ? 24 : 5)) + (shouldBoil ? getLobbyBoardBoilOffset(operation, -1, 'w', boilFrame) * .35 : 0);
+  context.lineWidth = (operation.width ?? (isEraser ? 120 : 5)) + (shouldBoil ? getLobbyBoardBoilOffset(operation, -1, 'w', boilFrame) * .35 : 0);
   context.lineCap = 'round';
   context.lineJoin = 'round';
   context.beginPath();
@@ -2955,7 +3151,7 @@ function getLobbyBoardBoilOffset(operation, index, axis, frame) {
 
 function drawLobbyBoardText(context, message) {
   const color = getLobbyBoardColor(message.color);
-  const prefix = `${message.displayName}: `;
+  const prefix = message.system ? '' : `${message.displayName}: `;
   const lines = wrapLobbyBoardText(context, `${prefix}${message.text}`, message.rowSpan);
   context.save();
   context.fillStyle = color;
@@ -2982,7 +3178,7 @@ function wrapLobbyBoardText(context, text, maxLines) {
 }
 
 function getLobbyBoardColor(color) {
-  return { black: '#1d1b18', red: '#d7432f', blue: '#2f66b3', green: '#287d54' }[color] ?? '#1d1b18';
+  return LOBBY_BOARD_COLOR_VALUES[color] ?? LOBBY_BOARD_COLOR_VALUES.black;
 }
 
 function handleLobbyChallenge(message) {
@@ -3171,7 +3367,7 @@ function renderTitleBoilButton() {
       class="title-audio-button title-boil-button"
       data-action="toggle-boil"
       type="button"
-      aria-label="boil ${isBoilEnabled ? 'on' : 'off'}"
+      aria-label="animation ${isBoilEnabled ? 'on' : 'off'}"
       aria-pressed="${isBoilEnabled ? 'true' : 'false'}"
     >
       <canvas
@@ -3185,6 +3381,29 @@ function renderTitleBoilButton() {
       ></canvas>
     </button>
   `;
+}
+
+function renderSettingsControls() {
+  return `
+    <div class="title-audio-actions settings-controls" aria-label="Settings controls">
+      ${renderTitleAudioButton('sound', isSoundEnabled)}
+      ${renderTitleBoilButton()}
+      ${renderTitleVolumeSlider('music', musicVolume)}
+      ${renderTitleVolumeSlider('sfx', sfxVolume)}
+    </div>
+  `;
+}
+
+function installSettingsHandlers(root, onChange = null) {
+  root.querySelector('[data-action="toggle-sound"]')?.addEventListener('click', () => {
+    toggleSound({ rerender: !onChange });
+    onChange?.();
+  });
+  root.querySelector('[data-action="toggle-boil"]')?.addEventListener('click', () => {
+    toggleBoil({ rerender: !onChange });
+    onChange?.();
+  });
+  mountTitleVolumeSliders(root.querySelectorAll('.title-volume-slider'));
 }
 
 function mountTitleVolumeSliders(canvases) {
@@ -3370,7 +3589,7 @@ function loadTitleVolumeSliderImages() {
   return loadTitleVolumeSliderImages.promise;
 }
 
-function toggleSound() {
+function toggleSound({ rerender = true } = {}) {
   isSoundEnabled = !isSoundEnabled;
   isMusicEnabled = isSoundEnabled;
 
@@ -3387,15 +3606,19 @@ function toggleSound() {
   setMusicEnabled(isMusicEnabled, ['title', 'lobby'].includes(screen) ? 'title' : 'game');
   setSoundEnabled(isSoundEnabled);
   playAudioToggleSound();
-  render();
+  if (rerender) {
+    render();
+  }
 }
 
-function toggleBoil() {
+function toggleBoil({ rerender = true } = {}) {
   isBoilEnabled = !isBoilEnabled;
   writeStoredBoilEnabled(isBoilEnabled);
   setBoilEnabled(isBoilEnabled);
   playAudioToggleSound();
-  render();
+  if (rerender) {
+    render();
+  }
 }
 
 function playAudioToggleSound() {
@@ -3408,7 +3631,6 @@ function playAudioToggleSound() {
 }
 
 function renderTitleScreen() {
-  stopFindingMatchTicker();
   requestMusicTrack('title');
 
   app.innerHTML = `
@@ -3422,7 +3644,6 @@ function renderTitleScreen() {
         height="${TITLE_LOGO_FRAME_HEIGHT}"
         aria-label="Super Rock Paper Scissors Online"
       ></canvas>
-      <button class="text-link scene-gallery-link" data-action="scene-gallery" type="button">Scene gallery</button>
 
       <form class="title-menu-form">
         <div class="title-menu-actions">
@@ -3449,15 +3670,19 @@ function renderTitleScreen() {
             ></canvas>
           </button>
         </div>
-        <input
-          id="title-name-input"
-          class="title-name-input"
-          name="displayName"
-          maxlength="${MAX_RANKED_DISPLAY_NAME_LENGTH}"
-          autocomplete="nickname"
-          spellcheck="false"
-          value="${escapeHtml(rankedDisplayName)}"
-        />
+        <label class="sprite-input-frame title-name-input-frame">
+          <canvas class="sprite-canvas sprite-input-frame-art" data-doodle="text_frame" data-frame-width="768" data-frame-height="64" width="768" height="64" aria-hidden="true"></canvas>
+          <input
+            id="title-name-input"
+            class="title-name-input"
+            name="displayName"
+            maxlength="${MAX_RANKED_DISPLAY_NAME_LENGTH}"
+            autocomplete="nickname"
+            spellcheck="false"
+            aria-label="Display name"
+            value="${escapeHtml(rankedDisplayName)}"
+          />
+        </label>
         <p class="online-player-count" aria-live="polite">${renderOnlinePlayerCount()}</p>
       </form>
 
@@ -3474,10 +3699,6 @@ function renderTitleScreen() {
   app.querySelector('[data-action="random-name"]').addEventListener('click', generateTitleName);
   app.querySelector('[data-action="toggle-sound"]').addEventListener('click', toggleSound);
   app.querySelector('[data-action="toggle-boil"]').addEventListener('click', toggleBoil);
-  app.querySelector('[data-action="scene-gallery"]').addEventListener('click', () => {
-    screen = 'scene-gallery';
-    render();
-  });
   mountTitleVolumeSliders(app.querySelectorAll('.title-volume-slider'));
   startOnlineStatusPolling();
   mountSpriteRenderers(app.querySelectorAll('.sprite-canvas'));
@@ -3490,7 +3711,6 @@ function renderTitleScreen() {
 }
 
 function renderTutorialScreen() {
-  stopFindingMatchTicker();
   requestMusicTrack('game');
 
   app.innerHTML = `
@@ -3698,7 +3918,6 @@ function shouldShowTutorialMoveButtons() {
 }
 
 function renderOpponentSelectScreen() {
-  stopFindingMatchTicker();
   requestMusicTrack('title');
   const pageVariants = getVariantSelectPageVariants();
 
@@ -3739,7 +3958,7 @@ function renderOpponentSelectScreen() {
     });
     button.addEventListener('click', toggleVariantDifficultyVisual);
   });
-  app.querySelector('[data-action="back-title"]').addEventListener('click', returnToTitleFromOpponentSelect);
+  app.querySelector('[data-action="back-title"]').addEventListener('click', returnToLobbyFromOpponentSelect);
   app.querySelector('[data-action="variant-page-prev"]')?.addEventListener('click', () => changeVariantSelectPage(-1));
   app.querySelector('[data-action="variant-page-next"]')?.addEventListener('click', () => changeVariantSelectPage(1));
   mountSpriteRenderers(app.querySelectorAll('.sprite-canvas'));
@@ -4022,42 +4241,6 @@ function renderVariantPageControls() {
       </button>
     </div>
   `;
-}
-
-function renderQueueScreen() {
-  startFindingMatchTicker();
-  requestMusicTrack('title');
-  const statusMarkup = rankedQueueError
-    ? `<p class="online-player-count" aria-live="polite">${escapeHtml(rankedQueueError)}</p>`
-    : '';
-
-  app.innerHTML = `
-    <section class="title-screen queue-screen" aria-label="Ranked queue">
-      <canvas
-        class="sprite-canvas title-logo"
-        data-doodle="new-logo-rev-2-alpha"
-        data-frame-width="${TITLE_LOGO_FRAME_WIDTH}"
-        data-frame-height="${TITLE_LOGO_FRAME_HEIGHT}"
-        width="${TITLE_LOGO_FRAME_WIDTH}"
-        height="${TITLE_LOGO_FRAME_HEIGHT}"
-        aria-label="Super Rock Paper Scissors Online"
-      ></canvas>
-      <canvas
-        class="sprite-canvas finding-match-art"
-        data-doodle="${FINDING_MATCH_DOODLES[findingMatchStep]}"
-        data-frame-width="${TITLE_BUTTON_FRAME_WIDTH}"
-        data-frame-height="${TITLE_BUTTON_FRAME_HEIGHT}"
-        width="${TITLE_BUTTON_FRAME_WIDTH}"
-        height="${TITLE_BUTTON_FRAME_HEIGHT}"
-        aria-label="Finding match"
-      ></canvas>
-      ${statusMarkup}
-      <button class="ghost" data-action="cancel-queue">Cancel</button>
-    </section>
-  `;
-
-  app.querySelector('[data-action="cancel-queue"]').addEventListener('click', leaveRanked);
-  mountSpriteRenderers(app.querySelectorAll('.sprite-canvas'));
 }
 
 function renderStageHud() {
@@ -4917,7 +5100,7 @@ async function restartGame() {
   beginOpeningCues();
 }
 
-async function startGameFromTitle() {
+async function openPracticeVariantSelect() {
   if (isTransitioning) {
     return;
   }
@@ -4930,24 +5113,44 @@ async function startGameFromTitle() {
     rankedSnapshot = null;
     render();
   });
+  rankedClient.setPresence('playing_computer');
   isTransitioning = false;
   render();
 }
 
-async function returnToTitleFromOpponentSelect() {
+async function returnToLobbyFromOpponentSelect() {
   if (isTransitioning) {
     return;
   }
 
   isTransitioning = true;
   await playCurtainMenuTransition(() => {
-    rankedClient.setPresence('idle');
-    screen = 'title';
+    screen = 'lobby';
     clearLocalTurnChoice();
     p1QueuedMove = null;
     rankedSnapshot = null;
     render();
   });
+  rankedClient.setPresence('idle');
+  isTransitioning = false;
+  render();
+}
+
+async function returnToTitleFromLobby() {
+  if (isTransitioning) {
+    return;
+  }
+
+  isTransitioning = true;
+  await playCurtainMenuTransition(() => {
+    lobbySelectedPlayerId = null;
+    lobbyChallenge = null;
+    lobbyChallengeStatus = null;
+    screen = 'title';
+    render();
+  });
+  rankedClient.setReady(false);
+  rankedClient.setPresence('idle');
   isTransitioning = false;
   render();
 }
@@ -5419,13 +5622,12 @@ async function enterLobbyFromTitle(event) {
   writeStoredDisplayName(rankedDisplayName);
   unlockSceneAudio();
   isTransitioning = true;
-  const curtain = await closeCurtainWipe(app, playCurtainCloseAudio);
-  lobbyConnected = false;
+  await playCurtainMenuTransition(() => {
+    lobbyConnected = false;
+    screen = 'lobby';
+    render();
+  });
   rankedClient.connect(rankedDisplayName, DEFAULT_VARIANT_ID);
-  screen = 'lobby';
-  render();
-  app.append(curtain);
-  await openCurtainWipe(curtain, playCurtainOpenAudio);
   isTransitioning = false;
 }
 
@@ -5442,62 +5644,30 @@ function generateTitleName() {
   input.select();
 }
 
-function beginRankedQueue() {
-  stopOnlineStatusPolling();
-  unlockSceneAudio();
-  playMode = 'online';
-  selectedVariantId = DEFAULT_VARIANT_ID;
-  setCachedActiveGameLayoutForVariant(DEFAULT_VARIANT_ID);
-  clearLocalTurnChoice();
-  clearRankedReadyWaitingTimer();
-  screen = 'queue';
-  p1QueuedMove = null;
-  rankedSnapshot = null;
-  rankedUpdateQueue.clear();
-  rankedReadyWaiting = null;
-  rankedRoundAudioKey = null;
-  rankedQueueError = null;
-  rankedConnectionNotice = null;
-  findingMatchStep = 0;
-  rankedQueueCurtainPromise = closeRankedQueueCurtain();
-  rankedClient.connect(rankedDisplayName, DEFAULT_VARIANT_ID);
-}
-
 function handleRankedQueue() {
-  screen = 'queue';
-  rankedQueueError = null;
-  if (rankedQueueCurtainPhase || rankedQueueCurtainPromise || rankedQueueCurtain || rankedSnapshot) {
-    return;
-  }
-  render();
+  matchmakingStatus = 'searching';
+  if (screen === 'lobby') render();
 }
 
 function handleRankedError(message = 'connection failed') {
   rankedConnectionNotice = message;
+  if (matchmakingStatus === 'searching' && !rankedSnapshot) matchmakingStatus = 'idle';
   if (screen === 'lobby') {
     lobbyConnected = false;
     render();
     return;
   }
-  if (playMode !== 'online' || screen !== 'queue' || rankedSnapshot) {
-    return;
-  }
-
-  rankedQueueError = message;
-  if (!rankedQueueCurtainPhase && !rankedQueueCurtainPromise && !rankedQueueCurtain) {
-    render();
-  }
 }
 
 function handleRankedClose({ code } = {}) {
   lobbyConnected = false;
+  if (!rankedSnapshot) matchmakingStatus = 'idle';
   if (screen === 'lobby') {
     rankedConnectionNotice = code === 4001 ? 'New connection for this guest. Disconnected.' : 'Reconnecting…';
     render();
     return;
   }
   if (playMode === 'online' && screen !== 'lobby') {
-    removeRankedQueueCurtain();
     onlineFlowDirector.cancel();
     gameFlowDirector.cancel();
     clearRankedReadyWaitingTimer();
@@ -5511,11 +5681,6 @@ function handleRankedClose({ code } = {}) {
       render();
       return;
     }
-    if (screen === 'queue' && !rankedSnapshot) {
-      rankedQueueError = rankedQueueError ?? 'connection closed';
-      render();
-      return;
-    }
     screen = 'lobby';
     rankedSnapshot = null;
     rankedUpdateQueue.clear();
@@ -5525,18 +5690,40 @@ function handleRankedClose({ code } = {}) {
 }
 
 function applyRankedSnapshot(snapshot, transition = null) {
+  if (snapshot.matchId === ignoredRankedMatchId) return;
+
   if (playMode !== 'online') {
+    interruptLocalPlayForRankedMatch();
     playMode = 'online';
     selectedVariantId = DEFAULT_VARIANT_ID;
     setCachedActiveGameLayoutForVariant(DEFAULT_VARIANT_ID);
     rankedSnapshot = null;
     rankedUpdateQueue.clear();
   }
+  matchmakingStatus = 'matched';
   if (snapshot.revision <= (rankedSnapshot?.revision ?? 0)) {
     return;
   }
   rankedUpdateQueue.push(snapshot, transition);
   drainRankedSnapshots();
+}
+
+function interruptLocalPlayForRankedMatch() {
+  loopToken += 1;
+  transitionGeneration += 1;
+  clearLocalTurnChoice();
+  clearPausableTimers();
+  gameFlowDirector.cancel();
+  onlineFlowDirector.cancel();
+  pauseMenu?.overlay.remove();
+  pauseMenu?.curtain.remove();
+  pauseMenu = null;
+  variantDetailMenu?.overlay.remove();
+  variantDetailMenu?.curtain?.remove();
+  variantDetailMenu = null;
+  isTransitioning = false;
+  pendingSuperAnimation = null;
+  p1QueuedMove = null;
 }
 
 async function drainRankedSnapshots() {
@@ -5567,33 +5754,8 @@ async function processRankedSnapshot(snapshot, transition = null) {
   const previousPhase = previousSnapshot?.phase;
   const flowEvent = interpretOnlineSnapshot(previousSnapshot, snapshot, transition?.transitionId);
 
-  if (rankedQueueCurtainPromise) {
-    await rankedQueueCurtainPromise;
-  }
-
-  if (rankedQueueCurtain && snapshot.phase === 'countdown') {
-    onlineFlowDirector.adoptCurtain(rankedQueueCurtain);
-    rankedQueueCurtain = null;
-    rankedQueueCurtainPhase = null;
-    isTransitioning = true;
-    await onlineFlowDirector.play(flowEvent, { snapshot, previousPhase });
-    isTransitioning = false;
-    return;
-  }
-
-  stopFindingMatchTicker();
-
-  if (rankedQueueCurtain) {
-    onlineFlowDirector.adoptCurtain(rankedQueueCurtain);
-    rankedQueueCurtain = null;
-    rankedQueueCurtainPhase = null;
-    isTransitioning = true;
-    await onlineFlowDirector.play(flowEvent, { snapshot, previousPhase });
-    isTransitioning = false;
-    return;
-  }
-
   if ([
+    'MATCH_FOUND',
     'VARIANTS_CHOSEN',
     'VARIANT_SELECTION_STARTED',
     'TIEBREAKER_SELECTION_STARTED',
@@ -5609,7 +5771,7 @@ async function processRankedSnapshot(snapshot, transition = null) {
     isTransitioning = true;
     await onlineFlowDirector.play(flowEvent, { snapshot, previousPhase });
     isTransitioning = false;
-    render();
+    if (flowEvent !== 'MATCH_FOUND') render();
     return;
   }
 
@@ -6018,10 +6180,8 @@ function resetRankedSession() {
     clearTimeout(rankedDisconnectReturnTimer);
     rankedDisconnectReturnTimer = null;
   }
-  removeRankedQueueCurtain();
   variantDetailMenu?.overlay.remove();
   variantDetailMenu = null;
-  stopFindingMatchTicker();
   clearRankedReadyWaitingTimer();
   playMode = 'local';
   selectedVariantId = DEFAULT_VARIANT_ID;
@@ -6031,7 +6191,7 @@ function resetRankedSession() {
   rankedUpdateQueue.clear();
   rankedReadyWaiting = null;
   rankedRoundAudioKey = null;
-  rankedQueueError = null;
+  matchmakingStatus = 'idle';
   turnPhase = 'idle';
   p1QueuedMove = null;
 }
@@ -6046,109 +6206,6 @@ function renderRankedDisconnectNotice() {
     : 'Opponent disconnected. You win.';
 
   return `<div class="ranked-disconnect-notice" role="alert">${message}</div>`;
-}
-
-async function closeRankedQueueCurtain() {
-  removeRankedQueueCurtain({ keepPromise: true });
-  const token = rankedQueueCurtainToken + 1;
-  rankedQueueCurtainToken = token;
-  rankedQueueCurtainPhase = 'closing';
-  isTransitioning = true;
-  const curtain = await closeCurtainWipe(app, playCurtainCloseAudio);
-  rankedQueueCurtainPromise = null;
-  if (token !== rankedQueueCurtainToken || playMode !== 'online' || screen === 'lobby') {
-    curtain.remove();
-    rankedQueueCurtainPhase = null;
-    isTransitioning = false;
-    return;
-  }
-  rankedQueueCurtain = curtain;
-  rankedQueueCurtainPhase = 'closed';
-  renderBehindRankedQueueCurtain();
-  renderFindingMatchOverlay();
-  isTransitioning = false;
-}
-
-function removeRankedQueueCurtain({ keepPromise = false } = {}) {
-  rankedQueueCurtainToken += 1;
-  if (!keepPromise) {
-    rankedQueueCurtainPromise = null;
-  }
-  rankedQueueCurtainPhase = null;
-  app.querySelector('.finding-match-overlay')?.remove();
-  rankedQueueCurtain?.remove();
-  rankedQueueCurtain = null;
-}
-
-function renderBehindRankedQueueCurtain() {
-  render();
-  if (rankedQueueCurtain && !rankedQueueCurtain.isConnected) {
-    app.append(rankedQueueCurtain);
-  }
-}
-
-function startFindingMatchTicker() {
-  if (findingMatchTimer) {
-    return;
-  }
-
-  findingMatchTimer = setInterval(() => {
-    if (screen !== 'queue') {
-      stopFindingMatchTicker();
-      return;
-    }
-
-    findingMatchStep = (findingMatchStep + 1) % FINDING_MATCH_DOODLES.length;
-    const art = app.querySelector('.finding-match-overlay .finding-match-art');
-    if (art) {
-      art.dataset.doodle = FINDING_MATCH_DOODLES[findingMatchStep];
-      mountSpriteRenderers(app.querySelectorAll('.sprite-canvas'));
-    } else if (!rankedQueueCurtainPhase) {
-      render();
-    }
-  }, BEAT_MS);
-}
-
-function renderFindingMatchOverlay() {
-  app.querySelector('.finding-match-overlay')?.remove();
-  const overlay = document.createElement('div');
-  overlay.className = 'finding-match-overlay';
-  overlay.innerHTML = `
-    <div class="finding-match-panel" role="status" aria-label="Finding match">
-      <canvas
-        class="sprite-canvas finding-match-art"
-        data-doodle="${FINDING_MATCH_DOODLES[findingMatchStep]}"
-        data-frame-width="${TITLE_BUTTON_FRAME_WIDTH}"
-        data-frame-height="${TITLE_BUTTON_FRAME_HEIGHT}"
-        width="${TITLE_BUTTON_FRAME_WIDTH}"
-        height="${TITLE_BUTTON_FRAME_HEIGHT}"
-        aria-hidden="true"
-      ></canvas>
-    </div>
-    <button class="opponent-button finding-match-cancel" data-action="cancel-queue" aria-label="Back">
-      <canvas
-        class="sprite-canvas opponent-button-art"
-        data-doodle="back_button_w"
-        data-frame-width="${TITLE_BUTTON_FRAME_WIDTH}"
-        data-frame-height="${TITLE_BUTTON_FRAME_HEIGHT}"
-        width="${TITLE_BUTTON_FRAME_WIDTH}"
-        height="${TITLE_BUTTON_FRAME_HEIGHT}"
-        aria-hidden="true"
-      ></canvas>
-    </button>
-  `;
-  app.append(overlay);
-  overlay.querySelector('[data-action="cancel-queue"]').addEventListener('click', leaveRanked);
-  mountSpriteRenderers(overlay.querySelectorAll('.sprite-canvas'));
-}
-
-function stopFindingMatchTicker() {
-  if (!findingMatchTimer) {
-    return;
-  }
-
-  clearInterval(findingMatchTimer);
-  findingMatchTimer = null;
 }
 
 function renderOnlinePlayerCount() {
@@ -6601,11 +6658,19 @@ function getFallbackMove(playerId) {
 
 
 function playWipeTransition(onCovered) {
-  return playStarburstWipeTransition(app, onCovered, () => playOneShotAudio(STARBURST_WIPE_AUDIO));
+  const generation = transitionGeneration;
+  return playStarburstWipeTransition(app, () => {
+    if (generation === transitionGeneration) onCovered();
+  }, () => playOneShotAudio(STARBURST_WIPE_AUDIO));
 }
 
 function playCurtainMenuTransition(onCovered) {
-  return playCurtainWipeTransition(app, onCovered, {
+  const generation = transitionGeneration;
+  return playCurtainWipeTransition(app, () => {
+    if (generation !== transitionGeneration) return false;
+    onCovered();
+    return true;
+  }, {
     playCloseAudio: playCurtainCloseAudio,
     playOpenAudio: playCurtainOpenAudio,
   });

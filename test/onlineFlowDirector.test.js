@@ -25,17 +25,12 @@ function createDirector(log) {
 test('match-found sequence is an editable ordered choreography', async () => {
   const log = [];
   const director = createDirector(log);
-  director.adoptCurtain({ isConnected: true, remove() {} });
 
   await director.play('MATCH_FOUND', { snapshot: {}, previousPhase: null });
 
   assert.deepEqual(log, [
-    'commit',
-    'show:match-found',
-    'reattach',
-    'open',
-    'wait:2',
     'close',
+    'commit',
   ]);
 });
 
@@ -54,6 +49,24 @@ test('variants-chosen sequence owns scoreboard and spike wipe', async () => {
     'wait:5',
     'spike:playing',
     'cues',
+  ]);
+});
+
+test('variant selection reuses the match-found curtain before opening', async () => {
+  const log = [];
+  const director = createDirector(log);
+
+  await director.play('MATCH_FOUND', { snapshot: {}, previousPhase: null });
+  await director.play('VARIANT_SELECTION_STARTED', { snapshot: {}, previousPhase: 'countdown' });
+
+  assert.deepEqual(log, [
+    'close',
+    'commit',
+    'reattach',
+    'commit',
+    'show:variant-select',
+    'reattach',
+    'open',
   ]);
 });
 

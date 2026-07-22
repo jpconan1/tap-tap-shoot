@@ -139,6 +139,12 @@ export class RankedClient {
     return true;
   }
 
+  forfeitMatch(snapshot) {
+    if (!snapshot?.matchId) return false;
+    this.send({ type: 'forfeitMatch', matchId: snapshot.matchId });
+    return true;
+  }
+
   debugWinGame(snapshot) {
     if (
       !this.debugTools.winGame ||
