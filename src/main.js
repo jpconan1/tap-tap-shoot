@@ -74,6 +74,8 @@ import {
   setBoilEnabled,
 } from './renderer.js';
 import { createAlertSystem } from './alertSystem.js';
+import { createLayoutLoader, DEFAULT_LAYOUT_STATE_ID } from './layoutLoader.js';
+import { createLobbyWhiteboard, LOBBY_BOARD_COLORS } from './lobbyWhiteboard.js';
 
 const BEAT_MS = 750;
 const BAN_ANIMATION_DURATION_MS = 7 * 58;
@@ -119,16 +121,6 @@ const TUTORIAL_REVEAL_SLIDE_INDEX = 5;
 const TUTORIAL_TIPS_SLIDE_COUNT = 3;
 const REMATCH_BUTTON_FRAME_WIDTH = 256;
 const REMATCH_BUTTON_FRAME_HEIGHT = 128;
-const LOBBY_BOARD_COLORS = Object.freeze(['black', 'red', 'blue', 'purple', 'green']);
-const LOBBY_BOARD_COLOR_VALUES = Object.freeze({ black: '#191919', red: '#AC3235', blue: '#5703EF', purple: '#821B92', green: '#118040' });
-const LOBBY_BOARD_TOOL_LAYOUT = Object.freeze({
-  black: Object.freeze({ x: 185, y: 591, width: 71, height: 14, heldWidth: 75, heldHeight: 64, hotspotX: 7, hotspotY: 57 }),
-  red: Object.freeze({ x: 260, y: 591, width: 71, height: 14, heldWidth: 75, heldHeight: 64, hotspotX: 7, hotspotY: 57 }),
-  blue: Object.freeze({ x: 335, y: 591, width: 71, height: 14, heldWidth: 75, heldHeight: 64, hotspotX: 7, hotspotY: 57 }),
-  purple: Object.freeze({ x: 410, y: 591, width: 71, height: 14, heldWidth: 75, heldHeight: 64, hotspotX: 7, hotspotY: 57 }),
-  green: Object.freeze({ x: 485, y: 591, width: 71, height: 14, heldWidth: 75, heldHeight: 64, hotspotX: 7, hotspotY: 57 }),
-  erase: Object.freeze({ x: 570, y: 584, width: 67, height: 23, heldWidth: 144, heldHeight: 168, hotspotX: 72, hotspotY: 84 }),
-});
 const BULLET_SLOT_COUNT = MAX_BULLETS;
 const LAST_NUMBERED_TURN = 21;
 const FRAME_WIDTH = 960;
@@ -142,7 +134,6 @@ const VARIANT_LAYOUT_URLS = Object.freeze({
   [VARIANT_IDS.gunKnifeFist]: './assets/gun-knife-fist/gun-knife-fist-layout.json',
   [VARIANT_IDS.tapTapShootX]: './assets/tap-tap-shoot-x/tap-tap-shoot-x-layout.json',
 });
-const DEFAULT_LAYOUT_STATE_ID = 'playing.default';
 const DISADVANTAGED_LAYOUT_STATE_ID = 'playing.disadvantaged';
 const BETWEEN_ROUND_LAYOUT_STATE_ID = 'round.between';
 const GAME_OVER_LAYOUT_STATE_ID = 'round.game-over';
@@ -420,20 +411,13 @@ let lobbyChallengeStatus = null;
 let lobbySelectedPlayerId = null;
 let lobbyUnreadCount = 0;
 let lobbyConnected = false;
-let lobbyBoard = createEmptyLobbyBoard();
-let lobbyBoardTool = 'scroll';
-let lobbyMarkerColor = 'black';
-let lobbyToolPointer = null;
 let lobbyRosterOpen = false;
-let lobbyActiveStroke = null;
-let lobbyPendingBoardTop = null;
 let tutorialSlideIndex = 0;
 let tutorialTipsSlideIndex = 0;
 let tutorialStageMode = 'slide';
 let tutorialFeedbackMarkup = '';
 let tutorialPendingFeedbackMarkup = '';
 let stagePresentation = getIdleStagePresentation();
-let gameLayouts = new Map();
 let gameLayout = null;
 let activeLayoutStateId = DEFAULT_LAYOUT_STATE_ID;
 let lastMoves = {
@@ -456,6 +440,20 @@ const rankedClient = new RankedClient({
   onBoardTrim: handleLobbyBoardTrim,
   onBoardReset: handleLobbyBoardReset,
   onChallenge: handleLobbyChallenge,
+});
+const layoutLoader = createLayoutLoader({
+  layoutUrls: VARIANT_LAYOUT_URLS,
+  defaultVariantId: DEFAULT_VARIANT_ID,
+});
+const lobbyWhiteboard = createLobbyWhiteboard({
+  root: app,
+  isActive: () => screen === 'lobby',
+  isBoilEnabled: () => isBoilEnabled,
+  mountSprites: mountSpriteRenderers,
+  sendStroke: (points, color) => rankedClient.sendBoardStroke(points, color),
+  sendErase: (points) => rankedClient.sendBoardErase(points),
+  frameRate: DOODLE_FRAME_RATE,
+  frameCount: DOODLE_FRAME_COUNT,
 });
 const onlineFlowDirector = new OnlineFlowDirector({
   closeCurtains: () => closeCurtainWipe(app, playCurtainCloseAudio, 'online-flow-curtain'),
@@ -504,17 +502,17 @@ updateFrameScale();
 window.addEventListener('resize', handleViewportResize);
 window.visualViewport?.addEventListener('resize', handleViewportResize);
 window.addEventListener('keydown', handleGlobalKeydown);
-window.addEventListener('pointermove', followLobbyBoardTool);
-window.addEventListener('pointerdown', releaseLobbyBoardToolOutside, true);
+window.addEventListener('pointermove', lobbyWhiteboard.followTool);
+window.addEventListener('pointerdown', lobbyWhiteboard.releaseToolOutside, true);
 installAudioUnlockListeners();
 boot();
 
 async function boot() {
   const loadingScreen = renderLoadingScreen();
   let loadingImages = null;
-  const gameLayoutPromise = preloadGameLayouts()
+  const gameLayoutPromise = layoutLoader.preloadAll()
     .then(() => {
-      gameLayout = getCachedGameLayoutForVariant(DEFAULT_VARIANT_ID);
+      gameLayout = layoutLoader.getCached(DEFAULT_VARIANT_ID);
       updateFrameScale();
     })
     .catch((error) => {
@@ -914,36 +912,7 @@ function preloadGameFont() {
 }
 
 async function loadGameLayoutForVariant(variantId) {
-  const layoutUrl = getLayoutUrlForVariant(variantId);
-
-  if (gameLayouts.has(layoutUrl)) {
-    return gameLayouts.get(layoutUrl);
-  }
-
-  const response = await fetch(layoutUrl, { cache: 'no-store' });
-
-  if (!response.ok) {
-    throw new Error(`Layout request failed: ${response.status}`);
-  }
-
-  const layout = normalizeGameLayout(await response.json());
-  gameLayouts.set(layoutUrl, layout);
-  return layout;
-}
-
-function preloadGameLayouts() {
-  return Promise.all(
-    [...new Set([DEFAULT_VARIANT_ID, ...Object.keys(VARIANT_LAYOUT_URLS)])]
-      .map((variantId) => loadGameLayoutForVariant(variantId)),
-  );
-}
-
-function getLayoutUrlForVariant(variantId) {
-  return VARIANT_LAYOUT_URLS[variantId] ?? GAME_LAYOUT_URL;
-}
-
-function getCachedGameLayoutForVariant(variantId) {
-  return gameLayouts.get(getLayoutUrlForVariant(variantId)) ?? gameLayouts.get(GAME_LAYOUT_URL) ?? gameLayout;
+  return layoutLoader.load(variantId);
 }
 
 async function setActiveGameLayoutForVariant(variantId) {
@@ -952,220 +921,8 @@ async function setActiveGameLayoutForVariant(variantId) {
 }
 
 function setCachedActiveGameLayoutForVariant(variantId) {
-  gameLayout = getCachedGameLayoutForVariant(variantId);
+  gameLayout = layoutLoader.getCached(variantId);
   updateFrameScale();
-}
-
-function normalizeGameLayout(payload) {
-  if (payload?.version >= 2 && payload?.states && typeof payload.states === 'object') {
-    return normalizeStatefulGameLayout(payload);
-  }
-
-  const frame = payload?.landscape?.frame;
-  const elements = payload?.landscape?.elements;
-
-  if (!frame || !Array.isArray(elements)) {
-    throw new Error('Layout is missing landscape frame or elements');
-  }
-
-  const slots = elements
-    .filter((element) => element && typeof element.key === 'string')
-    .map((element, index) => [
-      element.key,
-      {
-        x: finiteLayoutNumber(element.x, 0),
-        y: finiteLayoutNumber(element.y, 0),
-        width: Math.max(1, finiteLayoutNumber(element.width, 1)),
-        height: Math.max(1, finiteLayoutNumber(element.height, 1)),
-        zIndex: index + 1,
-      },
-    ]);
-
-  return {
-    variant: 'Tap Tap Shoot Y',
-    width: Math.max(1, finiteLayoutNumber(frame.width, FRAME_WIDTH)),
-    height: Math.max(1, finiteLayoutNumber(frame.height, FRAME_HEIGHT)),
-    states: new Map([[DEFAULT_LAYOUT_STATE_ID, {
-      width: Math.max(1, finiteLayoutNumber(frame.width, FRAME_WIDTH)),
-      height: Math.max(1, finiteLayoutNumber(frame.height, FRAME_HEIGHT)),
-      slots: new Map(slots),
-    }]]),
-  };
-}
-
-function normalizeStatefulGameLayout(payload) {
-  const frame = payload.frame ?? payload.landscape?.frame ?? {};
-  const width = Math.max(1, finiteLayoutNumber(frame.width, FRAME_WIDTH));
-  const height = Math.max(1, finiteLayoutNumber(frame.height, FRAME_HEIGHT));
-  const portraitFrame = payload.portraitFrame ?? {};
-  const portraitWidth = Math.max(1, finiteLayoutNumber(portraitFrame.width, PORTRAIT_FRAME_WIDTH));
-  const portraitHeight = Math.max(1, finiteLayoutNumber(portraitFrame.height, PORTRAIT_FRAME_HEIGHT));
-  const rawStates = payload.states;
-  const normalizedStates = new Map();
-
-  for (const [stateId, stateDefinition] of Object.entries(rawStates)) {
-    if (!stateDefinition || typeof stateDefinition !== 'object') {
-      continue;
-    }
-
-    normalizedStates.set(stateId, {
-      id: stateId,
-      extends: typeof stateDefinition.extends === 'string' ? stateDefinition.extends : null,
-      width: Math.max(1, finiteLayoutNumber(stateDefinition.frame?.width, width)),
-      height: Math.max(1, finiteLayoutNumber(stateDefinition.frame?.height, height)),
-      slots: normalizeGameLayoutSlots(stateDefinition.elements),
-      portraitWidth,
-      portraitHeight,
-      portraitSlots: normalizeGameLayoutSlots(stateDefinition.portraitElements),
-    });
-  }
-
-  if (!normalizedStates.has(DEFAULT_LAYOUT_STATE_ID)) {
-    normalizedStates.set(DEFAULT_LAYOUT_STATE_ID, {
-      id: DEFAULT_LAYOUT_STATE_ID,
-      extends: null,
-      width,
-      height,
-      slots: new Map(),
-      portraitWidth,
-      portraitHeight,
-      portraitSlots: new Map(),
-    });
-  }
-
-  return {
-    variant: String(payload.variant || 'Tap Tap Shoot Y'),
-    width,
-    height,
-    portraitWidth,
-    portraitHeight,
-    states: resolveGameLayoutStates(normalizedStates),
-  };
-}
-
-function normalizeGameLayoutSlots(elements) {
-  if (!Array.isArray(elements)) {
-    return new Map();
-  }
-
-  return new Map(elements
-    .filter((element) => element && typeof element.key === 'string')
-    .map((element, index) => [
-      element.key,
-      element.hidden
-        ? { hidden: true, zIndex: index + 1 }
-        : {
-          x: finiteLayoutNumber(element.x, 0),
-          y: finiteLayoutNumber(element.y, 0),
-          width: Math.max(1, finiteLayoutNumber(element.width, 1)),
-          height: Math.max(1, finiteLayoutNumber(element.height, 1)),
-          zIndex: index + 1,
-        },
-    ]));
-}
-
-function resolveGameLayoutStates(states) {
-  const resolved = new Map();
-
-  for (const stateId of states.keys()) {
-    resolved.set(stateId, resolveGameLayoutState(stateId, states, resolved, new Set()));
-  }
-
-  return resolved;
-}
-
-function resolveGameLayoutState(stateId, states, resolved, stack) {
-  if (resolved.has(stateId)) {
-    return resolved.get(stateId);
-  }
-
-  const stateDefinition = states.get(stateId) ?? states.get(DEFAULT_LAYOUT_STATE_ID);
-  const slots = new Map();
-
-  if (stateDefinition.extends && !stack.has(stateDefinition.extends)) {
-    stack.add(stateId);
-    const parent = resolveGameLayoutState(stateDefinition.extends, states, resolved, stack);
-    parent.slots.forEach((slot, key) => slots.set(key, slot));
-    stack.delete(stateId);
-  }
-
-  stateDefinition.slots.forEach((slot, key) => {
-    if (slot.hidden) {
-      slots.delete(key);
-    } else {
-      slots.set(key, slot);
-    }
-  });
-
-  return {
-    id: stateId,
-    width: stateDefinition.width,
-    height: stateDefinition.height,
-    slots,
-    portraitWidth: stateDefinition.portraitWidth,
-    portraitHeight: stateDefinition.portraitHeight,
-    portraitSlots: resolvePortraitLayoutSlots(stateDefinition, slots),
-  };
-}
-
-function resolvePortraitLayoutSlots(stateDefinition, landscapeSlots) {
-  if (stateDefinition.portraitSlots?.size) {
-    return stateDefinition.portraitSlots;
-  }
-
-  return createFallbackPortraitSlots(landscapeSlots);
-}
-
-function createFallbackPortraitSlots(landscapeSlots) {
-  const slots = new Map();
-  const add = (key, x, y, width, height, zIndex = 1) => {
-    if (landscapeSlots.has(key)) slots.set(key, { x, y, width, height, zIndex });
-  };
-
-  add('p1-info', 14, 16, 190, 72, 20);
-  add('p2-info', 336, 16, 190, 72, 20);
-  add('p1-win-label', 8, 88, 128, 64, 20);
-  add('p1-win-counter', 104, 94, 64, 64, 21);
-  add('p2-win-label', 404, 88, 128, 64, 20);
-  add('p2-win-counter', 372, 94, 64, 64, 21);
-  add('turn-counter', 142, 76, 256, 128, 22);
-  add('scene', 14, 190, 512, 256, 5);
-
-  add('p1-you-picked', 18, 448, 128, 64, 12);
-  add('p1-previous-move-icon', 136, 448, 64, 64, 13);
-  add('p2-they-picked', 340, 448, 150, 64, 12);
-  add('p2-previous-move-icon', 286, 448, 64, 64, 13);
-
-  const resourceKeys = [...landscapeSlots.keys()].filter((key) => /^(p1|p2)-.+-slot-\d+$/.test(key));
-  for (const playerId of ['p1', 'p2']) {
-    const playerKeys = resourceKeys.filter((key) => key.startsWith(`${playerId}-`)).sort();
-    playerKeys.forEach((key, index) => {
-      const row = Math.floor(index / 3);
-      const column = index % 3;
-      const x = playerId === 'p1' ? 18 + (column * 48) : 378 + (column * 48);
-      add(key, x, 524 + (row * 48), 48, 48, 14);
-    });
-  }
-
-  add('rules-button', 214, 526, 112, 56, 24);
-
-  const buttonKeys = [...landscapeSlots.keys()]
-    .filter((key) => key.endsWith('-button') && !['rules-button', 'continue-button', 'quit-button'].includes(key))
-    .sort((a, b) => (landscapeSlots.get(a)?.x ?? 0) - (landscapeSlots.get(b)?.x ?? 0));
-  buttonKeys.forEach((key, index) => {
-    const lastOddButton = buttonKeys.length % 2 && index === buttonKeys.length - 1;
-    const x = lastOddButton ? 150 : (index % 2 === 0 ? 25 : 295);
-    add(key, x, 610 + (Math.floor(index / 2) * 116), 220, 110, 30 + index);
-  });
-
-  add('continue-button', 142, 700, 256, 128, 30);
-  add('quit-button', 142, 824, 256, 128, 31);
-  return slots;
-}
-
-function finiteLayoutNumber(value, fallback) {
-  const number = Number(value);
-  return Number.isFinite(number) ? Math.round(number) : fallback;
 }
 
 function getViewportSize() {
@@ -2693,12 +2450,12 @@ function renderLobbyScreen() {
             <canvas class="whiteboard-text-canvas" aria-hidden="true"></canvas>
             <canvas class="whiteboard-canvas"></canvas>
           </div>
-          <button class="whiteboard-tray-return-zone ${lobbyBoardTool === 'scroll' ? '' : 'is-active'}" data-action="return-board-tool" type="button" aria-label="Return whiteboard tool"></button>
+          <button class="whiteboard-tray-return-zone ${lobbyWhiteboard.isToolHeld() ? 'is-active' : ''}" data-action="return-board-tool" type="button" aria-label="Return whiteboard tool"></button>
           <div class="whiteboard-tool-tray" role="group" aria-label="Whiteboard tools">
-            ${LOBBY_BOARD_COLORS.map(renderLobbyBoardTool).join('')}
-            ${renderLobbyBoardTool('erase')}
+            ${LOBBY_BOARD_COLORS.map(lobbyWhiteboard.renderTool).join('')}
+            ${lobbyWhiteboard.renderTool('erase')}
           </div>
-          ${renderHeldLobbyBoardTool()}
+          ${lobbyWhiteboard.renderHeldTool()}
           <button class="whiteboard-new-marks" data-action="board-bottom" type="button" hidden>new marks ↓</button>
         </div>
         <aside class="lobby-roster-panel ${lobbyRosterOpen ? 'is-open' : ''}">
@@ -2741,7 +2498,7 @@ function renderLobbyScreen() {
   app.querySelector('[data-action="toggle-roster"]')?.addEventListener('click', () => { lobbyRosterOpen = !lobbyRosterOpen; app.querySelector('.lobby-roster-panel')?.classList.toggle('is-open', lobbyRosterOpen); });
   installLobbyOverlayHandlers();
   mountSpriteRenderers(app.querySelectorAll('.sprite-canvas'));
-  mountLobbyWhiteboard();
+  lobbyWhiteboard.mount();
 }
 
 function toggleMatchmaking() {
@@ -2760,24 +2517,6 @@ function syncMatchmakingIndicator() {
   indicator.setAttribute('aria-label', 'Waiting for match...');
   indicator.innerHTML = '<span aria-hidden="true">Waiting for match<span class="matchmaking-dots"></span></span>';
   app.append(indicator);
-}
-
-function renderLobbyBoardTool(tool) {
-  const layout = LOBBY_BOARD_TOOL_LAYOUT[tool];
-  const selected = tool === 'erase' ? lobbyBoardTool === 'erase' : lobbyBoardTool === 'marker' && lobbyMarkerColor === tool;
-  const file = tool === 'erase' ? 'eraser_sheet.webp' : `${tool === 'purple' ? 'purp' : tool}-marker_sheet.webp`;
-  const label = tool === 'erase' ? 'Eraser' : `${tool} marker`;
-  return `<button class="whiteboard-tray-tool ${selected ? 'is-selected' : ''}" style="--tool-x:${(layout.x / 840) * 100}%;--tool-y:${(layout.y / 622) * 100}%;--tool-w:${(layout.width / 840) * 100}%;--tool-h:${(layout.height / 622) * 100}%" data-board-tool="${tool}" type="button" aria-label="${label}" aria-pressed="${selected}"><canvas class="sprite-canvas" data-doodle-file="${file}" data-frame-width="${layout.width}" data-frame-height="${layout.height}" width="${layout.width}" height="${layout.height}" aria-hidden="true"></canvas></button>`;
-}
-
-function renderHeldLobbyBoardTool() {
-  if (lobbyBoardTool === 'scroll') return '';
-  const tool = lobbyBoardTool === 'erase' ? 'erase' : lobbyMarkerColor;
-  const layout = LOBBY_BOARD_TOOL_LAYOUT[tool];
-  const file = tool === 'erase' ? 'eraser-held_sheet.webp' : `${tool === 'purple' ? 'purp' : tool}_marker-writing_sheet.webp`;
-  const x = lobbyToolPointer?.x ?? layout.x + layout.hotspotX;
-  const y = lobbyToolPointer?.y ?? layout.y + layout.hotspotY;
-  return `<canvas class="sprite-canvas whiteboard-held-tool" style="--pointer-x:${(x / 840) * 100}%;--pointer-y:${(y / 622) * 100}%;--held-w:${(layout.heldWidth / 840) * 100}%;--held-h:${(layout.heldHeight / 622) * 100}%;--hotspot-x:${(layout.hotspotX / layout.heldWidth) * 100}%;--hotspot-y:${(layout.hotspotY / layout.heldHeight) * 100}%" data-doodle-file="${file}" data-frame-width="${layout.heldWidth}" data-frame-height="${layout.heldHeight}" width="${layout.heldWidth}" height="${layout.heldHeight}" aria-hidden="true"></canvas>`;
 }
 
 function renderLobbySheetAction(action, doodle, label, pressed = false, disabled = false) {
@@ -2824,8 +2563,8 @@ function openLobbyPlayer(playerId) {
 function installLobbyOverlayHandlers() {
   app.querySelector('[data-action="close-overlay"]')?.addEventListener('click', () => { lobbySelectedPlayerId = null; render(); });
   app.querySelector('[data-action="challenge-player"]')?.addEventListener('click', () => rankedClient.challengePlayer(lobbySelectedPlayerId));
-  app.querySelector('.lobby-chat-form')?.addEventListener('submit', (event) => { event.preventDefault(); const input = event.currentTarget.elements.message; rankedClient.sendChat(input.value, lobbyMarkerColor); input.value = ''; input.focus(); });
-  app.querySelectorAll('[data-board-tool]').forEach((button) => button.addEventListener('click', (event) => selectLobbyBoardTool(button.dataset.boardTool, event)));
+  app.querySelector('.lobby-chat-form')?.addEventListener('submit', (event) => { event.preventDefault(); const input = event.currentTarget.elements.message; rankedClient.sendChat(input.value, lobbyWhiteboard.getMarkerColor()); input.value = ''; input.focus(); });
+  app.querySelectorAll('[data-board-tool]').forEach((button) => button.addEventListener('click', (event) => lobbyWhiteboard.selectTool(button.dataset.boardTool, event)));
   app.querySelector('[data-action="accept-challenge"]')?.addEventListener('click', () => rankedClient.respondChallenge(lobbyChallenge.id, true));
   app.querySelector('[data-action="decline-challenge"]')?.addEventListener('click', () => rankedClient.respondChallenge(lobbyChallenge.id, false));
   app.querySelector('[data-action="cancel-challenge"]')?.addEventListener('click', () => rankedClient.cancelChallenge(lobbyChallenge.id));
@@ -2839,7 +2578,7 @@ function handleLobbyState(message) {
   matchmakingStatus = message.self?.presence === 'ready' ? 'searching' : matchmakingStatus === 'matched' ? 'matched' : 'idle';
   lobbyPlayers = message.players ?? [];
   lobbyMessages = message.recentMessages ?? [];
-  lobbyBoard = message.board ?? createEmptyLobbyBoard();
+  lobbyWhiteboard.setBoard(message.board);
   lobbyChallenge = message.pendingChallenge ?? null;
   lobbyChallengeStatus = lobbyChallenge ? 'pending' : null;
   if (screen === 'title') screen = 'lobby';
@@ -2855,330 +2594,22 @@ function handleLobbyRoster(players) {
 
 function handleLobbyChat(message) {
   if (!message) return;
-  const normalizedMessage = {
-    ...message,
-    color: LOBBY_BOARD_COLORS.includes(message.color) ? message.color : 'black',
-    rowY: Number.isFinite(message.rowY) ? message.rowY : lobbyBoard.nextY,
-    rowSpan: Number.isFinite(message.rowSpan) ? message.rowSpan : Math.max(1, Math.min(3, Math.ceil(((message.displayName?.length ?? 0) + (message.text?.length ?? 0) + 2) / 74))),
-  };
+  const normalizedMessage = lobbyWhiteboard.appendChat(message);
   lobbyMessages.push(normalizedMessage);
   if (lobbyMessages.length > 100) lobbyMessages.shift();
-  lobbyBoard.operations.push({ kind: 'text', id: normalizedMessage.id, message: normalizedMessage });
-  lobbyBoard.nextY = Math.max(lobbyBoard.nextY, normalizedMessage.rowY + (normalizedMessage.rowSpan * lobbyBoard.rowHeight));
   if (screen !== 'lobby') lobbyUnreadCount += 1;
-  updateLobbyBoard(true);
 }
 
 function handleLobbyBoardOperation(operation) {
-  if (!operation) return;
-  lobbyBoard.operations.push(operation);
-  updateLobbyBoard(true);
+  lobbyWhiteboard.appendOperation(operation);
 }
 
 function handleLobbyBoardTrim(top) {
-  if (!Number.isFinite(top)) return;
-  if (lobbyActiveStroke) {
-    lobbyPendingBoardTop = top;
-    return;
-  }
-  applyLobbyBoardTrim(top);
+  lobbyWhiteboard.trim(top);
 }
 
 function handleLobbyBoardReset(board) {
-  lobbyBoard = board ?? createEmptyLobbyBoard();
-  lobbyPendingBoardTop = null;
-  updateLobbyBoard(true);
-}
-
-function createEmptyLobbyBoard() {
-  return { width: 760, viewHeight: 450, maxHeight: 1575, rowHeight: 30, top: 0, nextY: 34, operations: [] };
-}
-
-function selectLobbyBoardTool(tool, event) {
-  const isAlreadySelected = tool === 'erase'
-    ? lobbyBoardTool === 'erase'
-    : lobbyBoardTool === 'marker' && lobbyMarkerColor === tool;
-  if (isAlreadySelected) {
-    releaseLobbyBoardTool();
-    return;
-  }
-  if (LOBBY_BOARD_COLORS.includes(tool)) {
-    lobbyMarkerColor = tool;
-    lobbyBoardTool = 'marker';
-  } else if (tool === 'erase') {
-    lobbyBoardTool = tool;
-  }
-  updateLobbyToolPointer(event);
-  app.querySelectorAll('[data-board-tool]').forEach((button) => {
-    const selected = lobbyBoardTool === 'erase'
-      ? button.dataset.boardTool === 'erase'
-      : button.dataset.boardTool === lobbyMarkerColor;
-    button.classList.toggle('is-selected', selected);
-    button.setAttribute('aria-pressed', String(selected));
-  });
-  const canvas = app.querySelector('.whiteboard-canvas');
-  if (canvas) canvas.dataset.tool = lobbyBoardTool;
-  app.querySelector('.whiteboard-tray-return-zone')?.classList.add('is-active');
-  refreshHeldLobbyBoardTool();
-}
-
-function releaseLobbyBoardTool() {
-  if (lobbyBoardTool === 'scroll') return;
-  lobbyBoardTool = 'scroll';
-  lobbyToolPointer = null;
-  app.querySelectorAll('[data-board-tool]').forEach((button) => {
-    button.classList.remove('is-selected');
-    button.setAttribute('aria-pressed', 'false');
-  });
-  const canvas = app.querySelector('.whiteboard-canvas');
-  if (canvas) canvas.dataset.tool = 'scroll';
-  app.querySelector('.whiteboard-tray-return-zone')?.classList.remove('is-active');
-  app.querySelector('.whiteboard-held-tool')?.remove();
-}
-
-function updateLobbyToolPointer(event) {
-  const frame = app.querySelector('.whiteboard-frame');
-  if (!frame || !Number.isFinite(event?.clientX) || !Number.isFinite(event?.clientY)) return;
-  const rect = frame.getBoundingClientRect();
-  lobbyToolPointer = {
-    x: ((event.clientX - rect.left) / rect.width) * 840,
-    y: ((event.clientY - rect.top) / rect.height) * 622,
-  };
-}
-
-function refreshHeldLobbyBoardTool() {
-  app.querySelector('.whiteboard-held-tool')?.remove();
-  const tray = app.querySelector('.whiteboard-tool-tray');
-  if (!tray || lobbyBoardTool === 'scroll') return;
-  tray.insertAdjacentHTML('afterend', renderHeldLobbyBoardTool());
-  mountSpriteRenderers(app.querySelectorAll('.sprite-canvas'));
-}
-
-function followLobbyBoardTool(event) {
-  if (screen !== 'lobby' || lobbyBoardTool === 'scroll') return;
-  updateLobbyToolPointer(event);
-  const held = app.querySelector('.whiteboard-held-tool');
-  if (!held || !lobbyToolPointer) return;
-  held.style.setProperty('--pointer-x', `${(lobbyToolPointer.x / 840) * 100}%`);
-  held.style.setProperty('--pointer-y', `${(lobbyToolPointer.y / 622) * 100}%`);
-}
-
-function releaseLobbyBoardToolOutside(event) {
-  if (screen !== 'lobby' || lobbyBoardTool === 'scroll') return;
-  if (event.target.closest?.('.whiteboard-frame')) return;
-  releaseLobbyBoardTool();
-}
-
-function mountLobbyWhiteboard() {
-  const canvas = app.querySelector('.whiteboard-canvas');
-  const scroll = app.querySelector('.whiteboard-scroll');
-  if (!canvas || !scroll) return;
-  canvas.dataset.tool = lobbyBoardTool;
-  drawLobbyBoard(canvas);
-  animateLobbyBoardDrawings(canvas);
-  requestAnimationFrame(() => { scroll.scrollTop = scroll.scrollHeight; updateLobbyNewMarksButton(); });
-  canvas.addEventListener('pointerdown', beginLobbyBoardStroke);
-  canvas.addEventListener('pointermove', continueLobbyBoardStroke);
-  canvas.addEventListener('pointerup', finishLobbyBoardStroke);
-  canvas.addEventListener('pointercancel', finishLobbyBoardStroke);
-  scroll.addEventListener('scroll', updateLobbyNewMarksButton);
-  app.querySelector('[data-action="return-board-tool"]')?.addEventListener('pointerdown', releaseLobbyBoardTool);
-  app.querySelector('[data-action="board-bottom"]')?.addEventListener('click', () => {
-    scroll.scrollTo({ top: scroll.scrollHeight, behavior: 'smooth' });
-  });
-}
-
-function beginLobbyBoardStroke(event) {
-  if (lobbyBoardTool === 'scroll' || event.button > 0) return;
-  const canvas = event.currentTarget;
-  canvas.setPointerCapture(event.pointerId);
-  lobbyActiveStroke = { pointerId: event.pointerId, tool: lobbyBoardTool, color: lobbyMarkerColor, points: [getLobbyBoardPoint(event, canvas)] };
-  event.preventDefault();
-}
-
-function continueLobbyBoardStroke(event) {
-  if (!lobbyActiveStroke || lobbyActiveStroke.pointerId !== event.pointerId) return;
-  const point = getLobbyBoardPoint(event, event.currentTarget);
-  const previous = lobbyActiveStroke.points.at(-1);
-  if (Math.hypot(point.x - previous.x, point.y - previous.y) < 1.5) return;
-  lobbyActiveStroke.points.push(point);
-  if (lobbyActiveStroke.points.length > 180) finishLobbyBoardStroke(event);
-  else drawLobbyBoard(event.currentTarget, lobbyActiveStroke);
-  event.preventDefault();
-}
-
-function finishLobbyBoardStroke(event) {
-  if (!lobbyActiveStroke || lobbyActiveStroke.pointerId !== event.pointerId) return;
-  const stroke = lobbyActiveStroke;
-  lobbyActiveStroke = null;
-  event.currentTarget.releasePointerCapture?.(event.pointerId);
-  if (stroke.points.length > 1) {
-    if (stroke.tool === 'erase') rankedClient.sendBoardErase(stroke.points);
-    else rankedClient.sendBoardStroke(stroke.points, stroke.color);
-  }
-  if (lobbyPendingBoardTop !== null) {
-    applyLobbyBoardTrim(lobbyPendingBoardTop);
-    lobbyPendingBoardTop = null;
-  }
-}
-
-function getLobbyBoardPoint(event, canvas) {
-  const rect = canvas.getBoundingClientRect();
-  return {
-    x: Math.max(0, Math.min(lobbyBoard.width, ((event.clientX - rect.left) / rect.width) * lobbyBoard.width)),
-    y: lobbyBoard.top + Math.max(0, Math.min(canvas.height, ((event.clientY - rect.top) / rect.height) * canvas.height)),
-  };
-}
-
-function applyLobbyBoardTrim(top) {
-  const scroll = app.querySelector('.whiteboard-scroll');
-  const oldTop = lobbyBoard.top;
-  const oldScrollTop = scroll?.scrollTop ?? 0;
-  lobbyBoard.top = top;
-  lobbyBoard.operations = lobbyBoard.operations.filter((operation) => operation.kind !== 'text'
-    ? operation.points?.some((point) => point.y >= top)
-    : operation.message.rowY + (operation.message.rowSpan * lobbyBoard.rowHeight) > top);
-  updateLobbyBoard(false);
-  if (scroll && oldScrollTop > 0) {
-    const pixelsPerUnit = scroll.scrollHeight / Math.max(lobbyBoard.viewHeight, lobbyBoard.nextY - oldTop);
-    scroll.scrollTop = Math.max(0, oldScrollTop - ((top - oldTop) * pixelsPerUnit));
-  }
-}
-
-function updateLobbyBoard(followNewContent) {
-  if (screen !== 'lobby') return;
-  const canvas = app.querySelector('.whiteboard-canvas');
-  const scroll = app.querySelector('.whiteboard-scroll');
-  if (!canvas || !scroll) return;
-  const nearBottom = scroll.scrollHeight - scroll.scrollTop - scroll.clientHeight < 45;
-  drawLobbyBoard(canvas, lobbyActiveStroke);
-  if (followNewContent && nearBottom) requestAnimationFrame(() => { scroll.scrollTop = scroll.scrollHeight; updateLobbyNewMarksButton(); });
-  else if (followNewContent) updateLobbyNewMarksButton(true);
-}
-
-function updateLobbyNewMarksButton(forceVisible = false) {
-  const scroll = app.querySelector('.whiteboard-scroll');
-  const button = app.querySelector('.whiteboard-new-marks');
-  if (!scroll || !button) return;
-  button.hidden = !forceVisible && scroll.scrollHeight - scroll.scrollTop - scroll.clientHeight < 45;
-}
-
-function drawLobbyBoard(canvas, preview = null) {
-  const height = Math.ceil(Math.max(lobbyBoard.viewHeight, lobbyBoard.nextY - lobbyBoard.top));
-  const textCanvas = app.querySelector('.whiteboard-text-canvas');
-  [canvas, textCanvas].filter(Boolean).forEach((layer) => {
-    if (layer.width !== lobbyBoard.width) layer.width = lobbyBoard.width;
-    if (layer.height !== height) layer.height = height;
-    layer.style.height = `${(height / lobbyBoard.viewHeight) * 100}%`;
-  });
-  if (textCanvas) drawLobbyBoardTextLayer(textCanvas, preview);
-  drawLobbyBoardDrawingLayer(canvas, preview, getLobbyBoardBoilFrame());
-}
-
-function drawLobbyBoardTextLayer(canvas, preview = null) {
-  const context = canvas.getContext('2d');
-  context.clearRect(0, 0, canvas.width, canvas.height);
-  [...lobbyBoard.operations, ...(preview?.tool === 'erase' ? [preview] : [])].forEach((operation) => {
-    if (operation.kind === 'text') drawLobbyBoardText(context, operation.message);
-    else if (operation.kind === 'erase' || operation.tool === 'erase') drawLobbyBoardPath(context, operation, 0, false);
-  });
-}
-
-function drawLobbyBoardDrawingLayer(canvas, preview = null, boilFrame = 0) {
-  const context = canvas.getContext('2d');
-  context.clearRect(0, 0, canvas.width, canvas.height);
-  [...lobbyBoard.operations, ...(preview ? [preview] : [])].forEach((operation) => {
-    if (operation.kind !== 'text') drawLobbyBoardPath(context, operation, boilFrame, isBoilEnabled);
-  });
-}
-
-function drawLobbyBoardPath(context, operation, boilFrame, shouldBoil) {
-  const points = operation.points ?? [];
-  if (points.length < 2) return;
-  context.save();
-  context.globalCompositeOperation = operation.kind === 'erase' || operation.tool === 'erase' ? 'destination-out' : 'source-over';
-  context.strokeStyle = getLobbyBoardColor(operation.color);
-  const isEraser = operation.kind === 'erase' || operation.tool === 'erase';
-  context.lineWidth = (operation.width ?? (isEraser ? 120 : 5)) + (shouldBoil ? getLobbyBoardBoilOffset(operation, -1, 'w', boilFrame) * .35 : 0);
-  context.lineCap = 'round';
-  context.lineJoin = 'round';
-  context.beginPath();
-  const first = getBoiledLobbyBoardPoint(points[0], operation, 0, boilFrame, shouldBoil);
-  context.moveTo(first.x, first.y - lobbyBoard.top);
-  points.slice(1).forEach((point, index) => {
-    const boiled = getBoiledLobbyBoardPoint(point, operation, index + 1, boilFrame, shouldBoil);
-    context.lineTo(boiled.x, boiled.y - lobbyBoard.top);
-  });
-  context.stroke();
-  context.restore();
-}
-
-function animateLobbyBoardDrawings(canvas) {
-  let previousFrame = -1;
-  function tick() {
-    if (!canvas.isConnected) return;
-    const frame = getLobbyBoardBoilFrame();
-    if (frame !== previousFrame) {
-      previousFrame = frame;
-      drawLobbyBoardDrawingLayer(canvas, lobbyActiveStroke, frame);
-    }
-    requestAnimationFrame(tick);
-  }
-  requestAnimationFrame(tick);
-}
-
-function getLobbyBoardBoilFrame() {
-  return isBoilEnabled ? Math.floor((performance.now() / 1000) * DOODLE_FRAME_RATE) % DOODLE_FRAME_COUNT : 0;
-}
-
-function getBoiledLobbyBoardPoint(point, operation, index, frame, shouldBoil) {
-  if (!shouldBoil) return point;
-  return {
-    x: point.x + getLobbyBoardBoilOffset(operation, index, 'x', frame) * 1.15,
-    y: point.y + getLobbyBoardBoilOffset(operation, index, 'y', frame) * 1.15,
-  };
-}
-
-function getLobbyBoardBoilOffset(operation, index, axis, frame) {
-  const key = `${operation.id ?? 'preview'}:${index}:${axis}:${frame}`;
-  let hash = 2166136261;
-  for (let characterIndex = 0; characterIndex < key.length; characterIndex += 1) {
-    hash ^= key.charCodeAt(characterIndex);
-    hash = Math.imul(hash, 16777619);
-  }
-  return ((hash >>> 0) % 2001) / 1000 - 1;
-}
-
-function drawLobbyBoardText(context, message) {
-  const color = getLobbyBoardColor(message.color);
-  const prefix = message.system ? '' : `${message.displayName}: `;
-  const lines = wrapLobbyBoardText(context, `${prefix}${message.text}`, message.rowSpan);
-  context.save();
-  context.fillStyle = color;
-  context.font = '19px "Architects Daughter", sans-serif';
-  context.textBaseline = 'top';
-  lines.forEach((line, index) => context.fillText(line, 18, message.rowY - lobbyBoard.top + (index * 24), lobbyBoard.width - 36));
-  context.restore();
-}
-
-function wrapLobbyBoardText(context, text, maxLines) {
-  context.font = '19px "Architects Daughter", sans-serif';
-  const words = text.split(' ');
-  const lines = [];
-  let line = '';
-  words.forEach((word) => {
-    const candidate = line ? `${line} ${word}` : word;
-    if (line && context.measureText(candidate).width > lobbyBoard.width - 36 && lines.length < maxLines - 1) {
-      lines.push(line);
-      line = word;
-    } else line = candidate;
-  });
-  lines.push(line);
-  return lines.slice(0, maxLines);
-}
-
-function getLobbyBoardColor(color) {
-  return LOBBY_BOARD_COLOR_VALUES[color] ?? LOBBY_BOARD_COLOR_VALUES.black;
+  lobbyWhiteboard.setBoard(board);
 }
 
 function handleLobbyChallenge(message) {
