@@ -44,6 +44,9 @@ import { getServerHttpUrl } from './serverUrl.js';
 import { OnlineFlowDirector } from './presentation/onlineFlowDirector.js';
 import { interpretOnlineSnapshot } from './presentation/onlineFlowSequences.js';
 import { GameFlowDirector } from './presentation/gameFlowDirector.js';
+import { createTitleScreen } from './presentation/titleScreen.js';
+import { createVariantSelectScreen } from './presentation/variantSelectScreen.js';
+import { createLobbyScreen } from './presentation/lobbyScreen.js';
 import { getResourcePresentation, shouldShowPickHistoryForVariant } from './variantPresentation.js';
 import { resolveReadyScene, resolveScene, swapScenePerspective } from './sceneResolver.js';
 import { VARIANT_SELECT_PAGE_SIZE, VARIANT_SELECT_VARIANTS } from './variantSelectConfig.js';
@@ -96,22 +99,10 @@ const THEY_PICKED_LABEL_FRAME_WIDTH = 150;
 const PICK_LABEL_FRAME_HEIGHT = 64;
 const MOVE_ICON_FRAME_WIDTH = 128;
 const MOVE_ICON_FRAME_HEIGHT = 128;
-const TITLE_LOGO_FRAME_WIDTH = 512;
-const TITLE_LOGO_FRAME_HEIGHT = 368;
 const TITLE_BUTTON_FRAME_WIDTH = 256;
 const TITLE_BUTTON_FRAME_HEIGHT = 128;
-const TITLE_AUDIO_BUTTON_FRAME_WIDTH = 384;
-const TITLE_AUDIO_BUTTON_FRAME_HEIGHT = 192;
-const TITLE_BOIL_TOGGLE_FRAME_WIDTH = 320;
-const TITLE_BOIL_TOGGLE_FRAME_HEIGHT = 160;
-const TITLE_VOLUME_SLIDER_FRAME_WIDTH = 320;
-const TITLE_VOLUME_SLIDER_FRAME_HEIGHT = 160;
 const VARIANT_BUTTON_FRAME_WIDTH = 325;
 const VARIANT_BUTTON_FRAME_HEIGHT = 128;
-const VARIANT_DIFFICULTY_TOGGLE_FRAME_WIDTH = 110;
-const VARIANT_DIFFICULTY_TOGGLE_FRAME_HEIGHT = 140;
-const PICK_VARIANT_FRAME_WIDTH = 388;
-const PICK_VARIANT_FRAME_HEIGHT = 233;
 const ONLINE_HEADER_FRAME_WIDTH = 1518;
 const ONLINE_HEADER_FRAME_HEIGHT = 512;
 const BAN_HEADER_FRAME_WIDTH = 910;
@@ -158,9 +149,6 @@ const LOADING_BAR_EMPTY_URL = './assets/progress_bar_empty_sheet.webp';
 const LOADING_BAR_FULL_URL = './assets/progress_bar_full_sheet.webp';
 const LOADING_CLICK_MESSAGE_URL = './assets/click_msg_sheet.webp';
 const PAPER_BACKGROUND_URL = './assets/crumpled_paper_background.webp';
-const TITLE_MUSIC_SLIDER_URL = './assets/title/Music_slider_sheet.webp';
-const TITLE_SFX_SLIDER_URL = './assets/title/sfx_slider_sheet.webp';
-const TITLE_GRADIENT_SLIDER_URL = './assets/title/graidant_slider_sheet.webp';
 const TITLE_ALERT_SHOWCASE = Object.freeze([
   Object.freeze({ width: 320, height: 150, label: '320 by 150 alert', message: '320 × 150' }),
   Object.freeze({ width: 440, height: 190, label: '440 by 190 alert', message: '440 × 190' }),
@@ -454,6 +442,78 @@ const lobbyWhiteboard = createLobbyWhiteboard({
   sendErase: (points) => rankedClient.sendBoardErase(points),
   frameRate: DOODLE_FRAME_RATE,
   frameCount: DOODLE_FRAME_COUNT,
+});
+const titleScreen = createTitleScreen({
+  app,
+  getState: () => ({ isSoundEnabled, isBoilEnabled, musicVolume, sfxVolume, rankedDisplayName }),
+  getSharpCanvasContext,
+  loadImageAsset,
+  mountSpriteRenderers,
+  requestMusicTrack,
+  renderOnlinePlayerCount,
+  startOnlineStatusPolling,
+  enterLobby: enterLobbyFromTitle,
+  generateName: generateTitleName,
+  toggleSound,
+  toggleBoil,
+  enableAudio: enableAudioFromSlider,
+  setVolume: setTitleVolume,
+  escapeHtml,
+  maxDisplayNameLength: MAX_RANKED_DISPLAY_NAME_LENGTH,
+  showAlertShowcase: () => {
+    if (!ENABLE_TITLE_ALERT_SHOWCASE || hasShownTitleAlertShowcase) return;
+    hasShownTitleAlertShowcase = true;
+    alertSystem.show(TITLE_ALERT_SHOWCASE);
+  },
+});
+const variantSelectScreen = createVariantSelectScreen({
+  app,
+  variants: COMPUTER_VARIANTS,
+  pageSize: VARIANT_SELECT_PAGE_SIZE,
+  getPage: () => variantSelectPage,
+  setPage: (page) => { variantSelectPage = page; },
+  getDifficulty: () => variantDifficultyToggleState,
+  setDifficulty: (difficulty) => { variantDifficultyToggleState = difficulty; },
+  escapeHtml,
+  mountSpriteRenderers,
+  requestMusicTrack,
+  onSelectVariant: showVariantDetail,
+  onBack: returnToLobbyFromOpponentSelect,
+  onCloseDetail: closeVariantDetail,
+});
+const lobbyScreen = createLobbyScreen({
+  app,
+  boardColors: LOBBY_BOARD_COLORS,
+  whiteboard: lobbyWhiteboard,
+  getState: () => ({
+    connected: lobbyConnected,
+    players: lobbyPlayers,
+    self: lobbySelf,
+    rosterOpen: lobbyRosterOpen,
+    matchmakingStatus,
+    selectedPlayerId: lobbySelectedPlayerId,
+    challenge: lobbyChallenge,
+    challengeStatus: lobbyChallengeStatus,
+  }),
+  setRosterOpen: (open) => { lobbyRosterOpen = open; },
+  escapeHtml,
+  renderSettingsControls: titleScreen.renderSettingsControls,
+  installSettingsHandlers: titleScreen.installSettingsHandlers,
+  renderOpenCurtainBorder: variantSelectScreen.renderOpenCurtainBorder,
+  mountSpriteRenderers,
+  stopOnlineStatusPolling,
+  requestMusicTrack,
+  onOpenPlayer: openLobbyPlayer,
+  onToggleMatchmaking: toggleMatchmaking,
+  onOpenPractice: () => openLobbyPlayer('computer'),
+  onOpenSettings: openPauseMenu,
+  onBack: returnToTitleFromLobby,
+  onCloseOverlay: () => { lobbySelectedPlayerId = null; render(); },
+  onChallengePlayer: (playerId) => rankedClient.challengePlayer(playerId),
+  onSendChat: (message, color) => rankedClient.sendChat(message, color),
+  onRespondChallenge: (challengeId, accept) => rankedClient.respondChallenge(challengeId, accept),
+  onCancelChallenge: (challengeId) => rankedClient.cancelChallenge(challengeId),
+  onCloseChallenge: () => { lobbyChallenge = null; lobbyChallengeStatus = null; render(); },
 });
 const onlineFlowDirector = new OnlineFlowDirector({
   closeCurtains: (onCreate) => closeCurtainWipe(app, playCurtainCloseAudio, 'online-flow-curtain', onCreate),
@@ -1192,7 +1252,7 @@ function renderPauseMenu(menuScreen) {
   overlay.className = 'pause-menu-overlay';
   overlay.innerHTML = `
     <div class="pause-menu" role="dialog" aria-modal="true" aria-label="Pause menu">
-      ${renderSettingsControls()}
+      ${titleScreen.renderSettingsControls()}
       <div class="pause-menu-actions">
         ${menuScreen === 'lobby'
           ? renderSheetButton('pause-back', 'back_button_w', 'Back', 'pause-sheet-button')
@@ -1202,7 +1262,7 @@ function renderPauseMenu(menuScreen) {
     </div>
   `;
   app.append(overlay);
-  installSettingsHandlers(overlay, refreshPauseMenuSettings);
+  titleScreen.installSettingsHandlers(overlay, refreshPauseMenuSettings);
   overlay.querySelector('[data-action="pause-back"]')?.addEventListener('click', closePauseMenu);
   overlay.querySelector('[data-action="pause-continue"]')?.addEventListener('click', closePauseMenu);
   overlay.querySelector('[data-action="pause-quit"]')?.addEventListener('click', renderPauseQuitConfirmation);
@@ -1217,7 +1277,7 @@ function stopMatchmakingFromPauseMenu(event) {
   matchmakingStatus = 'idle';
   rankedClient.setReady(false);
   event.currentTarget.remove();
-  syncMatchmakingIndicator();
+  lobbyScreen.syncMatchmakingIndicator();
 }
 
 function renderPauseQuitConfirmation() {
@@ -1249,8 +1309,8 @@ function refreshPauseMenuSettings() {
     return;
   }
 
-  controls.outerHTML = renderSettingsControls();
-  installSettingsHandlers(pauseMenu.overlay, refreshPauseMenuSettings);
+  controls.outerHTML = titleScreen.renderSettingsControls();
+  titleScreen.installSettingsHandlers(pauseMenu.overlay, refreshPauseMenuSettings);
   mountSpriteRenderers(pauseMenu.overlay.querySelectorAll('.sprite-canvas'));
 }
 
@@ -1399,7 +1459,7 @@ function resumePausableTimers() {
 
 function render() {
   updateFrameScale();
-  queueMicrotask(syncMatchmakingIndicator);
+  queueMicrotask(lobbyScreen.syncMatchmakingIndicator);
   queueMicrotask(() => onlineFlowDirector.syncLayers());
 
   const activePauseMenu = pauseMenu;
@@ -1416,12 +1476,12 @@ function render() {
   }
 
   if (screen === 'title') {
-    renderTitleScreen();
+    titleScreen.render();
     return;
   }
 
   if (screen === 'lobby') {
-    renderLobbyScreen();
+    lobbyScreen.render();
     return;
   }
 
@@ -1431,7 +1491,7 @@ function render() {
   }
 
   if (screen === 'opponent-select') {
-    renderOpponentSelectScreen();
+    variantSelectScreen.render();
     return;
   }
 
@@ -1520,7 +1580,7 @@ function renderRankedBanScreen() {
 
   app.innerHTML = `
     <section class="title-screen opponent-select-screen variant-ban-screen ${isTiebreakerBan ? 'tiebreaker-ban-stage' : ''}" aria-label="${isTiebreakerBan ? 'Ban variant' : 'Pick variant'}">
-      ${renderOpenCurtainBorder()}
+      ${variantSelectScreen.renderOpenCurtainBorder()}
 
       <canvas
         class="sprite-canvas pick-variant-header online-stage-header"
@@ -1582,8 +1642,8 @@ function renderScoreboardScreen() {
   const [firstVariantId, secondVariantId] = orderedVariantIds.length >= 2
     ? orderedVariantIds
     : rankedSnapshot?.remainingVariants ?? [];
-  const firstVariant = getComputerVariant(firstVariantId);
-  const secondVariant = getComputerVariant(secondVariantId);
+  const firstVariant = variantSelectScreen.getVariant(firstVariantId);
+  const secondVariant = variantSelectScreen.getVariant(secondVariantId);
   const firstScore = getScoreboardVariantScore(firstVariantId);
   const secondScore = getScoreboardVariantScore(secondVariantId);
   const tiebreakerResult = rankedSnapshot?.gameResults?.[2] ?? null;
@@ -1592,7 +1652,7 @@ function renderScoreboardScreen() {
       : null;
   app.innerHTML = `
     <section class="online-interstitial scoreboard-stage" aria-label="Scoreboard">
-      ${renderOpenCurtainBorder()}
+      ${variantSelectScreen.renderOpenCurtainBorder()}
       <div class="scoreboard-name scoreboard-name-left">
         ${escapeHtml(localName)}
       </div>
@@ -1630,7 +1690,7 @@ function renderScoreboardScreen() {
 function renderScoreboardTiebreaker(tiebreakerResult) {
   if (tiebreakerResult) {
     const variantId = tiebreakerResult.variantId;
-    const variant = getComputerVariant(variantId);
+    const variant = variantSelectScreen.getVariant(variantId);
     const score = getScoreboardVariantScore(variantId);
     return `
       <div class="scoreboard-game-row">
@@ -1714,7 +1774,7 @@ function getRankedVariantSelectVariants() {
     .map((rankedVariant) => COMPUTER_VARIANTS.find((variant) => variant.id === rankedVariant.id) ?? {
       id: rankedVariant.id,
       name: rankedVariant.label,
-      buttonDoodle: getComputerVariant(rankedVariant.id).buttonDoodle,
+      buttonDoodle: variantSelectScreen.getVariant(rankedVariant.id).buttonDoodle,
     })
     .filter(Boolean);
 }
@@ -1722,7 +1782,7 @@ function getRankedVariantSelectVariants() {
 function renderRankedVariantPickButton({ variant, slot, disabled, picked, banned, firstPicked, isTiebreakerBan }) {
   const showSettledBan = isTiebreakerBan && (banned || completedBanAnimationVariants.has(variant.id));
   const showBanAnimation = isTiebreakerBan && picked && !showSettledBan;
-  return renderVariantButton(variant, slot, {
+  return variantSelectScreen.renderVariantButton(variant, slot, {
     className: `ranked-variant-pick ${picked ? 'picked' : ''} ${banned ? 'banned' : ''} ${isTiebreakerBan ? 'tiebreaker-ban' : ''}`,
     dataAttribute: 'data-pick-variant',
     disabled,
@@ -1837,11 +1897,11 @@ function renderGameplayRulesOverlay() {
     return '';
   }
 
-  const variant = getComputerVariant(getCurrentVariantId());
+  const variant = variantSelectScreen.getVariant(getCurrentVariantId());
   return `
     <div class="variant-detail-overlay gameplay-rules-overlay">
       <div class="variant-detail-copy" role="dialog" aria-modal="true" aria-label="${escapeHtml(variant.name)} rules">
-        ${renderVariantDetailCopy(variant)}
+        ${variantSelectScreen.renderDetailCopy(variant)}
       </div>
       <div class="variant-detail-actions">
         <button class="variant-detail-action" data-action="dismiss-rules" type="button" aria-label="Back">
@@ -2435,121 +2495,11 @@ function shouldClearStageForCountdown() {
     || (playMode === 'online' && rankedSnapshot?.phase === 'roundOver' && Boolean(readyWaiting));
 }
 
-function renderLobbyScreen() {
-  stopOnlineStatusPolling();
-  requestMusicTrack('title');
-
-  const roster = orderLobbyPlayers(lobbyPlayers);
-  app.innerHTML = `
-    <section class="title-screen lobby-screen ${lobbyConnected ? '' : 'is-disconnected'}" aria-label="Online lobby">
-      <canvas class="sprite-canvas lobby-header-art" data-doodle="lobby-header" data-frame-width="465" data-frame-height="174" width="465" height="174" aria-label="Lobby"></canvas>
-      <div class="lobby-workspace">
-        <div class="whiteboard-frame">
-          <div class="whiteboard-paper" aria-hidden="true"></div>
-          <img class="whiteboard-art" src="./assets/whiteboard.webp" width="840" height="622" alt="">
-          <div class="whiteboard-scroll" tabindex="0" aria-label="Shared lobby whiteboard">
-            <canvas class="whiteboard-text-canvas" aria-hidden="true"></canvas>
-            <canvas class="whiteboard-canvas"></canvas>
-          </div>
-          <button class="whiteboard-tray-return-zone ${lobbyWhiteboard.isToolHeld() ? 'is-active' : ''}" data-action="return-board-tool" type="button" aria-label="Return whiteboard tool"></button>
-          <div class="whiteboard-tool-tray" role="group" aria-label="Whiteboard tools">
-            ${LOBBY_BOARD_COLORS.map(lobbyWhiteboard.renderTool).join('')}
-            ${lobbyWhiteboard.renderTool('erase')}
-          </div>
-          ${lobbyWhiteboard.renderHeldTool()}
-          <button class="whiteboard-new-marks" data-action="board-bottom" type="button" hidden>new marks ↓</button>
-        </div>
-        <aside class="lobby-roster-panel ${lobbyRosterOpen ? 'is-open' : ''}">
-          <header class="lobby-heading"><strong>ONLINE</strong><span>${lobbyConnected ? lobbyPlayers.length : '…'}</span></header>
-          <div class="lobby-roster" role="list">
-            ${roster.map(renderLobbyPlayerRow).join('')}
-          </div>
-        </aside>
-      </div>
-      <div class="lobby-bottom-rail">
-        <form class="lobby-chat-form">
-          <label class="sprite-input-frame lobby-chat-input-frame">
-            <canvas class="sprite-canvas sprite-input-frame-art" data-doodle="text_frame" data-frame-width="768" data-frame-height="64" width="768" height="64" aria-hidden="true"></canvas>
-            <input name="message" maxlength="200" autocomplete="off" aria-label="Chat message">
-          </label>
-          <button class="lobby-chat-submit" type="submit" aria-label="Send chat message">
-            <canvas class="sprite-canvas lobby-chat-submit-art" data-doodle="chat_button" data-frame-width="128" data-frame-height="64" width="128" height="64" aria-hidden="true"></canvas>
-          </button>
-        </form>
-        <button class="lobby-roster-toggle" data-action="toggle-roster" type="button" aria-label="Players">
-          <canvas class="sprite-canvas lobby-roster-toggle-art" data-doodle="burger_button" data-frame-width="128" data-frame-height="128" width="128" height="128" aria-hidden="true"></canvas>
-        </button>
-      </div>
-      <div class="lobby-action-row">
-        ${renderLobbySheetAction('back-to-title', 'back_button_w', 'Back to title')}
-        ${renderLobbySheetAction('play-computer', 'title/playvcom_button', 'Practice versus computer')}
-        ${renderLobbySheetAction('toggle-ready', 'match_button', 'Play a match', matchmakingStatus === 'searching', !lobbyConnected)}
-        ${renderLobbySheetAction('settings', 'settings_button', 'Settings')}
-      </div>
-      ${renderLobbyOverlay()}
-      ${renderOpenCurtainBorder()}
-    </section>
-  `;
-
-  app.querySelectorAll('[data-player-id]').forEach((button) => button.addEventListener('click', () => openLobbyPlayer(button.dataset.playerId)));
-  app.querySelector('[data-action="toggle-ready"]')?.addEventListener('click', toggleMatchmaking);
-  app.querySelector('[data-action="play-computer"]')?.addEventListener('click', () => openLobbyPlayer('computer'));
-  app.querySelector('[data-action="settings"]')?.addEventListener('click', openPauseMenu);
-  app.querySelector('[data-action="back-to-title"]')?.addEventListener('click', returnToTitleFromLobby);
-  app.querySelector('[data-action="toggle-roster"]')?.addEventListener('click', () => { lobbyRosterOpen = !lobbyRosterOpen; app.querySelector('.lobby-roster-panel')?.classList.toggle('is-open', lobbyRosterOpen); });
-  installLobbyOverlayHandlers();
-  mountSpriteRenderers(app.querySelectorAll('.sprite-canvas'));
-  lobbyWhiteboard.mount();
-}
-
 function toggleMatchmaking() {
   const searching = matchmakingStatus === 'searching';
   matchmakingStatus = searching ? 'idle' : 'searching';
   rankedClient.setReady(!searching);
   render();
-}
-
-function syncMatchmakingIndicator() {
-  app.querySelector('.matchmaking-indicator')?.remove();
-  if (matchmakingStatus !== 'searching') return;
-  const indicator = document.createElement('div');
-  indicator.className = 'matchmaking-indicator';
-  indicator.setAttribute('role', 'status');
-  indicator.setAttribute('aria-label', 'Waiting for match...');
-  indicator.innerHTML = '<span aria-hidden="true">Waiting for match<span class="matchmaking-dots"></span></span>';
-  app.append(indicator);
-}
-
-function renderLobbySheetAction(action, doodle, label, pressed = false, disabled = false) {
-  return `<button class="lobby-sheet-action ${pressed ? 'is-active' : ''}" data-action="${action}" type="button" aria-label="${label}"${action === 'toggle-ready' ? ` aria-pressed="${pressed}"` : ''}${disabled ? ' disabled' : ''}><canvas class="sprite-canvas lobby-sheet-action-art" data-doodle="${doodle}" data-frame-width="256" data-frame-height="128" width="256" height="128" aria-hidden="true"></canvas></button>`;
-}
-
-function renderLobbyPlayerRow(player) {
-  const isSelf = player.playerId === lobbySelf?.playerId;
-  const busy = ['in_ranked_match', 'playing_computer'].includes(player.presence) || player.challengePending;
-  const status = player.challengePending ? 'Challenge pending' : player.presence === 'ready' ? 'Ready' : player.presence === 'in_ranked_match' ? 'In ranked match' : player.presence === 'playing_computer' ? 'Playing computer' : 'Idle';
-  return `<button class="lobby-player-row ${isSelf ? 'self' : ''} ${player.presence === 'ready' ? 'ready' : ''} ${busy ? 'busy' : ''}" data-player-id="${escapeHtml(player.playerId)}" type="button"><span>${escapeHtml(player.displayName)}${isSelf ? ' (you)' : ''}</span><small>${player.rating} · ${status}</small></button>`;
-}
-
-function orderLobbyPlayers(players) {
-  const weights = { ready: 1, idle: 2, in_ranked_match: 3, playing_computer: 3 };
-  return [...players].sort((a, b) => (a.playerId === lobbySelf?.playerId ? -1 : b.playerId === lobbySelf?.playerId ? 1 : (weights[a.presence] ?? 2) - (weights[b.presence] ?? 2) || a.displayName.localeCompare(b.displayName)));
-}
-
-function renderLobbyOverlay() {
-  if (lobbyChallenge) return renderLobbyChallengeOverlay();
-  if (!lobbySelectedPlayerId) return '';
-  const player = lobbyPlayers.find((entry) => entry.playerId === lobbySelectedPlayerId);
-  if (!player) return '';
-  if (player.playerId === lobbySelf?.playerId) return `<div class="lobby-overlay"><div class="lobby-dialog" role="dialog" aria-modal="true" aria-label="Settings"><h2>Settings</h2>${renderSettingsControls()}<button data-action="close-overlay" type="button">Close</button></div></div>`;
-  const canChallenge = player.presence === 'idle' && !player.challengePending;
-  return `<div class="lobby-overlay"><div class="lobby-dialog"><h2>${escapeHtml(player.displayName)}</h2><p>Rating ${player.rating}</p><p>${escapeHtml(player.presence.replaceAll('_', ' '))}</p>${canChallenge ? '<button data-action="challenge-player" type="button">Ranked challenge</button>' : ''}<button data-action="close-overlay" type="button">Close</button></div></div>`;
-}
-
-function renderLobbyChallengeOverlay() {
-  const incoming = lobbyChallenge.challengedId === lobbySelf?.playerId;
-  const name = incoming ? lobbyChallenge.challengerName : lobbyChallenge.challengedName;
-  return `<div class="lobby-overlay"><div class="lobby-dialog"><h2>${lobbyChallengeStatus === 'pending' ? (incoming ? 'Ranked challenge' : 'Challenge sent') : escapeHtml(lobbyChallengeStatus ?? '')}</h2><p>${escapeHtml(name)}</p>${lobbyChallengeStatus === 'pending' ? (incoming ? '<button data-action="accept-challenge">Accept</button><button data-action="decline-challenge">Decline</button>' : '<button data-action="cancel-challenge">Cancel</button>') : '<button data-action="close-challenge">Close</button>'}</div></div>`;
 }
 
 function openLobbyPlayer(playerId) {
@@ -2559,18 +2509,6 @@ function openLobbyPlayer(playerId) {
   }
   lobbySelectedPlayerId = playerId;
   render();
-}
-
-function installLobbyOverlayHandlers() {
-  app.querySelector('[data-action="close-overlay"]')?.addEventListener('click', () => { lobbySelectedPlayerId = null; render(); });
-  app.querySelector('[data-action="challenge-player"]')?.addEventListener('click', () => rankedClient.challengePlayer(lobbySelectedPlayerId));
-  app.querySelector('.lobby-chat-form')?.addEventListener('submit', (event) => { event.preventDefault(); const input = event.currentTarget.elements.message; rankedClient.sendChat(input.value, lobbyWhiteboard.getMarkerColor()); input.value = ''; input.focus(); });
-  app.querySelectorAll('[data-board-tool]').forEach((button) => button.addEventListener('click', (event) => lobbyWhiteboard.selectTool(button.dataset.boardTool, event)));
-  app.querySelector('[data-action="accept-challenge"]')?.addEventListener('click', () => rankedClient.respondChallenge(lobbyChallenge.id, true));
-  app.querySelector('[data-action="decline-challenge"]')?.addEventListener('click', () => rankedClient.respondChallenge(lobbyChallenge.id, false));
-  app.querySelector('[data-action="cancel-challenge"]')?.addEventListener('click', () => rankedClient.cancelChallenge(lobbyChallenge.id));
-  app.querySelector('[data-action="close-challenge"]')?.addEventListener('click', () => { lobbyChallenge = null; lobbyChallengeStatus = null; render(); });
-  installSettingsHandlers(app);
 }
 
 function handleLobbyState(message) {
@@ -2747,197 +2685,21 @@ function renderSceneGalleryCard({ presentation, label, audioScene }) {
   `;
 }
 
-function renderTitleAudioButton(kind, isChecked) {
-  const doodle = `title/${kind}_button${isChecked ? '_checked' : ''}`;
-  const label = `${kind} ${isChecked ? 'on' : 'off'}`;
-
-  return `
-    <button
-      class="title-audio-button"
-      data-action="toggle-${kind}"
-      type="button"
-      aria-label="${label}"
-      aria-pressed="${isChecked ? 'true' : 'false'}"
-    >
-      <canvas
-        class="sprite-canvas title-audio-button-art"
-        data-doodle="${doodle}"
-        data-frame-width="${TITLE_AUDIO_BUTTON_FRAME_WIDTH}"
-        data-frame-height="${TITLE_AUDIO_BUTTON_FRAME_HEIGHT}"
-        width="${TITLE_AUDIO_BUTTON_FRAME_WIDTH}"
-        height="${TITLE_AUDIO_BUTTON_FRAME_HEIGHT}"
-        aria-hidden="true"
-      ></canvas>
-    </button>
-  `;
-}
-
-function renderTitleVolumeSlider(kind, value) {
-  const label = kind === 'music' ? 'music volume' : 'sound effects volume';
-
-  return `
-    <canvas
-      class="title-volume-slider ${isSoundEnabled ? '' : 'is-muted'}"
-      data-volume-kind="${kind}"
-      width="${TITLE_VOLUME_SLIDER_FRAME_WIDTH}"
-      height="${TITLE_VOLUME_SLIDER_FRAME_HEIGHT}"
-      role="slider"
-      tabindex="0"
-      aria-label="${label}"
-      aria-valuemin="0"
-      aria-valuemax="100"
-      aria-valuenow="${Math.round(value * 100)}"
-    ></canvas>
-  `;
-}
-
-function renderTitleBoilButton() {
-  const doodle = `title/boiling_toggle_${isBoilEnabled ? 'on' : 'off'}`;
-
-  return `
-    <button
-      class="title-audio-button title-boil-button"
-      data-action="toggle-boil"
-      type="button"
-      aria-label="animation ${isBoilEnabled ? 'on' : 'off'}"
-      aria-pressed="${isBoilEnabled ? 'true' : 'false'}"
-    >
-      <canvas
-        class="sprite-canvas title-audio-button-art"
-        data-doodle="${doodle}"
-        data-frame-width="${TITLE_BOIL_TOGGLE_FRAME_WIDTH}"
-        data-frame-height="${TITLE_BOIL_TOGGLE_FRAME_HEIGHT}"
-        width="${TITLE_BOIL_TOGGLE_FRAME_WIDTH}"
-        height="${TITLE_BOIL_TOGGLE_FRAME_HEIGHT}"
-        aria-hidden="true"
-      ></canvas>
-    </button>
-  `;
-}
-
-function renderSettingsControls() {
-  return `
-    <div class="title-audio-actions settings-controls" aria-label="Settings controls">
-      ${renderTitleAudioButton('sound', isSoundEnabled)}
-      ${renderTitleBoilButton()}
-      ${renderTitleVolumeSlider('music', musicVolume)}
-      ${renderTitleVolumeSlider('sfx', sfxVolume)}
-    </div>
-  `;
-}
-
-function installSettingsHandlers(root, onChange = null) {
-  root.querySelector('[data-action="toggle-sound"]')?.addEventListener('click', () => {
-    toggleSound({ rerender: !onChange });
-    onChange?.();
-  });
-  root.querySelector('[data-action="toggle-boil"]')?.addEventListener('click', () => {
-    toggleBoil({ rerender: !onChange });
-    onChange?.();
-  });
-  mountTitleVolumeSliders(root.querySelectorAll('.title-volume-slider'));
-}
-
-function mountTitleVolumeSliders(canvases) {
-  const sliders = [...canvases];
-
-  if (!sliders.length) {
-    return;
-  }
-
-  sliders.forEach((canvas) => {
-    const updateFromPointer = (event) => {
-      setTitleVolumeFromPointer(canvas, event.clientX);
-    };
-
-    canvas.addEventListener('pointerdown', (event) => {
-      canvas.setPointerCapture(event.pointerId);
-      updateFromPointer(event);
-    });
-    canvas.addEventListener('pointermove', (event) => {
-      if (event.buttons) {
-        updateFromPointer(event);
-      }
-    });
-    canvas.addEventListener('keydown', (event) => {
-      const step = event.shiftKey ? 0.1 : 0.05;
-
-      if (event.key === 'ArrowLeft' || event.key === 'ArrowDown') {
-        event.preventDefault();
-        enableAudioFromSlider(canvas.dataset.volumeKind);
-        setTitleVolume(canvas.dataset.volumeKind, getTitleVolume(canvas.dataset.volumeKind) - step);
-      }
-
-      if (event.key === 'ArrowRight' || event.key === 'ArrowUp') {
-        event.preventDefault();
-        enableAudioFromSlider(canvas.dataset.volumeKind);
-        setTitleVolume(canvas.dataset.volumeKind, getTitleVolume(canvas.dataset.volumeKind) + step);
-      }
-    });
-  });
-
-  loadTitleVolumeSliderImages().then((images) => {
-    if (!images) {
-      return;
-    }
-
-    function tick(now) {
-      const connectedSliders = sliders.filter((canvas) => canvas.isConnected);
-
-      if (!connectedSliders.length) {
-        return;
-      }
-
-      drawTitleVolumeSliders(connectedSliders, images, now);
-      requestAnimationFrame(tick);
-    }
-
-    requestAnimationFrame(tick);
-  });
-}
-
-function setTitleVolumeFromPointer(canvas, clientX) {
-  const rect = canvas.getBoundingClientRect();
-  const value = rect.width > 0 ? (clientX - rect.left) / rect.width : 0;
-  enableAudioFromSlider(canvas.dataset.volumeKind);
-  setTitleVolume(canvas.dataset.volumeKind, value);
-}
-
 function enableAudioFromSlider(kind) {
-  if (isSoundEnabled) {
-    return;
-  }
+  if (isSoundEnabled) return;
 
   isSoundEnabled = true;
   isMusicEnabled = true;
   setSoundEnabled(isSoundEnabled);
   setMusicEnabled(isMusicEnabled, ['title', 'lobby'].includes(screen) ? 'title' : 'game');
-  updateTitleSoundButton();
+  titleScreen.updateSoundButton();
 
-  if (kind === 'music') {
-    setTitleVolume('sfx', 0);
-  } else {
-    setTitleVolume('music', 0);
-  }
-}
-
-function updateTitleSoundButton() {
-  const button = app.querySelector('[data-action="toggle-sound"]');
-  const canvas = button?.querySelector('.sprite-canvas');
-
-  if (!button || !canvas) {
-    return;
-  }
-
-  button.setAttribute('aria-label', `sound ${isSoundEnabled ? 'on' : 'off'}`);
-  button.setAttribute('aria-pressed', isSoundEnabled ? 'true' : 'false');
-  canvas.dataset.doodle = `title/sound_button${isSoundEnabled ? '_checked' : ''}`;
-  mountSpriteRenderers(app.querySelectorAll('.sprite-canvas'));
+  if (kind === 'music') setTitleVolume('sfx', 0);
+  else setTitleVolume('music', 0);
 }
 
 function setTitleVolume(kind, value) {
   const volume = clampVolume(value);
-
   if (kind === 'music') {
     musicVolume = volume;
     writeStoredVolume(MUSIC_VOLUME_KEY, musicVolume);
@@ -2947,78 +2709,6 @@ function setTitleVolume(kind, value) {
     writeStoredVolume(SFX_VOLUME_KEY, sfxVolume);
     setSfxVolume(sfxVolume);
   }
-}
-
-function getTitleVolume(kind) {
-  return kind === 'music' ? musicVolume : sfxVolume;
-}
-
-function drawTitleVolumeSliders(sliders, images, now) {
-  const frame = isBoilEnabled
-    ? Math.floor((now / 1000) * DOODLE_FRAME_RATE) % DOODLE_FRAME_COUNT
-    : 0;
-  const sourceY = frame * TITLE_VOLUME_SLIDER_FRAME_HEIGHT;
-
-  sliders.forEach((canvas) => {
-    const kind = canvas.dataset.volumeKind;
-    const baseImage = kind === 'music' ? images.music : images.sfx;
-    const context = getSharpCanvasContext(canvas);
-    const volume = getTitleVolume(kind);
-    const fillWidth = Math.round(TITLE_VOLUME_SLIDER_FRAME_WIDTH * volume);
-
-    if (!context || !baseImage || !images.gradient) {
-      return;
-    }
-
-    canvas.classList.toggle('is-muted', !isSoundEnabled);
-    canvas.setAttribute('aria-valuenow', String(Math.round(volume * 100)));
-    context.clearRect(0, 0, canvas.width, canvas.height);
-    context.drawImage(
-      baseImage,
-      0,
-      sourceY,
-      TITLE_VOLUME_SLIDER_FRAME_WIDTH,
-      TITLE_VOLUME_SLIDER_FRAME_HEIGHT,
-      0,
-      0,
-      canvas.width,
-      canvas.height,
-    );
-
-    if (fillWidth <= 0) {
-      return;
-    }
-
-    context.drawImage(
-      images.gradient,
-      0,
-      sourceY,
-      fillWidth,
-      TITLE_VOLUME_SLIDER_FRAME_HEIGHT,
-      0,
-      0,
-      fillWidth,
-      canvas.height,
-    );
-  });
-}
-
-function loadTitleVolumeSliderImages() {
-  if (!loadTitleVolumeSliderImages.promise) {
-    loadTitleVolumeSliderImages.promise = Promise.all([
-      loadImageAsset(TITLE_MUSIC_SLIDER_URL, { decode: false }),
-      loadImageAsset(TITLE_SFX_SLIDER_URL, { decode: false }),
-      loadImageAsset(TITLE_GRADIENT_SLIDER_URL, { decode: false }),
-    ]).then(([music, sfx, gradient]) => {
-      if (!music || !sfx || !gradient) {
-        return null;
-      }
-
-      return { music, sfx, gradient };
-    });
-  }
-
-  return loadTitleVolumeSliderImages.promise;
 }
 
 function toggleSound({ rerender = true } = {}) {
@@ -3060,86 +2750,6 @@ function playAudioToggleSound() {
 
   playUserGestureAudio(READY_AUDIO);
   unlockSceneAudio();
-}
-
-function renderTitleScreen() {
-  requestMusicTrack('title');
-
-  app.innerHTML = `
-    <section class="title-screen title-menu-screen" aria-label="Title screen">
-      <canvas
-        class="sprite-canvas title-logo title-menu-logo"
-        data-doodle="new-logo-rev-2-alpha"
-        data-frame-width="${TITLE_LOGO_FRAME_WIDTH}"
-        data-frame-height="${TITLE_LOGO_FRAME_HEIGHT}"
-        width="${TITLE_LOGO_FRAME_WIDTH}"
-        height="${TITLE_LOGO_FRAME_HEIGHT}"
-        aria-label="Super Rock Paper Scissors Online"
-      ></canvas>
-
-      <form class="title-menu-form">
-        <div class="title-menu-actions">
-          <button class="play-button title-menu-random" data-action="random-name" type="button" aria-label="Random name">
-            <canvas
-              class="sprite-canvas play-button-art"
-              data-doodle="name_button"
-              data-frame-width="${TITLE_BUTTON_FRAME_WIDTH}"
-              data-frame-height="${TITLE_BUTTON_FRAME_HEIGHT}"
-              width="${TITLE_BUTTON_FRAME_WIDTH}"
-              height="${TITLE_BUTTON_FRAME_HEIGHT}"
-              aria-hidden="true"
-            ></canvas>
-          </button>
-          <button class="play-button title-menu-submit" type="submit" aria-label="Enter lobby">
-            <canvas
-              class="sprite-canvas play-button-art"
-              data-doodle="lobby_button"
-              data-frame-width="${TITLE_BUTTON_FRAME_WIDTH}"
-              data-frame-height="${TITLE_BUTTON_FRAME_HEIGHT}"
-              width="${TITLE_BUTTON_FRAME_WIDTH}"
-              height="${TITLE_BUTTON_FRAME_HEIGHT}"
-              aria-hidden="true"
-            ></canvas>
-          </button>
-        </div>
-        <label class="sprite-input-frame title-name-input-frame">
-          <canvas class="sprite-canvas sprite-input-frame-art" data-doodle="text_frame" data-frame-width="768" data-frame-height="64" width="768" height="64" aria-hidden="true"></canvas>
-          <input
-            id="title-name-input"
-            class="title-name-input"
-            name="displayName"
-            maxlength="${MAX_RANKED_DISPLAY_NAME_LENGTH}"
-            autocomplete="nickname"
-            spellcheck="false"
-            aria-label="Display name"
-            value="${escapeHtml(rankedDisplayName)}"
-          />
-        </label>
-        <p class="online-player-count" aria-live="polite">${renderOnlinePlayerCount()}</p>
-      </form>
-
-      <div class="title-audio-actions title-menu-audio-actions" aria-label="Settings">
-        ${renderTitleAudioButton('sound', isSoundEnabled)}
-        ${renderTitleVolumeSlider('music', musicVolume)}
-        ${renderTitleVolumeSlider('sfx', sfxVolume)}
-        ${renderTitleBoilButton()}
-      </div>
-    </section>
-  `;
-
-  app.querySelector('.title-menu-form').addEventListener('submit', enterLobbyFromTitle);
-  app.querySelector('[data-action="random-name"]').addEventListener('click', generateTitleName);
-  app.querySelector('[data-action="toggle-sound"]').addEventListener('click', toggleSound);
-  app.querySelector('[data-action="toggle-boil"]').addEventListener('click', toggleBoil);
-  mountTitleVolumeSliders(app.querySelectorAll('.title-volume-slider'));
-  startOnlineStatusPolling();
-  mountSpriteRenderers(app.querySelectorAll('.sprite-canvas'));
-  app.querySelector('.title-name-input')?.focus();
-
-  if (ENABLE_TITLE_ALERT_SHOWCASE && !hasShownTitleAlertShowcase) {
-    hasShownTitleAlertShowcase = true;
-    alertSystem.show(TITLE_ALERT_SHOWCASE);
-  }
 }
 
 function renderTutorialScreen() {
@@ -3349,94 +2959,25 @@ function shouldShowTutorialMoveButtons() {
     || tutorialStageMode === 'tips';
 }
 
-function renderOpponentSelectScreen() {
-  requestMusicTrack('title');
-  const pageVariants = getVariantSelectPageVariants();
-
-  app.innerHTML = `
-    <section class="title-screen opponent-select-screen" aria-label="Choose variant">
-      ${renderOpenCurtainBorder()}
-
-      <canvas
-        class="sprite-canvas pick-variant-header"
-        data-doodle-file="pick_variant_sheet.webp"
-        data-frame-width="${PICK_VARIANT_FRAME_WIDTH}"
-        data-frame-height="${PICK_VARIANT_FRAME_HEIGHT}"
-        width="${PICK_VARIANT_FRAME_WIDTH}"
-        height="${PICK_VARIANT_FRAME_HEIGHT}"
-        aria-label="Pick variant"
-      ></canvas>
-
-      <div class="variant-actions">
-        ${pageVariants.map((variant, index) => renderVariantButton(variant, index + 1)).join('')}
-        ${renderBackButton()}
-      </div>
-      ${renderVariantPageControls()}
-    </section>
-  `;
-
-  app.querySelectorAll('[data-variant]').forEach((button) => {
-    button.addEventListener('pointerdown', (event) => {
-      if (event.button > 0) {
-        return;
-      }
-      showVariantDetail(button.dataset.variant, button);
-    });
-    button.addEventListener('click', () => showVariantDetail(button.dataset.variant, button));
-  });
-  app.querySelectorAll('[data-action="variant-difficulty-toggle"]').forEach((button) => {
-    button.addEventListener('pointerdown', (event) => {
-      event.stopPropagation();
-    });
-    button.addEventListener('click', toggleVariantDifficultyVisual);
-  });
-  app.querySelector('[data-action="back-title"]').addEventListener('click', returnToLobbyFromOpponentSelect);
-  app.querySelector('[data-action="variant-page-prev"]')?.addEventListener('click', () => changeVariantSelectPage(-1));
-  app.querySelector('[data-action="variant-page-next"]')?.addEventListener('click', () => changeVariantSelectPage(1));
-  mountSpriteRenderers(app.querySelectorAll('.sprite-canvas'));
-}
-
-function getVariantSelectPageCount() {
-  return Math.max(1, Math.ceil(COMPUTER_VARIANTS.length / VARIANT_SELECT_PAGE_SIZE));
-}
-
-function getVariantSelectPageVariants() {
-  const pageCount = getVariantSelectPageCount();
-  variantSelectPage = Math.max(0, Math.min(pageCount - 1, variantSelectPage));
-  const start = variantSelectPage * VARIANT_SELECT_PAGE_SIZE;
-  return COMPUTER_VARIANTS.slice(start, start + VARIANT_SELECT_PAGE_SIZE);
-}
-
-function getVariantSelectSlot(variantId) {
-  const pageIndex = COMPUTER_VARIANTS.findIndex((variant) => variant.id === variantId);
-  return pageIndex < 0 ? 1 : (pageIndex % VARIANT_SELECT_PAGE_SIZE) + 1;
-}
-
-function changeVariantSelectPage(direction) {
-  const pageCount = getVariantSelectPageCount();
-  variantSelectPage = (variantSelectPage + direction + pageCount) % pageCount;
-  renderOpponentSelectScreen();
-}
-
 async function showVariantDetail(variantId, sourceButton) {
   if (isTransitioning || variantDetailMenu) {
     return;
   }
 
-  const variant = getComputerVariant(variantId);
-  const selectedButton = promoteVariantButton(sourceButton);
+  const variant = variantSelectScreen.getVariant(variantId);
+  const selectedButton = variantSelectScreen.promoteButton(sourceButton);
   isTransitioning = true;
   const curtain = await closeCurtainWipe(app, playCurtainCloseAudio);
 
   if (screen !== 'opponent-select') {
-    restoreVariantButton(selectedButton);
+    variantSelectScreen.restoreButton(selectedButton);
     curtain.remove();
     isTransitioning = false;
     return;
   }
 
   app.classList.add('variant-detail-open');
-  const overlay = renderVariantDetailOverlay(variant, playSelectedVariant, {
+  const overlay = variantSelectScreen.renderDetailOverlay(variant, playSelectedVariant, {
     slot: Number(selectedButton.dataset.variantSlot),
   });
   variantDetailMenu = { curtain, overlay, selectedButton, mode: 'local' };
@@ -3448,20 +2989,20 @@ async function showRankedVariantDetail(variantId, sourceButton) {
     return;
   }
 
-  const variant = getComputerVariant(variantId);
-  const selectedButton = promoteVariantButton(sourceButton);
+  const variant = variantSelectScreen.getVariant(variantId);
+  const selectedButton = variantSelectScreen.promoteButton(sourceButton);
   isTransitioning = true;
   await onlineFlowDirector.cover();
 
   if (playMode !== 'online' || rankedSnapshot?.phase !== 'variantSelection') {
-    restoreVariantButton(selectedButton);
+    variantSelectScreen.restoreButton(selectedButton);
     await onlineFlowDirector.reveal();
     isTransitioning = false;
     return;
   }
 
   app.classList.add('variant-detail-open');
-  const overlay = renderVariantDetailOverlay(variant, confirmRankedVariantPick, {
+  const overlay = variantSelectScreen.renderDetailOverlay(variant, confirmRankedVariantPick, {
     actionDoodle: 'select_button',
     slot: Number(selectedButton.dataset.variantSlot),
   });
@@ -3469,212 +3010,6 @@ async function showRankedVariantDetail(variantId, sourceButton) {
   selectedButton.classList.add('online-flow-foreground');
   variantDetailMenu = { curtain: null, overlay, selectedButton, mode: 'online' };
   isTransitioning = false;
-}
-
-function promoteVariantButton(button) {
-  button.classList.add('variant-button-above-curtain');
-  return button;
-}
-
-function restoreVariantButton(button) {
-  app.classList.remove('variant-detail-open');
-  button?.classList.remove('variant-button-above-curtain');
-}
-
-function renderVariantDetailOverlay(variant, onPlay, {
-  actionDoodle = 'variant_play_button',
-  slot = getVariantSelectSlot(variant.id),
-} = {}) {
-  const overlay = document.createElement('div');
-  overlay.className = `variant-detail-overlay variant-detail-${variant.id} variant-detail-slot-${slot}`;
-  overlay.innerHTML = `
-
-    <div class="variant-detail-copy" role="dialog" aria-modal="true" aria-label="${escapeHtml(variant.name)} rules">
-      ${renderVariantDetailCopy(variant)}
-    </div>
-
-    <div class="variant-detail-actions">
-      <button class="variant-detail-action" data-action="variant-back" type="button" aria-label="Back">
-        <canvas
-          class="sprite-canvas variant-detail-action-art"
-          data-doodle="back_button_w"
-          data-frame-width="${TITLE_BUTTON_FRAME_WIDTH}"
-          data-frame-height="${TITLE_BUTTON_FRAME_HEIGHT}"
-          width="${TITLE_BUTTON_FRAME_WIDTH}"
-          height="${TITLE_BUTTON_FRAME_HEIGHT}"
-          aria-hidden="true"
-        ></canvas>
-      </button>
-      <button class="variant-detail-action" data-action="variant-play" type="button" aria-label="Play ${escapeHtml(variant.name)}">
-        <canvas
-          class="sprite-canvas variant-detail-action-art"
-          data-doodle="${actionDoodle}"
-          data-frame-width="${TITLE_BUTTON_FRAME_WIDTH}"
-          data-frame-height="${TITLE_BUTTON_FRAME_HEIGHT}"
-          width="${TITLE_BUTTON_FRAME_WIDTH}"
-          height="${TITLE_BUTTON_FRAME_HEIGHT}"
-          aria-hidden="true"
-        ></canvas>
-      </button>
-    </div>
-  `;
-
-  app.append(overlay);
-  overlay.querySelector('[data-action="variant-play"]').addEventListener('click', () => onPlay(variant.id));
-  overlay.querySelector('[data-action="variant-back"]').addEventListener('click', closeVariantDetail);
-  mountSpriteRenderers(app.querySelectorAll('.sprite-canvas'));
-  overlay.querySelector('[data-action="variant-play"]').focus();
-  return overlay;
-}
-
-function renderVariantDetailCopy(variant) {
-  return (variant.copy ?? [])
-    .map((line, index) => `<p class="${index === 0 ? 'lead' : ''}">${renderVariantDetailCopyLine(line, index)}</p>`)
-    .join('');
-}
-
-function renderVariantDetailCopyLine(line, index) {
-  if (index !== 0) {
-    return escapeHtml(line);
-  }
-
-  const sentenceEnd = String(line).indexOf('.');
-
-  if (sentenceEnd < 0) {
-    return `<span class="lead-sentence">${escapeHtml(line)}</span>`;
-  }
-
-  const leadSentence = String(line).slice(0, sentenceEnd + 1);
-  const followup = String(line).slice(sentenceEnd + 1);
-  return `<span class="lead-sentence">${escapeHtml(leadSentence)}</span>${escapeHtml(followup)}`;
-}
-
-function getComputerVariant(variantId) {
-  return COMPUTER_VARIANTS.find((variant) => variant.id === variantId) ?? COMPUTER_VARIANTS[0];
-}
-
-function renderOpenCurtainBorder() {
-  return `
-    <canvas
-      class="sprite-canvas curtain-border"
-      data-doodle="curtains/curtains-open"
-      data-frame-width="${FRAME_WIDTH}"
-      data-frame-height="${FRAME_HEIGHT}"
-      width="${FRAME_WIDTH}"
-      height="${FRAME_HEIGHT}"
-      aria-hidden="true"
-    ></canvas>
-  `;
-}
-
-function renderBackButton() {
-  return `
-    <button class="opponent-button back-button" data-action="back-title" aria-label="Back">
-      <canvas
-        class="sprite-canvas opponent-button-art"
-        data-doodle="back_button_w"
-        data-frame-width="${TITLE_BUTTON_FRAME_WIDTH}"
-        data-frame-height="${TITLE_BUTTON_FRAME_HEIGHT}"
-        width="${TITLE_BUTTON_FRAME_WIDTH}"
-        height="${TITLE_BUTTON_FRAME_HEIGHT}"
-        aria-hidden="true"
-      ></canvas>
-    </button>
-  `;
-}
-
-function renderVariantButton(variant, slot, {
-  className = '',
-  dataAttribute = 'data-variant',
-  disabled = false,
-  content = null,
-} = {}) {
-  const difficultyToggle = content ?? (variant.id === VARIANT_IDS.rockPaperScissors
-    ? ''
-    : `
-      <span
-        class="variant-difficulty-toggle"
-        data-action="variant-difficulty-toggle"
-      >
-        <canvas
-          class="sprite-canvas variant-difficulty-toggle-art"
-          data-doodle="${getVariantDifficultyToggleDoodle()}"
-          data-frame-width="${VARIANT_DIFFICULTY_TOGGLE_FRAME_WIDTH}"
-          data-frame-height="${VARIANT_DIFFICULTY_TOGGLE_FRAME_HEIGHT}"
-          width="${VARIANT_DIFFICULTY_TOGGLE_FRAME_WIDTH}"
-          height="${VARIANT_DIFFICULTY_TOGGLE_FRAME_HEIGHT}"
-          aria-hidden="true"
-        ></canvas>
-      </span>
-    `);
-
-  return `
-    <button
-      class="variant-button variant-slot-${slot} ${className}"
-      ${dataAttribute}="${variant.id}"
-      data-variant-slot="${slot}"
-      aria-label="${escapeHtml(variant.name)}"
-      ${disabled ? 'disabled' : ''}
-    >
-      <canvas
-        class="sprite-canvas variant-button-art"
-        data-doodle="${variant.buttonDoodle}"
-        data-frame-width="${VARIANT_BUTTON_FRAME_WIDTH}"
-        data-frame-height="${VARIANT_BUTTON_FRAME_HEIGHT}"
-        width="${VARIANT_BUTTON_FRAME_WIDTH}"
-        height="${VARIANT_BUTTON_FRAME_HEIGHT}"
-        aria-hidden="true"
-      ></canvas>
-      ${difficultyToggle}
-    </button>
-  `;
-}
-
-function getVariantDifficultyToggleDoodle() {
-  return variantDifficultyToggleState === 'hard' ? 'easy_hard_toggle-hard' : 'easy_hard_toggle-easy';
-}
-
-function toggleVariantDifficultyVisual(event) {
-  event.preventDefault();
-  event.stopPropagation();
-  variantDifficultyToggleState = variantDifficultyToggleState === 'hard' ? 'easy' : 'hard';
-  app.querySelectorAll('.variant-difficulty-toggle-art').forEach((canvas) => {
-    canvas.dataset.doodle = getVariantDifficultyToggleDoodle();
-  });
-  mountSpriteRenderers(app.querySelectorAll('.sprite-canvas'));
-}
-
-function renderVariantPageControls() {
-  if (getVariantSelectPageCount() <= 1) {
-    return '';
-  }
-
-  return `
-    <div class="variant-page-controls">
-      <button class="variant-page-button" data-action="variant-page-prev" type="button" aria-label="Previous page">
-        <canvas
-          class="sprite-canvas variant-page-button-art"
-          data-doodle="Prev_slide_button"
-          data-frame-width="${TITLE_BUTTON_FRAME_WIDTH}"
-          data-frame-height="${TITLE_BUTTON_FRAME_HEIGHT}"
-          width="${TITLE_BUTTON_FRAME_WIDTH}"
-          height="${TITLE_BUTTON_FRAME_HEIGHT}"
-          aria-hidden="true"
-        ></canvas>
-      </button>
-      <button class="variant-page-button" data-action="variant-page-next" type="button" aria-label="Next page">
-        <canvas
-          class="sprite-canvas variant-page-button-art"
-          data-doodle="next_slide_button"
-          data-frame-width="${TITLE_BUTTON_FRAME_WIDTH}"
-          data-frame-height="${TITLE_BUTTON_FRAME_HEIGHT}"
-          width="${TITLE_BUTTON_FRAME_WIDTH}"
-          height="${TITLE_BUTTON_FRAME_HEIGHT}"
-          aria-hidden="true"
-        ></canvas>
-      </button>
-    </div>
-  `;
 }
 
 function renderStageHud() {
@@ -4600,14 +3935,14 @@ async function closeVariantDetail() {
   isTransitioning = true;
   menu.overlay.remove();
   if (menu.mode === 'online' && rankedSnapshot?.phase === 'variantSelection') {
-    restoreVariantButton(menu.selectedButton);
+    variantSelectScreen.restoreButton(menu.selectedButton);
     onlineFlowDirector.consumeAnimations();
     renderRankedBanScreen();
     await onlineFlowDirector.reveal();
   } else {
     await openCurtainWipe(menu.curtain, playCurtainOpenAudio);
   }
-  restoreVariantButton(menu.selectedButton);
+  variantSelectScreen.restoreButton(menu.selectedButton);
   mountSpriteRenderers(app.querySelectorAll('.sprite-canvas'));
   isTransitioning = false;
 }
@@ -4691,7 +4026,7 @@ async function playSelectedVariant(variantId) {
   variantDetailMenu = null;
   isTransitioning = true;
   menu.overlay.remove();
-  restoreVariantButton(menu.selectedButton);
+  variantSelectScreen.restoreButton(menu.selectedButton);
   selectedVariantId = COMPUTER_VARIANT_IDS.includes(variantId) ? variantId : DEFAULT_VARIANT_ID;
   await setActiveGameLayoutForVariant(selectedVariantId);
   playMode = 'local';
