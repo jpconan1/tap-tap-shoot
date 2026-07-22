@@ -1,4 +1,5 @@
 import { getGameFlowPolicy } from './gameFlowPolicies.js';
+import { getPostTurnAction } from '../engine/matchEngine.js';
 
 export class GameFlowDirector {
   constructor({ playSuper, waitBeats, showResult, advanceRound }) {
@@ -19,9 +20,14 @@ export class GameFlowDirector {
       if (runId !== this.runId) return false;
     }
 
-    if (!roundFinished) return runId === this.runId;
+    const action = getPostTurnAction({
+      roundFinished,
+      gameFinished: resultLevel !== 'round',
+      autoAdvanceRound: policy.autoAdvanceRound,
+    });
+    if (action === 'continue-turn') return runId === this.runId;
 
-    if (resultLevel === 'round' && policy.autoAdvanceRound) {
+    if (action === 'advance-round') {
       await this.effects.advanceRound?.({ preserveReveal: true });
       return runId === this.runId;
     }

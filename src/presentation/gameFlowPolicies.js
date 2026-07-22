@@ -1,5 +1,6 @@
+import { shouldAutoAdvanceRound } from '../engine/matchRules.js';
+
 const DEFAULT_POLICY = Object.freeze({
-  autoAdvanceRound: false,
   readyScene: 'split',
   roundResult: 'overlay',
   super: false,
@@ -8,7 +9,6 @@ const DEFAULT_POLICY = Object.freeze({
 const POLICIES = Object.freeze({
   rockPaperScissors: Object.freeze({
     ...DEFAULT_POLICY,
-    autoAdvanceRound: true,
     roundResult: 'persist-reveal',
   }),
   fireballWar: Object.freeze({
@@ -18,9 +18,11 @@ const POLICIES = Object.freeze({
 });
 
 export function getGameFlowPolicy(variantId) {
-  return POLICIES[variantId] ?? DEFAULT_POLICY;
+  const presentation = POLICIES[variantId] ?? DEFAULT_POLICY;
+  return {
+    ...presentation,
+    autoAdvanceRound: shouldAutoAdvanceRound(variantId),
+  };
 }
 
-export function shouldAutoAdvanceRound(variantId) {
-  return getGameFlowPolicy(variantId).autoAdvanceRound;
-}
+export { shouldAutoAdvanceRound } from '../engine/matchRules.js';

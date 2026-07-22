@@ -3,6 +3,7 @@ import test from 'node:test';
 
 import { GameFlowDirector } from '../src/presentation/gameFlowDirector.js';
 import { getGameFlowPolicy } from '../src/presentation/gameFlowPolicies.js';
+import { getMatchRules } from '../src/engine/matchRules.js';
 
 function createDirector(log) {
   return new GameFlowDirector({
@@ -24,6 +25,7 @@ test('RPS preserves reveal and immediately advances ordinary rounds', async () =
   await createDirector(log).reveal({ variantId: 'rockPaperScissors', roundFinished: true });
   assert.deepEqual(log, ['advance:true']);
   assert.equal(getGameFlowPolicy('rockPaperScissors').roundResult, 'persist-reveal');
+  assert.equal(getMatchRules('rockPaperScissors').autoAdvanceRound, true);
 });
 
 test('RPS still shows game and match results', async () => {

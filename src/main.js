@@ -9,7 +9,9 @@ import {
   getVariantStartResource,
   getVariantTargetRoundWins,
 } from './engine/moves.js';
-import { createRoundState, getPlayerLegalMoves, getPlayerResource, playTurn } from './engine/gameState.js';
+import { createRoundState, getPlayerLegalMoves, getPlayerResource } from './engine/gameState.js';
+import { resolveLocalTurn } from './engine/localMatch.js';
+import { getGameWinner as getEngineGameWinner, getResultLevel, isGameOver as isEngineGameOver, resolveRoundTimeout, startNextRound } from './engine/matchEngine.js';
 import { resolveTurn } from './engine/resolveTurn.js';
 import { chooseRivalMove as chooseAiMove } from './engine/rivalAi.js';
 import {
@@ -47,6 +49,7 @@ import { GameFlowDirector } from './presentation/gameFlowDirector.js';
 import { createTitleScreen } from './presentation/titleScreen.js';
 import { createVariantSelectScreen } from './presentation/variantSelectScreen.js';
 import { createLobbyScreen } from './presentation/lobbyScreen.js';
+import { createRankedScreens } from './presentation/rankedScreens.js';
 import { getResourcePresentation, shouldShowPickHistoryForVariant } from './variantPresentation.js';
 import { resolveReadyScene, resolveScene, swapScenePerspective } from './sceneResolver.js';
 import { VARIANT_SELECT_PAGE_SIZE, VARIANT_SELECT_VARIANTS } from './variantSelectConfig.js';
@@ -79,6 +82,7 @@ import {
 import { createAlertSystem } from './alertSystem.js';
 import { createLayoutLoader, DEFAULT_LAYOUT_STATE_ID } from './layoutLoader.js';
 import { createLobbyWhiteboard, LOBBY_BOARD_COLORS } from './lobbyWhiteboard.js';
+import { LocalTurnController } from './localTurnController.js';
 
 const BEAT_MS = 750;
 const BAN_ANIMATION_DURATION_MS = 7 * 58;
@@ -101,12 +105,6 @@ const MOVE_ICON_FRAME_WIDTH = 128;
 const MOVE_ICON_FRAME_HEIGHT = 128;
 const TITLE_BUTTON_FRAME_WIDTH = 256;
 const TITLE_BUTTON_FRAME_HEIGHT = 128;
-const VARIANT_BUTTON_FRAME_WIDTH = 325;
-const VARIANT_BUTTON_FRAME_HEIGHT = 128;
-const ONLINE_HEADER_FRAME_WIDTH = 1518;
-const ONLINE_HEADER_FRAME_HEIGHT = 512;
-const BAN_HEADER_FRAME_WIDTH = 910;
-const BAN_HEADER_FRAME_HEIGHT = 512;
 const TUTORIAL_MAIN_SLIDE_COUNT = 6;
 const TUTORIAL_REVEAL_SLIDE_INDEX = 5;
 const TUTORIAL_TIPS_SLIDE_COUNT = 3;
@@ -370,7 +368,6 @@ const pausableTimers = new Set();
 let loopToken = 0;
 let turnPhase = 'idle';
 let p1QueuedMove = null;
-let localTurnChoice = null;
 let localRoundTimedOutPlayer = null;
 let rankedSnapshot = null;
 let ignoredRankedMatchId = null;
@@ -428,6 +425,10 @@ const rankedClient = new RankedClient({
   onBoardTrim: handleLobbyBoardTrim,
   onBoardReset: handleLobbyBoardReset,
   onChallenge: handleLobbyChallenge,
+});
+const localTurnController = new LocalTurnController({
+  setTimer: setPausableTimeout,
+  clearTimer: clearPausableTimeout,
 });
 const layoutLoader = createLayoutLoader({
   layoutUrls: VARIANT_LAYOUT_URLS,
@@ -514,6 +515,29 @@ const lobbyScreen = createLobbyScreen({
   onRespondChallenge: (challengeId, accept) => rankedClient.respondChallenge(challengeId, accept),
   onCancelChallenge: (challengeId) => rankedClient.cancelChallenge(challengeId),
   onCloseChallenge: () => { lobbyChallenge = null; lobbyChallengeStatus = null; render(); },
+});
+const rankedScreens = createRankedScreens({
+  app,
+  variants: COMPUTER_VARIANTS,
+  getSnapshot: () => rankedSnapshot,
+  getDisplayName: () => rankedDisplayName,
+  isBanAnimationComplete: (variantId) => completedBanAnimationVariants.has(variantId),
+  markBanAnimationComplete: (variantId) => completedBanAnimationVariants.add(variantId),
+  escapeHtml,
+  getVariant: variantSelectScreen.getVariant,
+  renderVariantButton: variantSelectScreen.renderVariantButton,
+  renderOpenCurtainBorder: variantSelectScreen.renderOpenCurtainBorder,
+  renderStaticDoodle,
+  getWinCounterDoodle,
+  renderSheetButton,
+  mountSpriteRenderers,
+  mountReadyWaitingOverlays,
+  mountBanAnimations,
+  onLeave: leaveRanked,
+  onPickVariant: submitRankedVariantPick,
+  onShowVariantDetail: showRankedVariantDetail,
+  onContinue: submitRankedContinue,
+  onMainMenu: wipeToLobbyFromScoreboard,
 });
 const onlineFlowDirector = new OnlineFlowDirector({
   closeCurtains: (onCreate) => closeCurtainWipe(app, playCurtainCloseAudio, 'online-flow-curtain', onCreate),
@@ -1496,7 +1520,7 @@ function render() {
   }
 
   if (screen === 'scoreboard') {
-    renderScoreboardScreen();
+    rankedScreens.renderScoreboard();
     return;
   }
 
@@ -1508,7 +1532,7 @@ function render() {
   const legalMoves = new Set(getCurrentLegalMoves());
 
   if (playMode === 'online' && rankedSnapshot?.phase === 'variantSelection') {
-    renderRankedBanScreen();
+    rankedScreens.renderVariantSelection();
     return;
   }
 
@@ -1563,179 +1587,6 @@ function render() {
   maybeStartComputerTurnChoice();
 }
 
-function renderRankedBanScreen() {
-  const picks = rankedSnapshot.variantPicks ?? rankedSnapshot.bans ?? {};
-  const pickedVariants = new Set(Object.values(picks));
-  const bannedVariants = new Set(rankedSnapshot.bannedVariants ?? []);
-  const playerPick = picks[rankedSnapshot.playerKey];
-  const variants = getRankedVariantSelectVariants();
-  const isTiebreakerBan = rankedSnapshot.variantSelectionRound === 2;
-  const firstPickedVariant = picks[rankedSnapshot.variantPickOrder?.[0]];
-  const headerDoodle = isTiebreakerBan
-    ? 'header-ban-variant_sheet.webp'
-    : firstPickedVariant
-    ? 'header-second-variant_sheet.webp'
-    : 'header-first-variant_sheet.webp';
-  const headerWidth = isTiebreakerBan ? BAN_HEADER_FRAME_WIDTH : ONLINE_HEADER_FRAME_WIDTH;
-
-  app.innerHTML = `
-    <section class="title-screen opponent-select-screen variant-ban-screen ${isTiebreakerBan ? 'tiebreaker-ban-stage' : ''}" aria-label="${isTiebreakerBan ? 'Ban variant' : 'Pick variant'}">
-      ${variantSelectScreen.renderOpenCurtainBorder()}
-
-      <canvas
-        class="sprite-canvas pick-variant-header online-stage-header"
-        data-doodle-file="${headerDoodle}"
-        data-frame-width="${headerWidth}"
-        data-frame-height="${isTiebreakerBan ? BAN_HEADER_FRAME_HEIGHT : ONLINE_HEADER_FRAME_HEIGHT}"
-        width="${headerWidth}"
-        height="${isTiebreakerBan ? BAN_HEADER_FRAME_HEIGHT : ONLINE_HEADER_FRAME_HEIGHT}"
-        aria-label="${isTiebreakerBan ? 'Ban variant' : 'Pick variant'}"
-      ></canvas>
-
-      <div class="variant-actions">
-        ${variants.map((variant, index) => renderRankedVariantPickButton({
-          variant,
-          slot: index + 1,
-          disabled: Boolean(playerPick) || pickedVariants.has(variant.id) || bannedVariants.has(variant.id),
-          picked: pickedVariants.has(variant.id),
-          banned: bannedVariants.has(variant.id),
-          firstPicked: firstPickedVariant === variant.id,
-          isTiebreakerBan,
-        })).join('')}
-        ${renderRankedQuitButton()}
-      </div>
-      ${isTiebreakerBan && rankedSnapshot.variantPickOrder?.[0] === rankedSnapshot.playerKey
-        ? '<div class="tiebreaker-ban-waiting">Waiting for your opponent</div>'
-        : ''}
-    </section>
-  `;
-
-  app.querySelector('[data-action="quit"]')?.addEventListener('click', leaveRanked);
-  app.querySelectorAll('[data-pick-variant]').forEach((button) => {
-    button.addEventListener('click', () => {
-      if (isTiebreakerBan) submitRankedVariantPick(button.dataset.pickVariant);
-      else showRankedVariantDetail(button.dataset.pickVariant, button);
-    });
-  });
-  mountSpriteRenderers(app.querySelectorAll('.sprite-canvas'));
-  mountReadyWaitingOverlays(app.querySelectorAll('.ranked-variant-ready'));
-  app.querySelectorAll('.ranked-ban-animation').forEach((canvas) => {
-    canvas.addEventListener('ban-animation-complete', () => {
-      completedBanAnimationVariants.add(canvas.dataset.variantId);
-    }, { once: true });
-  });
-  mountBanAnimations(app.querySelectorAll('.ranked-ban-animation'));
-}
-
-function renderScoreboardScreen() {
-  const localName = rankedSnapshot?.players?.[rankedSnapshot.playerKey]?.displayName ?? rankedDisplayName;
-  const opponentName = rankedSnapshot?.players?.[rankedSnapshot.opponentKey]?.displayName ?? 'Opponent';
-  const pickedVariantIds = (rankedSnapshot?.variantPickOrder ?? [])
-    .map((playerKey) => rankedSnapshot?.variantPicks?.[playerKey])
-    .filter(Boolean);
-  const completedVariantIds = (rankedSnapshot?.gameResults ?? [])
-    .map((result) => result.variantId)
-    .filter(Boolean);
-  const orderedVariantIds = completedVariantIds.length >= 2
-    ? completedVariantIds
-    : pickedVariantIds;
-  const [firstVariantId, secondVariantId] = orderedVariantIds.length >= 2
-    ? orderedVariantIds
-    : rankedSnapshot?.remainingVariants ?? [];
-  const firstVariant = variantSelectScreen.getVariant(firstVariantId);
-  const secondVariant = variantSelectScreen.getVariant(secondVariantId);
-  const firstScore = getScoreboardVariantScore(firstVariantId);
-  const secondScore = getScoreboardVariantScore(secondVariantId);
-  const tiebreakerResult = rankedSnapshot?.gameResults?.[2] ?? null;
-  const readyPlayerId = rankedSnapshot?.readyPlayerKey === rankedSnapshot?.playerKey ? 'p1'
-    : rankedSnapshot?.readyPlayerKey === rankedSnapshot?.opponentKey ? 'p2'
-      : null;
-  app.innerHTML = `
-    <section class="online-interstitial scoreboard-stage" aria-label="Scoreboard">
-      ${variantSelectScreen.renderOpenCurtainBorder()}
-      <div class="scoreboard-name scoreboard-name-left">
-        ${escapeHtml(localName)}
-      </div>
-      <div class="scoreboard-name scoreboard-name-right">
-        ${escapeHtml(opponentName)}
-        ${renderScoreboardReady(readyPlayerId === 'p2')}
-      </div>
-      ${renderStaticDoodle('header-scoreboard', 1214, 256, 'scoreboard-header')}
-      ${renderStaticDoodle('scoreboard', 960, 540, 'scoreboard-board')}
-      <div class="scoreboard-games">
-        <div class="scoreboard-game-row">
-          ${renderScoreboardWinCounter(firstVariantId, firstScore.p1)}
-          ${renderStaticDoodle(firstVariant.buttonDoodle, VARIANT_BUTTON_FRAME_WIDTH, VARIANT_BUTTON_FRAME_HEIGHT, 'scoreboard-variant-button')}
-          ${renderScoreboardWinCounter(firstVariantId, firstScore.p2)}
-        </div>
-        <div class="scoreboard-game-row">
-          ${renderScoreboardWinCounter(secondVariantId, secondScore.p1)}
-          ${renderStaticDoodle(secondVariant.buttonDoodle, VARIANT_BUTTON_FRAME_WIDTH, VARIANT_BUTTON_FRAME_HEIGHT, 'scoreboard-variant-button')}
-          ${renderScoreboardWinCounter(secondVariantId, secondScore.p2)}
-        </div>
-        ${renderScoreboardTiebreaker(tiebreakerResult)}
-      </div>
-      ${renderScoreboardAction(readyPlayerId === 'p1')}
-      ${rankedSnapshot?.phase !== 'gameOver' && readyPlayerId === 'p1'
-        ? '<div class="scoreboard-waiting-message">Waiting for your opponent</div>'
-        : ''}
-    </section>
-  `;
-  app.querySelector('[data-action="continue"]')?.addEventListener('click', submitRankedContinue);
-  app.querySelector('[data-action="main-menu"]')?.addEventListener('click', wipeToLobbyFromScoreboard);
-  mountSpriteRenderers(app.querySelectorAll('.sprite-canvas'));
-  mountReadyWaitingOverlays(app.querySelectorAll('.scoreboard-ready'));
-}
-
-function renderScoreboardTiebreaker(tiebreakerResult) {
-  if (tiebreakerResult) {
-    const variantId = tiebreakerResult.variantId;
-    const variant = variantSelectScreen.getVariant(variantId);
-    const score = getScoreboardVariantScore(variantId);
-    return `
-      <div class="scoreboard-game-row">
-        ${renderScoreboardWinCounter(variantId, score.p1)}
-        ${renderStaticDoodle(variant.buttonDoodle, VARIANT_BUTTON_FRAME_WIDTH, VARIANT_BUTTON_FRAME_HEIGHT, 'scoreboard-variant-button')}
-        ${renderScoreboardWinCounter(variantId, score.p2)}
-      </div>
-    `;
-  }
-
-  return rankedSnapshot?.phase === 'gameOver'
-    ? ''
-    : renderStaticDoodle('tie_breaker_button', 325, 128, 'scoreboard-tiebreaker');
-}
-
-function renderScoreboardReady(show) {
-  return show
-    ? '<canvas class="scoreboard-ready" width="300" height="256" aria-hidden="true"></canvas>'
-    : '';
-}
-
-function renderScoreboardAction(isLocalReady) {
-  if (rankedSnapshot?.phase === 'gameOver') {
-    return `
-      <div class="scoreboard-next-variant-wrap">
-        ${renderSheetButton('main-menu', 'main_menu_button', 'Main menu', 'scoreboard-next-variant')}
-      </div>
-    `;
-  }
-
-  if (!rankedSnapshot?.pendingNextVariant && !rankedSnapshot?.pendingTiebreaker) {
-    return '';
-  }
-
-  return `
-    <div class="scoreboard-next-variant-wrap ${isLocalReady ? 'is-ready' : ''}">
-      ${isLocalReady
-        ? '<canvas class="scoreboard-ready scoreboard-next-ready" width="300" height="256" aria-hidden="true"></canvas>'
-        : rankedSnapshot.pendingTiebreaker
-          ? renderSheetButton('continue', 'tiebreaker_button', 'Tiebreaker', 'scoreboard-next-variant')
-          : renderSheetButton('continue', 'next_variant_button', 'Next variant', 'scoreboard-next-variant')}
-    </div>
-  `;
-}
-
 async function showFinalRankedScoreboard() {
   if (isTransitioning) return;
   isTransitioning = true;
@@ -1754,67 +1605,6 @@ async function wipeToLobbyFromScoreboard() {
     previousPhase: rankedSnapshot?.phase,
   });
   isTransitioning = false;
-}
-
-function getScoreboardVariantScore(variantId) {
-  const result = rankedSnapshot?.gameResults?.find((gameResult) => gameResult.variantId === variantId);
-  return {
-    p1: result?.roundWins?.[rankedSnapshot.playerKey] ?? 0,
-    p2: result?.roundWins?.[rankedSnapshot.opponentKey] ?? 0,
-  };
-}
-
-function renderScoreboardWinCounter(variantId, wins) {
-  return renderStaticDoodle(getWinCounterDoodle(variantId, wins), 64, 64, 'scoreboard-win-counter');
-}
-
-function getRankedVariantSelectVariants() {
-  const rankedVariants = rankedSnapshot?.variants ?? [];
-  return rankedVariants
-    .map((rankedVariant) => COMPUTER_VARIANTS.find((variant) => variant.id === rankedVariant.id) ?? {
-      id: rankedVariant.id,
-      name: rankedVariant.label,
-      buttonDoodle: variantSelectScreen.getVariant(rankedVariant.id).buttonDoodle,
-    })
-    .filter(Boolean);
-}
-
-function renderRankedVariantPickButton({ variant, slot, disabled, picked, banned, firstPicked, isTiebreakerBan }) {
-  const showSettledBan = isTiebreakerBan && (banned || completedBanAnimationVariants.has(variant.id));
-  const showBanAnimation = isTiebreakerBan && picked && !showSettledBan;
-  return variantSelectScreen.renderVariantButton(variant, slot, {
-    className: `ranked-variant-pick ${picked ? 'picked' : ''} ${banned ? 'banned' : ''} ${isTiebreakerBan ? 'tiebreaker-ban' : ''}`,
-    dataAttribute: 'data-pick-variant',
-    disabled,
-    content: showSettledBan
-      ? renderStaticDoodle('ban-animation/x', 300, 256, 'ranked-ban-mark')
-      : showBanAnimation
-        ? `<canvas class="ranked-ban-animation" data-variant-id="${variant.id}" width="300" height="256" aria-hidden="true"></canvas>`
-        : firstPicked ? `
-        <canvas
-          class="ranked-variant-ready"
-          width="300"
-          height="256"
-          aria-hidden="true"
-        ></canvas>
-      ` : '',
-  });
-}
-
-function renderRankedQuitButton() {
-  return `
-    <button class="opponent-button back-button" data-action="quit" aria-label="Back">
-      <canvas
-        class="sprite-canvas opponent-button-art"
-        data-doodle="back_button_w"
-        data-frame-width="${TITLE_BUTTON_FRAME_WIDTH}"
-        data-frame-height="${TITLE_BUTTON_FRAME_HEIGHT}"
-        width="${TITLE_BUTTON_FRAME_WIDTH}"
-        height="${TITLE_BUTTON_FRAME_HEIGHT}"
-        aria-hidden="true"
-      ></canvas>
-    </button>
-  `;
 }
 
 function renderLayoutGameScreen(legalMoves) {
@@ -2430,13 +2220,13 @@ function getActiveReadyWaiting() {
   if (
     isLocalChoiceMode()
     && turnPhase === 'scene'
-    && localTurnChoice?.readyPlayerId
-    && (localTurnChoice.phase === 'safe' || localTurnChoice.phase === 'countdown')
+    && localTurnController.choice?.readyPlayerId
+    && (localTurnController.choice.phase === 'safe' || localTurnController.choice.phase === 'countdown')
   ) {
     return {
-      phase: localTurnChoice.phase,
-      readyPlayerId: localTurnChoice.readyPlayerId,
-      waitingPlayerId: localTurnChoice.waitingPlayerId,
+      phase: localTurnController.choice.phase,
+      readyPlayerId: localTurnController.choice.readyPlayerId,
+      waitingPlayerId: localTurnController.choice.waitingPlayerId,
     };
   }
 
@@ -3054,7 +2844,7 @@ function renderComputerDebugLine(playerId) {
     return '';
   }
 
-  const queuedMove = localTurnChoice?.moves?.p2;
+  const queuedMove = localTurnController.choice?.moves?.p2;
   const lastComputerMove = state.history[0]?.p2Move ?? null;
   const debugMove = queuedMove || lastComputerMove;
 
@@ -3293,7 +3083,7 @@ function renderTestOpponentControls() {
   }
 
   const legalMoves = new Set(getPlayerLegalMoves(state, 'p2'));
-  const selectedMove = localTurnChoice?.moves.p2;
+  const selectedMove = localTurnController.choice?.moves.p2;
   const canChooseMove = turnPhase === 'scene'
     && state.status === 'playing'
     && !isTransitioning
@@ -3359,12 +3149,8 @@ function submitMove(p1Move) {
 
 function queueLocalPlayerMove(p1Move) {
   const choice = getOrCreateLocalTurnChoice();
-
-  if (!choice || choice.moves.p1) {
-    return;
-  }
-
-  choice.moves.p1 = p1Move;
+  const command = localTurnController.submitMove('p1', p1Move, getCurrentLegalMoves());
+  if (!choice || !['waiting', 'complete'].includes(command.status)) return;
   p1QueuedMove = p1Move;
   handleLocalMoveQueued('p1');
 }
@@ -3401,42 +3187,17 @@ function submitTestOpponentMove(p2Move) {
 
 function queueTestOpponentMove(p2Move) {
   const choice = getOrCreateLocalTurnChoice();
-
-  if (!choice || choice.moves.p2) {
-    return;
-  }
-
-  choice.moves.p2 = p2Move;
+  const command = localTurnController.submitMove('p2', p2Move, getPlayerLegalMoves(state, 'p2'));
+  if (!choice || !['waiting', 'complete'].includes(command.status)) return;
   handleLocalMoveQueued('p2');
 }
 
 function getOrCreateLocalTurnChoice() {
   const key = getLocalTurnChoiceKey();
 
-  if (localTurnChoice?.key === key) {
-    return localTurnChoice;
-  }
-
-  clearLocalTurnChoice();
-  localTurnChoice = {
-    key,
-    moves: {
-      p1: null,
-      p2: null,
-    },
-    phase: 'neutral',
-    readyPlayerId: null,
-    waitingPlayerId: null,
-    splitApplied: false,
-    computerTimer: playMode === 'local'
-      ? setPausableTimeout(() => {
-        queueLocalComputerMove();
-      }, COMPUTER_MOVE_DELAY_MS)
-      : null,
-    safeTimer: null,
-    timeoutTimer: null,
-  };
-  return localTurnChoice;
+  return localTurnController.getOrCreate(key, playMode === 'local'
+    ? { computerDelayMs: COMPUTER_MOVE_DELAY_MS, onComputerDue: queueLocalComputerMove }
+    : {});
 }
 
 function getLocalTurnChoiceKey() {
@@ -3451,17 +3212,14 @@ function getLocalTurnChoiceKey() {
 
 function queueLocalComputerMove() {
   const choice = getOrCreateLocalTurnChoice();
-
-  if (!choice || choice.moves.p2) {
-    return;
-  }
-
-  choice.moves.p2 = chooseAiMove(state, Math.random, variantDifficultyToggleState);
+  const moveId = chooseAiMove(state, Math.random, variantDifficultyToggleState);
+  const command = localTurnController.submitMove('p2', moveId, getPlayerLegalMoves(state, 'p2'));
+  if (!choice || !['waiting', 'complete'].includes(command.status)) return;
   handleLocalMoveQueued('p2');
 }
 
 function handleLocalMoveQueued(playerId) {
-  const choice = localTurnChoice;
+  const choice = localTurnController.choice;
 
   if (!choice) {
     return;
@@ -3479,33 +3237,24 @@ function handleLocalMoveQueued(playerId) {
 }
 
 function beginLocalSafePhase(readyPlayerId) {
-  const choice = localTurnChoice;
+  const choice = localTurnController.beginWaiting(readyPlayerId, {
+    safeDurationMs: READY_WAITING_SAFE_PHASE_MS,
+    onSafeElapsed: beginLocalCountdownPhase,
+  });
 
   if (!choice) {
     return;
   }
 
-  choice.phase = 'safe';
-  choice.readyPlayerId = readyPlayerId;
-  choice.waitingPlayerId = readyPlayerId === 'p1' ? 'p2' : 'p1';
-  choice.safeTimer = setPausableTimeout(() => {
-    beginLocalCountdownPhase();
-  }, READY_WAITING_SAFE_PHASE_MS);
   render();
 }
 
 function beginLocalCountdownPhase() {
-  const choice = localTurnChoice;
-
-  if (!choice || !choice.waitingPlayerId || choice.moves[choice.waitingPlayerId]) {
-    return;
-  }
-
-  choice.phase = 'countdown';
-
-  choice.timeoutTimer = setPausableTimeout(() => {
-    loseLocalRoundOnTimeout(choice.waitingPlayerId);
-  }, COUNTDOWN_PHASE_MS);
+  const choice = localTurnController.beginCountdown({
+    durationMs: COUNTDOWN_PHASE_MS,
+    onElapsed: loseLocalRoundOnTimeout,
+  });
+  if (!choice) return;
   render();
 }
 
@@ -3516,7 +3265,7 @@ function handleReadyWaitingSplit() {
     return;
   }
 
-  if (localTurnChoice && choice.readyPlayerId === localTurnChoice.readyPlayerId && localTurnChoice.splitApplied) {
+  if (localTurnController.choice && choice.readyPlayerId === localTurnController.choice.readyPlayerId && localTurnController.choice.splitApplied) {
     return;
   }
 
@@ -3535,8 +3284,8 @@ function handleReadyWaitingSplit() {
     return;
   }
 
-  if (localTurnChoice && choice.readyPlayerId === localTurnChoice.readyPlayerId) {
-    localTurnChoice.splitApplied = true;
+  if (localTurnController.choice && choice.readyPlayerId === localTurnController.choice.readyPlayerId) {
+    localTurnController.choice.splitApplied = true;
   }
 
   stagePresentation = splitPresentation;
@@ -3559,211 +3308,8 @@ function getReadySplitPresentation(readyPlayerId) {
   return resolveReadyScene({ sceneName: scene, readyPlayerId, moves: lastMoves });
 }
 
-function getRpsReadySplitScene(scene) {
-  const prefix = 'rock-paper-scissors/';
-
-  if (!scene.startsWith(prefix)) {
-    return null;
-  }
-
-  const sceneName = scene.slice(prefix.length);
-  const splitSceneName = sceneName === 'scissors-tie' ? 'scissors-draw' : sceneName;
-  return ['rps-standoff', 'rock-draw', 'paper-draw', 'scissors-draw'].includes(splitSceneName)
-    ? splitSceneName
-    : null;
-}
-
-function getFireballWarReadySplitScene(scene) {
-  const prefix = 'fireball-war/';
-
-  if (!scene.startsWith(prefix)) {
-    return null;
-  }
-
-  const sceneName = scene.slice(prefix.length);
-
-  if (sceneName === 'cbf-standoff') {
-    return 'cbf_standoff';
-  }
-
-  if (sceneName === 'both-charge') {
-    return 'charge';
-  }
-
-  return ['block-draw', 'fireball-draw'].includes(sceneName) ? sceneName : null;
-}
-
-function getGunKnifeFistReadySplitPresentation(scene, readyPlayerId) {
-  const prefix = 'gun-knife-fist/';
-
-  if (!scene.startsWith(prefix)) {
-    return null;
-  }
-
-  const sceneName = scene.slice(prefix.length);
-
-  if (sceneName === 'pss-standoff' || ['punch-draw', 'shoot-draw', 'stab-draw'].includes(sceneName)) {
-    return {
-      kind: 'doodle',
-      name: `gun-knife-fist/split_scenes/${sceneName}_${readyPlayerId}_is_ready`,
-      flip: false,
-    };
-  }
-
-  if (sceneName.startsWith('punch-shoot')) {
-    const isPuncherReady = lastMoves[readyPlayerId] === 'punch';
-    return {
-      kind: 'doodle',
-      name: `gun-knife-fist/split_scenes/punch-shoot_${isPuncherReady ? 'puncher' : 'shooter'}_is_ready`,
-      flip: lastMoves.p2 === 'punch',
-    };
-  }
-
-  if (sceneName.startsWith('stab-punch')) {
-    const isStabberReady = lastMoves[readyPlayerId] === 'stab';
-    return {
-      kind: 'doodle',
-      name: `gun-knife-fist/split_scenes/stab-punch_${isStabberReady ? 'stabber' : 'puncher'}_is_ready`,
-      flip: lastMoves.p2 === 'stab',
-    };
-  }
-
-  return null;
-}
-
-function getTapTapShootYReadySplitPresentation(scene, readyPlayerId) {
-  const prefix = 'tap-tap-shoot-y/';
-
-  if (!scene.startsWith(prefix)) {
-    return null;
-  }
-
-  const sceneName = scene.slice(prefix.length);
-
-  if (sceneName === 'standoff-ssd') {
-    return {
-      kind: 'doodle',
-      name: `tap-tap-shoot-y/split_scenes/ssd-standoff_${readyPlayerId}_is_ready`,
-      flip: false,
-    };
-  }
-
-  if (sceneName === 'reload-draw') {
-    return {
-      kind: 'doodle',
-      name: `tap-tap-shoot-y/split_scenes/reloading_${readyPlayerId}_is_ready`,
-      flip: false,
-    };
-  }
-
-  if (['shoot-draw', 'stab-draw', 'duck-draw'].includes(sceneName)) {
-    return {
-      kind: 'doodle',
-      name: `tap-tap-shoot-y/split_scenes/${sceneName}_${readyPlayerId}_is_ready`,
-      flip: false,
-    };
-  }
-
-  if (sceneName === 'reload-duck') {
-    const isReloaderReady = lastMoves[readyPlayerId] === 'reload';
-    return {
-      kind: 'doodle',
-      name: `tap-tap-shoot-y/split_scenes/reload-duck_${isReloaderReady ? 'reloader' : 'ducker'}_is_ready`,
-      flip: lastMoves.p1 === 'duck',
-    };
-  }
-
-  if (sceneName === 'shoot-duck') {
-    const isShooterReady = lastMoves[readyPlayerId] === 'shoot';
-    return {
-      kind: 'doodle',
-      name: `tap-tap-shoot-y/split_scenes/shoot-duck_${isShooterReady ? 'shooter' : 'ducker'}_is_ready`,
-      flip: lastMoves.p2 === 'shoot',
-    };
-  }
-
-  if (sceneName === 'stab-reload') {
-    const isStabberReady = lastMoves[readyPlayerId] === 'stab';
-    return {
-      kind: 'doodle',
-      name: `tap-tap-shoot-y/split_scenes/stab-reload_${isStabberReady ? 'stabber' : 'reloader'}_is_ready`,
-      flip: lastMoves.p2 === 'stab',
-    };
-  }
-
-  return null;
-}
-
-function getTapTapShootXReadySplitPresentation(scene, readyPlayerId) {
-  const prefix = 'tap-tap-shoot-x/';
-
-  if (!scene.startsWith(prefix)) {
-    return null;
-  }
-
-  const sceneName = scene.slice(prefix.length);
-
-  if (sceneName === 'standoff-tts') {
-    return {
-      kind: 'doodle',
-      name: `tap-tap-shoot-x/split_scenes/tts-standoff_${readyPlayerId}_is_ready`,
-      flip: false,
-    };
-  }
-
-  if (sceneName === 'reload-draw') {
-    return {
-      kind: 'doodle',
-      name: `tap-tap-shoot-x/split_scenes/reloading_${readyPlayerId}_is_ready`,
-      flip: false,
-    };
-  }
-
-  if (['shoot-draw', 'stab-draw', 'defense-draw'].includes(sceneName)) {
-    return {
-      kind: 'doodle',
-      name: `tap-tap-shoot-x/split_scenes/${sceneName}_${readyPlayerId}_is_ready`,
-      flip: false,
-    };
-  }
-
-  if (sceneName === 'reload-duck') {
-    const isReloaderReady = lastMoves[readyPlayerId] === 'reload';
-    return {
-      kind: 'doodle',
-      name: `tap-tap-shoot-x/split_scenes/reload-defense_${isReloaderReady ? 'reloader' : 'defender'}_is_ready`,
-      flip: lastMoves.p1 === 'duck',
-    };
-  }
-
-  if (sceneName === 'shoot-duck') {
-    const isShooterReady = lastMoves[readyPlayerId] === 'shoot';
-    return {
-      kind: 'doodle',
-      name: `tap-tap-shoot-x/split_scenes/shoot-duck_${isShooterReady ? 'shooter' : 'ducker'}_is_ready`,
-      flip: lastMoves.p2 === 'shoot',
-    };
-  }
-
-  if (sceneName === 'stab-counterstab') {
-    const isStabberReady = lastMoves[readyPlayerId] === 'stab';
-    return {
-      kind: 'doodle',
-      name: `tap-tap-shoot-x/split_scenes/stab-counterstab_${isStabberReady ? 'stabber' : 'counterstabber'}_is_ready`,
-      flip: lastMoves.p2 === 'stab',
-    };
-  }
-
-  return null;
-}
-
 function clearLocalTurnChoice() {
-  if (localTurnChoice?.computerTimer) {
-    clearPausableTimeout(localTurnChoice.computerTimer);
-  }
-
-  clearLocalPhaseTimers();
-  localTurnChoice = null;
+  localTurnController.clear();
 }
 
 function pauseGameplayTimers() {
@@ -3777,15 +3323,7 @@ function resumeGameplayTimers() {
 }
 
 function clearLocalPhaseTimers() {
-  if (localTurnChoice?.safeTimer) {
-    clearPausableTimeout(localTurnChoice.safeTimer);
-    localTurnChoice.safeTimer = null;
-  }
-
-  if (localTurnChoice?.timeoutTimer) {
-    clearPausableTimeout(localTurnChoice.timeoutTimer);
-    localTurnChoice.timeoutTimer = null;
-  }
+  localTurnController.clearPhaseTimers();
 }
 
 async function loseLocalRoundOnTimeout(playerId) {
@@ -3794,14 +3332,14 @@ async function loseLocalRoundOnTimeout(playerId) {
   if (
     (playerId !== 'p1' && playerId !== 'p2') ||
     !isActiveLoop(token) ||
-    !localTurnChoice ||
-    localTurnChoice.moves[playerId] ||
+    !localTurnController.choice ||
+    localTurnController.choice.moves[playerId] ||
     state.status !== 'playing'
   ) {
     return;
   }
 
-  const chosenMoves = { ...localTurnChoice.moves };
+  const chosenMoves = { ...localTurnController.choice.moves };
   localRoundTimedOutPlayer = playerId;
   lastMoves = {
     p1: chosenMoves.p1 ?? lastMoves.p1,
@@ -3809,11 +3347,9 @@ async function loseLocalRoundOnTimeout(playerId) {
   };
   clearLocalTurnChoice();
   p1QueuedMove = null;
-  state = {
-    ...state,
-    status: 'finished',
-    winner: playerId === 'p1' ? 'p2' : 'p1',
-  };
+  const timeout = resolveRoundTimeout({ roundState: state, roundWins, loser: playerId });
+  state = timeout.roundState;
+  roundWins = timeout.roundWins;
   turnPhase = 'wipe';
   isTransitioning = true;
   await playWipeTransition(() => {
@@ -3937,7 +3473,7 @@ async function closeVariantDetail() {
   if (menu.mode === 'online' && rankedSnapshot?.phase === 'variantSelection') {
     variantSelectScreen.restoreButton(menu.selectedButton);
     onlineFlowDirector.consumeAnimations();
-    renderRankedBanScreen();
+    rankedScreens.renderVariantSelection();
     await onlineFlowDirector.reveal();
   } else {
     await openCurtainWipe(menu.curtain, playCurtainOpenAudio);
@@ -4267,21 +3803,11 @@ function resetRoundWins() {
 }
 
 function isGameOver() {
-  const targetRoundWins = getVariantTargetRoundWins(getCurrentVariantId());
-  return roundWins.p1 >= targetRoundWins || roundWins.p2 >= targetRoundWins;
+  return isEngineGameOver(roundWins, getCurrentVariantId());
 }
 
 function getGameWinner() {
-  const targetRoundWins = getVariantTargetRoundWins(getCurrentVariantId());
-  if (roundWins.p1 >= targetRoundWins) {
-    return 'p1';
-  }
-
-  if (roundWins.p2 >= targetRoundWins) {
-    return 'p2';
-  }
-
-  return null;
+  return getEngineGameWinner(roundWins, getCurrentVariantId());
 }
 
 function getMusicTopperFile() {
@@ -4318,7 +3844,9 @@ function setNewRound() {
   clearLocalTurnChoice();
   localRoundTimedOutPlayer = null;
   pendingSuperAnimation = null;
-  state = createRoundState({ variantId: selectedVariantId });
+  const game = startNextRound({ variantId: selectedVariantId, roundState: state, roundWins });
+  state = game.roundState;
+  roundWins = game.roundWins;
   screen = 'playing';
   rankedSnapshot = null;
   turnPhase = 'ready';
@@ -5158,19 +4686,28 @@ function renderTutorialFeedbackMarkup(lines) {
 }
 
 function resolveQueuedTurn() {
-  const legalMoves = screen === 'tutorial' ? getTutorialLegalMoves() : getPlayerLegalMoves(state, 'p1');
-  const p1Move = p1QueuedMove && legalMoves.includes(p1QueuedMove)
-    ? p1QueuedMove
-    : getFallbackMove('p1');
-  const tutorialOutcome = screen === 'tutorial' ? getTutorialOutcome(p1Move) : null;
-  const p2Move = tutorialOutcome?.p2Move
-    ?? localTurnChoice?.moves.p2
-    ?? chooseAiMove(state, Math.random, variantDifficultyToggleState);
-  const turn = playTurn(state, p1Move, p2Move);
+  const requestedPlayerMove = p1QueuedMove;
+  let tutorialOutcome = null;
+  const resolved = resolveLocalTurn({
+    state,
+    queuedPlayerMove: requestedPlayerMove,
+    queuedOpponentMove: localTurnController.choice?.moves.p2,
+    getForcedOpponentMove: screen === 'tutorial'
+      ? (playerMove) => {
+        tutorialOutcome = getTutorialOutcome(playerMove);
+        return tutorialOutcome?.p2Move;
+      }
+      : null,
+    chooseOpponentMove: (currentState) => chooseAiMove(currentState, Math.random, variantDifficultyToggleState),
+    roundWins,
+  });
+  const { p1: p1Move, p2: p2Move } = resolved.moves;
+  const { turn } = resolved;
   clearLocalTurnChoice();
 
   if (turn.ok) {
     state = turn.state;
+    roundWins = resolved.roundWins;
     turnPhase = 'scene';
     if (screen === 'tutorial') {
       tutorialStageMode = 'scene';
@@ -5184,18 +4721,17 @@ function resolveQueuedTurn() {
     stagePresentation = getTurnStagePresentation(turn.result, p1Move, p2Move);
 
     if (screen === 'tutorial' && state.status === 'finished' && state.winner) {
-      roundWins[state.winner] += 1;
       syncMusicTopper();
     }
 
     if (playMode === 'local' && state.status === 'finished' && state.winner === 'p2') {
-      if (isGameOver() || (screen !== 'tutorial' && roundWins.p2 >= getVariantTargetRoundWins(getCurrentVariantId()) - 1)) {
+      if (isGameOver()) {
         interruptMusicFileOnce(LOSE_JINGLE_AUDIO, null, false);
       } else {
         interruptMusicFileOnce(LOSE_JINGLE_AUDIO, 'game');
       }
     } else if (playMode === 'local' && state.status === 'finished' && state.winner === 'p1') {
-      if (isGameOver() || (screen !== 'tutorial' && roundWins.p1 >= getVariantTargetRoundWins(getCurrentVariantId()) - 1)) {
+      if (isGameOver()) {
         interruptMusicFileOnce(WIN_SOUND_AUDIO, null, false);
       } else {
         interruptMusicFileOnce(WIN_SOUND_AUDIO, 'game');
@@ -5262,9 +4798,7 @@ async function playPendingSuperAnimation(token) {
 }
 
 function getLocalResultLevel() {
-  if (!state.winner) return 'round';
-  const target = getVariantTargetRoundWins(getCurrentVariantId());
-  return roundWins[state.winner] + 1 >= target ? 'game' : 'round';
+  return getResultLevel(roundWins, state.winner, getCurrentVariantId());
 }
 
 async function showDirectedLocalResult(resultLevel) {
@@ -5280,7 +4814,6 @@ function advanceLocalRoundPreservingReveal() {
   if (!state.winner || state.status !== 'finished') return;
   const reveal = stagePresentation;
   const moves = { ...lastMoves };
-  roundWins[state.winner] += 1;
   syncMusicTopper();
   setNewRound();
   turnPhase = 'scene';
@@ -5340,9 +4873,6 @@ async function maybeShowTutorialFeedback(token) {
 }
 
 function showRoundOverScene(resultLevel = 'round') {
-  if (state.winner && screen !== 'tutorial') {
-    roundWins[state.winner] += 1;
-  }
   syncMusicTopper();
 
   if (playMode === 'local' && screen !== 'tutorial' && !isGameOver()) {
@@ -5419,12 +4949,6 @@ function getWinStacks(wins) {
 
   return stacks;
 }
-
-function getFallbackMove(playerId) {
-  const legalMoves = getPlayerLegalMoves(state, playerId);
-  return legalMoves.includes('reload') ? 'reload' : legalMoves[0];
-}
-
 
 function playWipeTransition(onCovered) {
   const generation = transitionGeneration;

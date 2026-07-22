@@ -1,6 +1,8 @@
 import { randomUUID } from 'node:crypto';
 
-import { createRoundState, getPlayerLegalMoves, getPlayerResource, playTurn } from '../src/engine/gameState.js';
+import { createRoundState, getPlayerLegalMoves, getPlayerResource } from '../src/engine/gameState.js';
+import { createVariantGame, getGameWinner, getPostTurnAction, resolveMatchTurn, resolveRoundTimeout, startNextRound } from '../src/engine/matchEngine.js';
+import { createPendingContinues, createPendingMoves, getMoveDeadlineOutcome, lockContinue, lockMove } from '../src/engine/matchCommands.js';
 import {
   DEFAULT_VARIANT_ID,
   VARIANT_ORDER,
@@ -9,8 +11,8 @@ import {
   getVariantTargetRoundWins,
   normalizeVariantId,
 } from '../src/engine/moves.js';
+import { shouldAutoAdvanceRound } from '../src/engine/matchRules.js';
 import { MemoryPlayerStore } from './playerStore.js';
-import { shouldAutoAdvanceRound } from '../src/presentation/gameFlowPolicies.js';
 import { NullAnalyticsStore } from './analyticsStore.js';
 
 const MAX_TIMEOUT_STRIKES = 3;
@@ -582,8 +584,8 @@ export class RankedDuelService {
         p2: 0,
       },
       roundState: createRoundState({ variantId: DEFAULT_VARIANT_ID }),
-      pendingMoves: new Map(),
-      pendingContinues: new Set(),
+      pendingMoves: createPendingMoves(),
+      pendingContinues: createPendingContinues(),
       pendingNextVariant: false,
       pendingTiebreaker: false,
       readyPlayerKey: null,
@@ -736,8 +738,8 @@ export class RankedDuelService {
 
     const previousPhase = room.phase;
     room.phase = 'choosing';
-    room.pendingMoves.clear();
-    room.pendingContinues.clear();
+    room.pendingMoves = createPendingMoves();
+    room.pendingContinues = createPendingContinues();
     room.pendingNextVariant = false;
     room.readyPlayerKey = null;
     room.waitingPlayerKey = null;
@@ -761,25 +763,25 @@ export class RankedDuelService {
     const playerKey = this.getPlayerKey(room, session);
     const legalMoves = getPlayerLegalMoves(room.roundState, playerKey);
 
-    if (!legalMoves.includes(moveId)) {
+    const command = lockMove(room.pendingMoves, playerKey, moveId, legalMoves);
+    if (command.status === 'illegal') {
       this.send(session, 'error', { message: 'illegal move' });
       return;
     }
-
-    if (room.pendingMoves.has(playerKey)) {
-      this.send(session, 'moveAccepted', { moveId: room.pendingMoves.get(playerKey) });
+    if (command.status === 'duplicate') {
+      this.send(session, 'moveAccepted', { moveId: command.moveId });
       return;
     }
 
-    room.pendingMoves.set(playerKey, moveId);
-    this.send(session, 'moveAccepted', { moveId });
+    room.pendingMoves = command.moves;
+    this.send(session, 'moveAccepted', { moveId: command.moveId });
 
-    if (room.pendingMoves.size === 2) {
+    if (command.status === 'complete') {
       this.resolveRoomTurn(room);
       return;
     }
 
-    this.beginReadyWaiting(room, playerKey);
+    this.beginReadyWaiting(room, command.readyPlayerId);
   }
 
   beginReadyWaiting(room, readyPlayerKey) {
@@ -797,13 +799,14 @@ export class RankedDuelService {
       return;
     }
 
-    if (room.pendingMoves.size === 0) {
+    const outcome = getMoveDeadlineOutcome(room.pendingMoves);
+    if (outcome.type === 'no-contest') {
       this.finishRoomByNoContest(room);
       return;
     }
 
-    if (room.pendingMoves.size === 1 && room.waitingPlayerKey) {
-      this.finishRoundByTimeout(room, room.waitingPlayerKey);
+    if (outcome.type === 'timeout') {
+      this.finishRoundByTimeout(room, outcome.loser);
       return;
     }
 
@@ -821,15 +824,23 @@ export class RankedDuelService {
     room.noContestWaitingAt = null;
     room.noContestCountdownAt = null;
 
-    const p1Move = room.pendingMoves.get('p1') ?? getFallbackMove(room.roundState, 'p1');
-    const p2Move = room.pendingMoves.get('p2') ?? getFallbackMove(room.roundState, 'p2');
-    const turn = playTurn(room.roundState, p1Move, p2Move, room.variantId);
+    const p1Move = room.pendingMoves.p1 ?? getFallbackMove(room.roundState, 'p1');
+    const p2Move = room.pendingMoves.p2 ?? getFallbackMove(room.roundState, 'p2');
+    const resolved = resolveMatchTurn({
+      roundState: room.roundState,
+      roundWins: room.roundWins,
+      p1Move,
+      p2Move,
+      variantId: room.variantId,
+    });
+    const { turn } = resolved;
 
     if (!turn.ok) {
       throw new Error(turn.error);
     }
 
     room.roundState = turn.state;
+    room.roundWins = resolved.roundWins;
     room.phase = 'revealed';
     room.analyticsTurnCount += 1;
     room.analyticsRoundTurnNumber += 1;
@@ -846,27 +857,27 @@ export class RankedDuelService {
       recordedAt: new Date(this.now()).toISOString(),
     });
 
-    if (room.roundState.winner) {
-      room.roundWins[room.roundState.winner] += 1;
-    }
-
     this.broadcastRoom(room, { revealedMoves: { p1: p1Move, p2: p2Move } }, 'turn-revealed');
 
     const revealDelay = shouldAutoAdvanceRound(room.variantId) ? 0 : this.revealMs;
     this.setRoomTimer(room, () => {
-      if (room.roundState.status !== 'finished') {
+      const gameWinnerKey = getGameWinner(room.roundWins, room.variantId);
+      const action = getPostTurnAction({
+        roundFinished: room.roundState.status === 'finished',
+        gameFinished: Boolean(gameWinnerKey),
+        autoAdvanceRound: shouldAutoAdvanceRound(room.variantId),
+      });
+      if (action === 'continue-turn') {
         this.beginChoosing(room);
         return;
       }
 
-      const targetRoundWins = getVariantTargetRoundWins(room.variantId);
-      if (room.roundWins.p1 >= targetRoundWins || room.roundWins.p2 >= targetRoundWins) {
-        const gameWinnerKey = room.roundWins.p1 >= targetRoundWins ? 'p1' : 'p2';
+      if (action === 'finish-game') {
         this.finishVariantGame(room, gameWinnerKey);
         return;
       }
 
-      if (shouldAutoAdvanceRound(room.variantId)) {
+      if (action === 'advance-round') {
         this.beginNextRound(room);
         return;
       }
@@ -881,7 +892,7 @@ export class RankedDuelService {
     }
 
     room.phase = 'roundOver';
-    room.pendingContinues.clear();
+    room.pendingContinues = createPendingContinues();
     room.readyPlayerKey = null;
     room.waitingPlayerKey = null;
     room.deadlineAt = null;
@@ -897,20 +908,20 @@ export class RankedDuelService {
 
     const playerKey = this.getPlayerKey(room, session);
 
-    if (room.pendingContinues.has(playerKey)) {
+    const command = lockContinue(room.pendingContinues, playerKey);
+    if (command.status === 'duplicate') {
       this.send(session, 'continueAccepted', {});
       return;
     }
-
-    room.pendingContinues.add(playerKey);
+    room.pendingContinues = command.continues;
     this.send(session, 'continueAccepted', {});
 
-    if (room.pendingContinues.size === 2) {
+    if (command.status === 'complete') {
       this.beginNextRound(room);
       return;
     }
 
-    this.beginContinueReadyWaiting(room, playerKey);
+    this.beginContinueReadyWaiting(room, command.readyPlayerId);
   }
 
   beginContinueReadyWaiting(room, readyPlayerKey) {
@@ -946,7 +957,13 @@ export class RankedDuelService {
       return;
     }
 
-    room.roundState = createRoundState({ variantId: room.variantId });
+    const game = startNextRound({
+      variantId: room.variantId,
+      roundState: room.roundState,
+      roundWins: room.roundWins,
+    });
+    room.roundState = game.roundState;
+    room.roundWins = game.roundWins;
     room.analyticsRoundNumber += 1;
     room.analyticsRoundTurnNumber = 0;
     this.beginChoosing(room);
@@ -961,7 +978,9 @@ export class RankedDuelService {
     room.analyticsTurnCount = 0;
     room.analyticsRoundTurnNumber = 0;
     room.pendingNextVariant = false;
-    room.roundState = createRoundState({ variantId: room.variantId });
+    const game = createVariantGame({ variantId: room.variantId });
+    room.roundState = game.roundState;
+    room.roundWins = game.roundWins;
     this.beginChoosing(room);
   }
 
@@ -991,7 +1010,13 @@ export class RankedDuelService {
   finishRoundByTimeout(room, loserKey) {
     this.clearRoomTimer(room);
 
-    const winnerKey = loserKey === 'p1' ? 'p2' : 'p1';
+    const timeout = resolveRoundTimeout({
+      roundState: room.roundState,
+      roundWins: room.roundWins,
+      loser: loserKey,
+      variantId: room.variantId,
+    });
+    const winnerKey = timeout.winner;
     room.roundTimeout = {
       loser: loserKey,
       winner: winnerKey,
@@ -1000,17 +1025,13 @@ export class RankedDuelService {
     this.applyTimeoutStrike(room, loserKey);
     room.readyPlayerKey = null;
     room.waitingPlayerKey = null;
-    room.roundState = {
-      ...room.roundState,
-      status: 'finished',
-      winner: winnerKey,
-    };
+    room.roundState = timeout.roundState;
+    room.roundWins = timeout.roundWins;
 
     if (room.phase === 'gameOver') {
       return;
     }
 
-    room.roundWins[winnerKey] += 1;
     room.phase = 'revealed';
     this.broadcastRoom(room, {
       timeout: {
@@ -1022,8 +1043,7 @@ export class RankedDuelService {
 
     const revealDelay = shouldAutoAdvanceRound(room.variantId) ? 0 : this.revealMs;
     this.setRoomTimer(room, () => {
-      const targetRoundWins = getVariantTargetRoundWins(room.variantId);
-      if (room.roundWins.p1 >= targetRoundWins || room.roundWins.p2 >= targetRoundWins) {
+      if (getGameWinner(room.roundWins, room.variantId)) {
         this.finishVariantGame(room, winnerKey);
         return;
       }
@@ -1095,8 +1115,8 @@ export class RankedDuelService {
     }
 
     this.clearRoomTimer(room);
-    room.pendingMoves.clear();
-    room.pendingContinues.clear();
+    room.pendingMoves = createPendingMoves();
+    room.pendingContinues = createPendingContinues();
     room.readyPlayerKey = null;
     room.waitingPlayerKey = null;
     room.deadlineAt = null;
@@ -1251,7 +1271,7 @@ export class RankedDuelService {
           resource: getPlayerResource(room.roundState.players.p1),
           bullets: getPlayerResource(room.roundState.players.p1),
           legalMoves: room.phase === 'choosing' ? getPlayerLegalMoves(room.roundState, 'p1') : [],
-          canContinue: room.phase === 'roundOver' && !room.pendingContinues.has('p1'),
+          canContinue: room.phase === 'roundOver' && !room.pendingContinues.p1,
           rating: isRanked ? room.players.p1.player.rating : null,
         },
         p2: {
@@ -1259,7 +1279,7 @@ export class RankedDuelService {
           resource: getPlayerResource(room.roundState.players.p2),
           bullets: getPlayerResource(room.roundState.players.p2),
           legalMoves: room.phase === 'choosing' ? getPlayerLegalMoves(room.roundState, 'p2') : [],
-          canContinue: room.phase === 'roundOver' && !room.pendingContinues.has('p2'),
+          canContinue: room.phase === 'roundOver' && !room.pendingContinues.p2,
           rating: isRanked ? room.players.p2.player.rating : null,
         },
       },
