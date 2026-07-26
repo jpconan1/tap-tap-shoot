@@ -2,6 +2,9 @@ const MATCH_RULES = Object.freeze({
   rockPaperScissors: Object.freeze({
     autoAdvanceRound: true,
   }),
+  rpsDragonSpear: Object.freeze({
+    autoAdvanceRound: true,
+  }),
 });
 
 const DEFAULT_MATCH_RULES = Object.freeze({

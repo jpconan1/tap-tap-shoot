@@ -1,0 +1,210 @@
+Nash Variants Report
+
+1. Charge Block Fireball
+
+Rules modeled
+- Players start at 1 bar each.
+- Charge gives +1 bar.
+- Reaching 3 bars wins.
+- If both players reach 3 bars at same time, both reset to 2 bars.
+- Fireball costs 1 bar.
+- Fireball beats charge and ends game immediately.
+- Block draws fireball and game continues.
+- Fireball always costs 1 bar when chosen, even if blocked.
+
+State table
+
+State             Value             Best CPU mix
+You 0, CPU 1      17%               charge 65%, fireball 35%
+You 0, CPU 2      checkmate loss    charge 100%
+You 1, CPU 0      83%               charge 65%, block 35%
+You 1, CPU 1      50%               charge 31%, block 47%, fireball 22%
+You 1, CPU 2      26%               charge 22%, block 53%, fireball 25%
+You 2, CPU 0      checkmate win     any non-fireball
+You 2, CPU 1      74%               charge 30%, block 44%, fireball 26%
+You 2, CPU 2      50%               charge 19%, block 40%, fireball 40%
+
+Starting state
+- Start: You 1, CPU 1.
+- Game value: 50%.
+- Perfect CPU mix: charge 31%, block 47%, fireball 22%.
+
+Ending type from start, with both players using Nash play
+
+Ending type              Chance
+Any 3-bar victory        47%
+Any fireball kill        53%
+You win by 3 bars        24%
+CPU wins by 3 bars       24%
+You win by fireball      26%
+CPU wins by fireball     26%
+
+Read
+- Starting game is fair.
+- Strong-player games end slightly more often by fireball kill than by 3-bar victory.
+- 2 bars against 1 bar is strong.
+- 1 bar against 2 bars is bad but live.
+- 0 bars against 2 bars is checkmate loss.
+
+
+2. Punch Stab Shoot
+
+Rules modeled
+- Players start at 3 HP each.
+- Punch beats shoot and deals 1 damage.
+- Shoot beats stab and deals 3 damage.
+- Stab beats punch and deals 2 damage.
+- Damage only happens when a player wins the matchup.
+- Ties deal no damage and the game continues.
+
+State table
+
+State             Value    Best CPU mix
+You 1, CPU 1      50%      punch 33%, stab 33%, shoot 33%
+You 1, CPU 2      37%      punch 30%, stab 18%, shoot 52%
+You 1, CPU 3      26%      punch 44%, stab 16%, shoot 40%
+You 2, CPU 1      63%      punch 52%, stab 18%, shoot 30%
+You 2, CPU 2      50%      punch 44%, stab 11%, shoot 44%
+You 2, CPU 3      38%      punch 55%, stab 11%, shoot 35%
+You 3, CPU 1      74%      punch 57%, stab 23%, shoot 20%
+You 3, CPU 2      62%      punch 52%, stab 16%, shoot 32%
+You 3, CPU 3      50%      punch 59%, stab 14%, shoot 28%
+
+Starting state
+- Start: You 3 HP, CPU 3 HP.
+- Game value: 50%.
+- Perfect CPU mix: punch 59%, stab 14%, shoot 28%.
+
+Read
+- Punch is the most common opening move, even though it deals the least damage.
+- Stab is used least from most states.
+- Stab is not useless. Its job is to punish punch hard enough that punch cannot dominate.
+- Shoot stays common because it threatens the biggest damage.
+- At 1 HP vs 1 HP, the game becomes plain rock-paper-scissors because any winning hit kills.
+
+Rejected twist: punch ties deal 1 damage each
+- Start mix changes to punch 52%, stab 15%, shoot 33%.
+- This makes shoot more common and punch less dominant.
+- It adds rule complexity for modest strategic change.
+- Recommendation: keep original rules.
+
+Rejected damage swap: stab deals 3, shoot deals 2
+- Start mix becomes punch 28%, stab 14%, shoot 59%.
+- This mostly moves the default move from punch to shoot.
+- Stab still stays low because shoot keeps it honest.
+- Recommendation: keep original rules. Guns hurt more than knives.
+
+
+3. Str Int Dex
+
+Rules modeled
+- Stats start at 0/0/0.
+- Scores start at 0/0.
+- First to 5 scored rounds wins.
+- At the start of each scored round, both players simultaneously reveal one stat to level up.
+- That level applies before moves.
+- Players then simultaneously reveal one move until somebody scores the round.
+- Sword uses STR.
+- Staff uses INT.
+- Bow uses DEX.
+- Sword/STR beats staff/INT.
+- Staff/INT beats bow/DEX.
+- Bow/DEX beats sword/STR.
+- If moves tie, higher associated stat wins the round.
+- If moves tie and associated stat is equal, nobody scores and moves reveal again.
+
+Generated files
+- Script: nash_str_int_dex.py
+- Full CPU table: str_int_dex_policy.json
+
+Table size
+- Between-round states: 10,385.
+- Level-reveal branches: 93,465.
+- JSON size: about 7.8 MB.
+- State key format: yourScore,cpuScore|yourStr,yourInt,yourDex|cpuStr,cpuInt,cpuDex.
+- Branch key format: yourLeveledStat,cpuLeveledStat.
+
+Starting state
+- Start: score 0-0, stats 0/0/0 each.
+- Game value: about 50%.
+- Perfect level mix: STR 33%, INT 33%, DEX 33%.
+
+Round 1 move mixes after level reveal
+
+You level    CPU levels    CPU move mix
+STR          STR           sword 33%, staff 33%, bow 33%
+STR          INT           sword 50%, bow 50%
+STR          DEX           sword 50%, bow 50%
+INT          STR           sword 50%, staff 50%
+INT          INT           sword 33%, staff 33%, bow 33%
+INT          DEX           sword 50%, staff 50%
+DEX          STR           sword 50%, staff 50%
+DEX          INT           staff 50%, bow 50%
+DEX          DEX           sword 33%, staff 33%, bow 33%
+
+Rule of thumb
+- If both players level the same stat, move choice usually becomes normal 33/33/33 RPS.
+- If players level different stats, avoid the move that loses to the opponent's boosted tied move.
+
+Opponent leveled    Their boosted tie move    Avoid    Usually mix
+STR                 sword                      staff    sword/bow
+INT                 staff                      bow      sword/staff
+DEX                 bow                        sword    staff/bow
+
+Later-game read
+- Strategy is based on current stat ownership, not just last level.
+- A high stat means that move's tie is dangerous.
+- It does not always mean the player should use that move.
+- Often, the right play is to use other moves that punish the opponent's attempt to route around the dangerous tie.
+
+Move mix shapes in full table
+
+Move mix shape      Count
+50/50/0 variants    89,895
+33/33/33            3,075
+46/54/0 variants    495
+
+Level mix shapes in full table
+
+Level mix shape     Count
+100/0/0 variants    9,798
+33/33/33            425
+50/50/0 variants    162
+
+Important design read
+- Leveling is mostly deterministic under perfect play.
+- About 94% of level states are pure 100/0/0 choices.
+- The leveling phase creates readable long-term pressure, but it is less mixed than expected.
+- If the design goal is a strong, readable strategy layer, this may be fine.
+- If the design goal is lots of leveling uncertainty, this ruleset needs another knob.
+
+Possible knobs if leveling should be less deterministic
+- Cap each stat.
+- Make over-leveling wasteful.
+- Reset or decay stats after each round.
+- Hide level-up choices until after move choice.
+- Give each stat a passive effect beyond tie wins.
+- Forbid leveling the same stat twice in a row.
+
+Example lookup
+
+State:
+- Score: You 2, CPU 3.
+- You: STR 2, INT 2, DEX 1.
+- CPU: STR 3, INT 1, DEX 1.
+
+Nash result:
+- Your game value: 31%.
+- You should level INT 100%.
+- CPU should level STR 100%.
+- After that reveal, your move mix is staff 50%, bow 50%.
+- Never sword in that round.
+
+
+Overall
+
+- Charge Block Fireball is compact and produces clean, useful Nash tables.
+- Punch Stab Shoot has funky but explainable move frequencies; original rules look best.
+- Str Int Dex has depth, but hard Nash is more deterministic than it first appears.
+- For hard CPU opponents, all three games should use weighted random from precomputed Nash tables.
+- Never make hard CPU choose the highest-percent option every time. That becomes exploitable.

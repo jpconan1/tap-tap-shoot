@@ -28,6 +28,11 @@ export function resolveScene({ variantId = '', p1Move, p2Move, result = {} }) {
   if (variant === VARIANT_IDS.tapTapShootY) return resolveTapTapShootY(result, p1Move, p2Move);
   if (variant === VARIANT_IDS.gunKnifeFist) return resolveGunKnifeFist(result, p1Move, p2Move);
   if (variant === VARIANT_IDS.tapTapShootX) return resolveTapTapShootX(result, p1Move, p2Move);
+  if (variant === VARIANT_IDS.rpsDragonSpear) return resolveRpsDragonSpear(result, p1Move, p2Move);
+  if (variant === VARIANT_IDS.rpsMinusOne) return resolveRpsMinusOne(result, p1Move, p2Move);
+  if (variant === VARIANT_IDS.kitchenSink) return resolveKitchenSink(result, p1Move, p2Move);
+  if (variant === VARIANT_IDS.rpsRpg) return resolveRpsRpg(result, p1Move, p2Move);
+  if (variant === VARIANT_IDS.rpsPoker) return resolveRpsPoker(result, p1Move, p2Move);
 
   const name = variant === VARIANT_IDS.rockPaperScissors
     ? resolveRpsName(p1Move, p2Move)
@@ -36,6 +41,106 @@ export function resolveScene({ variantId = '', p1Move, p2Move, result = {} }) {
       : resolveBasicName(p1Move, p2Move);
 
   return presentation(name, resolveBasicFlip(name, p1Move, p2Move, variant));
+}
+
+function resolveRpsPoker(result, p1Move, p2Move) {
+  const next = result.nextStateData;
+  const label = (move) => String(move).replace(':', ' ').toUpperCase();
+  return {
+    kind: 'placeholder',
+    name: `rps-poker-${next.phase}-result`,
+    title: result.winner
+      ? `${result.winner === 'p1' ? 'YOU WIN' : 'RIVAL WINS'} THE GAME!`
+      : next.hand > (result.previousStateData?.hand ?? next.hand) ? 'NEXT HAND!' : 'POKER ACTION!',
+    lines: [
+      `YOU: ${label(p1Move)}  RIVAL: ${label(p2Move)}`,
+      `HAND ${next.hand}  ANTE ${next.ante}  POT ${next.pot}`,
+      `STACKS: ${next.stacks.p1} - ${next.stacks.p2}`,
+      `COMMUNITY: ${next.community ? next.community.toUpperCase() : '?'}`,
+    ],
+  };
+}
+
+function resolveRpsRpg(result, p1Move, p2Move) {
+  const leveling = ['str', 'int', 'dex'].includes(p1Move);
+  if (leveling) {
+    return {
+      kind: 'placeholder',
+      name: 'rps-rpg-level-result',
+      title: 'STATS LEVELED!',
+      lines: [`YOU: +${p1Move.toUpperCase()}`, `RIVAL: +${p2Move.toUpperCase()}`, 'CHOOSE A WEAPON!'],
+    };
+  }
+  return {
+    kind: 'placeholder',
+    name: 'rps-rpg-fight-result',
+    title: result.winner ? `${result.winner.toUpperCase()} SCORES!` : 'TIE! FIGHT AGAIN!',
+    lines: [`YOU: ${p1Move.toUpperCase()}`, `RIVAL: ${p2Move.toUpperCase()}`],
+  };
+}
+
+function resolveKitchenSink(result, p1Move, p2Move) {
+  const visibleP1 = p1Move === 'wait' ? 'WAIT' : pairLabel(p1Move);
+  const visibleP2 = p2Move === 'wait' ? 'WAIT' : pairLabel(p2Move);
+  return {
+    kind: 'placeholder',
+    name: result.nextPhase === 'freeMove' ? 'kitchen-sink-punish' : 'kitchen-sink-result',
+    title: result.nextPhase === 'freeMove'
+      ? `${result.nextStateData.freeMoveActor.toUpperCase()} GETS A FREE MOVE!`
+      : `${visibleP1} VS ${visibleP2}`,
+    lines: [
+      `POSITION: ${String(result.nextStateData.position).toUpperCase()}`,
+      `HP: ${result.nextStateData.hp.p1} - ${result.nextStateData.hp.p2}`,
+      `BARS: ${result.p1Resource} - ${result.p2Resource}`,
+    ],
+  };
+}
+
+function resolveRpsMinusOne(result, p1Move, p2Move) {
+  const choosingPairs = ['rockPaper', 'paperScissors', 'scissorsRock'].includes(p1Move);
+  if (choosingPairs && !result.isRoundOver) {
+    return {
+      kind: 'placeholder',
+      name: 'rps-minus-one-pairs',
+      title: 'PAIRS REVEALED!',
+      lines: [`YOU: ${pairLabel(p1Move)}`, `RIVAL: ${pairLabel(p2Move)}`, 'KEEP ONE!'],
+    };
+  }
+
+  const winnerMove = result.winner === 'p1' ? p1Move : result.winner === 'p2' ? p2Move : null;
+  return {
+    kind: 'placeholder',
+    name: 'rps-minus-one-result',
+    title: winnerMove ? `${String(winnerMove).toUpperCase()} WINS!` : 'TIE! +1 EACH',
+    lines: [`YOU: ${pairLabel(p1Move)}`, `RIVAL: ${pairLabel(p2Move)}`],
+  };
+}
+
+function pairLabel(moveId) {
+  return {
+    rockPaper: 'ROCK + PAPER',
+    paperScissors: 'PAPER + SCISSORS',
+    scissorsRock: 'SCISSORS + ROCK',
+  }[moveId] ?? String(moveId).toUpperCase();
+}
+
+function resolveRpsDragonSpear(result, p1Move, p2Move) {
+  let title;
+  if (p1Move === p2Move) title = `${String(p1Move).toUpperCase()} DRAW!`;
+  else if ([p1Move, p2Move].includes('dragon') && [p1Move, p2Move].includes('spear')) title = 'DRAGON DEAD!';
+  else if ([p1Move, p2Move].includes('dragon')) title = 'DRAGON WINS!';
+  else if ([p1Move, p2Move].includes('spear')) title = 'RPS BEATS SPEAR!';
+  else title = `${String(result.winner === 'p1' ? p1Move : p2Move).toUpperCase()} WINS!`;
+
+  return {
+    kind: 'placeholder',
+    name: 'rps-ds-result',
+    title,
+    lines: [
+      `YOUR DRAGON: ${(result.p1Resource ?? 1) > 0 ? 'ALIVE' : 'DEAD'}`,
+      `RIVAL DRAGON: ${(result.p2Resource ?? 1) > 0 ? 'ALIVE' : 'DEAD'}`,
+    ],
+  };
 }
 
 export function swapScenePerspective(result = {}) {

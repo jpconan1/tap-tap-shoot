@@ -1299,6 +1299,15 @@ canvas {
   margin-top: 4px;
 }
 
+.computer-variant-select .variant-actions {
+  --variant-grid-button-width: 218px;
+  --variant-grid-button-height: 86px;
+  --variant-grid-label-size: 20px;
+  grid-template-columns: repeat(3, var(--variant-grid-button-width));
+  gap: 5px 18px;
+  margin-top: -12px;
+}
+
 .play-button,
 .opponent-button,
 .variant-button {
@@ -1367,6 +1376,41 @@ canvas {
 .variant-button-art {
   width: 244px;
   height: 96px;
+}
+
+.computer-variant-select .variant-button,
+.computer-variant-select .variant-button-art {
+  width: var(--variant-grid-button-width);
+  height: var(--variant-grid-button-height);
+}
+
+.variant-button-label {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: 1;
+  width: 78%;
+  color: #211d19;
+  font-size: var(--variant-grid-label-size);
+  font-weight: 900;
+  line-height: 0.95;
+  text-align: center;
+  text-transform: uppercase;
+  text-wrap: balance;
+  pointer-events: none;
+  transform: translate(-50%, -54%) rotate(-0.5deg);
+}
+
+.variant-button-label {
+  width: 88%;
+  font-size: clamp(14px, var(--variant-grid-label-size), 20px);
+  letter-spacing: -0.035em;
+  white-space: nowrap;
+}
+
+.variant-slot-2 .variant-button-label {
+  width: 72%;
+  white-space: normal;
 }
 
 .variant-difficulty-toggle {
@@ -1800,6 +1844,28 @@ canvas {
   height: 48px;
   margin: 0 -20px;
   flex: 0 0 auto;
+}
+
+.last-pick-placeholder {
+  position: relative;
+  width: 128px;
+  height: 64px;
+  flex: 0 0 auto;
+}
+
+.last-pick-placeholder span {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: 2;
+  width: 78%;
+  color: #211d19;
+  font-size: 14px;
+  font-weight: 900;
+  line-height: 1;
+  text-align: center;
+  text-transform: uppercase;
+  transform: translate(-50%, -54%);
 }
 
 .layout-slot .stage-presentation-stack {
@@ -2323,6 +2389,209 @@ canvas {
   transition: opacity 140ms ease;
 }
 
+.move-button-label {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: 2;
+  width: 76%;
+  color: #211d19;
+  font-size: 24px;
+  font-weight: 900;
+  line-height: 1;
+  text-align: center;
+  text-transform: uppercase;
+  pointer-events: none;
+  transform: translate(-50%, -54%) rotate(-0.5deg);
+}
+
+.move-card:disabled .move-button-label {
+  opacity: 0.42;
+}
+
+.stage-placeholder {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  padding: 18px;
+  border: 4px solid #211d19;
+  background: rgba(255, 255, 255, 0.78);
+  color: #211d19;
+  text-align: center;
+  transform: rotate(-0.25deg);
+}
+
+.stage-placeholder strong {
+  font-size: 34px;
+  line-height: 1;
+}
+
+.stage-placeholder span {
+  font-size: 20px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.previous-move-placeholder {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+.previous-move-placeholder span {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: 2;
+  width: 78%;
+  color: #211d19;
+  font-size: 15px;
+  font-weight: 900;
+  line-height: 1;
+  text-align: center;
+  text-transform: uppercase;
+  pointer-events: none;
+  transform: translate(-50%, -54%);
+}
+
+.poker-state {
+  display: grid;
+  width: 100%;
+  height: 100%;
+  place-content: center;
+  color: #211d19;
+  font-size: 17px;
+  font-weight: 900;
+  line-height: 1.1;
+  text-align: center;
+}
+
+.poker-state strong {
+  font-size: 21px;
+}
+
+.poker-wager {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  color: #211d19;
+  font-size: 18px;
+  font-weight: 900;
+}
+
+.poker-wager input {
+  box-sizing: border-box;
+  width: 64px;
+  padding: 5px;
+  border: 3px solid #211d19;
+  background: #fff;
+  color: #211d19;
+  font: inherit;
+  text-align: center;
+}
+
+.pip-counter {
+  display: grid;
+  width: 100%;
+  height: 100%;
+  place-items: center;
+  color: #211d19;
+  font-size: 48px;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.kitchen-round-counter,
+.rpg-score-counter {
+  display: grid;
+  width: 100%;
+  height: 100%;
+  place-items: center;
+  color: #211d19;
+  font-size: 22px;
+  font-weight: 900;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.kitchen-player-state,
+.kitchen-position {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  padding: 7px 10px;
+  border: 3px solid #211d19;
+  background: rgba(255, 255, 255, 0.8);
+  color: #211d19;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.kitchen-player-state span {
+  font-size: 17px;
+  white-space: pre;
+}
+
+.kitchen-player-state em {
+  color: #a52d45;
+  font-size: 12px;
+  font-style: normal;
+}
+
+.kitchen-position {
+  align-items: center;
+  font-size: 18px;
+  text-align: center;
+}
+
+.kitchen-position span {
+  font-size: 24px;
+  white-space: pre;
+}
+
+.rpg-player-state {
+  box-sizing: border-box;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+  width: 100%;
+  height: 100%;
+  padding: 8px;
+  border: 3px solid #211d19;
+  background: rgba(255, 255, 255, 0.8);
+  color: #211d19;
+  font-size: 17px;
+  font-weight: 900;
+  text-align: center;
+}
+
+.rpg-player-state strong {
+  grid-column: 1 / -1;
+}
+
+.rpg-phase {
+  display: grid;
+  width: 100%;
+  height: 100%;
+  place-items: center;
+  color: #a52d45;
+  font-size: 20px;
+  font-weight: 900;
+  text-align: center;
+}
+
 .move-card:nth-child(odd) .move-button-art {
   transform: rotate(-0.5deg);
 }
@@ -2433,4 +2702,171 @@ canvas {
 
 .ghost:hover {
   color: var(--red);
+}
+.rules-sandbox-root {
+  overflow: auto;
+}
+
+.rules-sandbox-mode {
+  display: block;
+  width: 100%;
+  min-height: 100vh;
+  min-height: 100dvh;
+  padding: 0;
+  overflow: auto;
+  background: #eee5ce url("../assets/crumpled_paper_background.webp") center / cover fixed;
+}
+
+.rules-sandbox-mode .game-shell {
+  position: static;
+  top: auto;
+  left: auto;
+  width: 100%;
+  height: auto;
+  min-height: 100vh;
+  min-height: 100dvh;
+  margin: 0;
+  transform: none !important;
+  transform-origin: initial;
+}
+
+.rules-sandbox {
+  box-sizing: border-box;
+  width: min(1180px, 100%);
+  min-height: 100vh;
+  margin: auto;
+  padding: 24px;
+  color: #211d19;
+  font-family: "Architects Daughter", cursive;
+}
+
+.rules-sandbox header p,
+.rules-sandbox-phase {
+  margin: 0;
+  color: #a52d45;
+  font-weight: 700;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+
+.rules-sandbox h1,
+.rules-sandbox h2,
+.rules-sandbox p {
+  margin-top: 0;
+}
+
+.rules-sandbox-variant-grid,
+.rules-sandbox-actions {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+}
+
+.rules-sandbox-header {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 20px;
+  align-items: center;
+}
+
+.rules-sandbox-header > button {
+  padding: 10px 14px;
+  border: 2px solid #211d19;
+  border-radius: 4px;
+  background: #fff9e9;
+  font: inherit;
+  cursor: pointer;
+}
+
+.rules-sandbox-board {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(240px, 1fr);
+  gap: 18px;
+}
+
+.rules-sandbox-scene,
+.rules-sandbox-state,
+.rules-sandbox-controls,
+.rules-sandbox-log {
+  padding: 18px;
+  border: 3px solid #211d19;
+  border-radius: 6px;
+  background: rgba(255, 249, 233, .88);
+}
+
+.rules-sandbox-scene {
+  min-height: 170px;
+}
+
+.rules-sandbox-controls {
+  grid-column: 1 / -1;
+}
+
+.rules-sandbox-log {
+  grid-column: 1 / -1;
+}
+
+.rules-sandbox-log ol {
+  max-height: 180px;
+  overflow: auto;
+}
+
+.rules-sandbox-placeholder {
+  position: relative;
+  min-width: 0;
+}
+
+.rules-sandbox-placeholder > button {
+  position: relative;
+  display: block;
+  width: 100%;
+  aspect-ratio: 2 / 1;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+}
+
+.rules-sandbox-placeholder canvas {
+  width: 100%;
+  height: 100%;
+}
+
+.rules-sandbox-placeholder span {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 12%;
+  color: #211d19;
+  font: 700 clamp(18px, 2.2vw, 30px) "Architects Daughter", cursive;
+  line-height: 1;
+  text-align: center;
+  text-shadow: 1px 1px #fff9e9;
+  pointer-events: none;
+}
+
+.rules-sandbox-placeholder input {
+  box-sizing: border-box;
+  width: 100%;
+  margin-bottom: 4px;
+  padding: 8px;
+  border: 2px solid #211d19;
+  background: #fff9e9;
+  font: 22px "Architects Daughter", cursive;
+}
+
+.rules-sandbox-placeholder.has-error input {
+  border-color: #b31f3b;
+}
+
+@media (max-width: 700px) {
+  .rules-sandbox {
+    padding: 12px;
+  }
+
+  .rules-sandbox-board,
+  .rules-sandbox-header {
+    grid-template-columns: 1fr;
+  }
 }

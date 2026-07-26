@@ -12,10 +12,12 @@ export function resolveTurn({
   p1Bullets,
   p2Bullets,
   variantId = DEFAULT_VARIANT_ID,
+  state = null,
 }) {
   const variant = getVariant(normalizeVariantId(variantId));
 
   return variant.resolveTurn({
+    state,
     p1Move,
     p2Move,
     p1Resource: p1Resource ?? p1Bullets ?? 0,

@@ -1,16 +1,21 @@
-import { DEFAULT_VARIANT_ID, getLegalMoves, getVariantStartResource, normalizeVariantId } from './moves.js';
+import { DEFAULT_VARIANT_ID, getLegalMoves, getVariant, getVariantStartResource, normalizeVariantId } from './moves.js';
 import { resolveTurn } from './resolveTurn.js';
 
-export function createRoundState({ variantId = DEFAULT_VARIANT_ID } = {}) {
+export function createRoundState({ variantId = DEFAULT_VARIANT_ID, resources = null } = {}) {
   const normalizedVariantId = normalizeVariantId(variantId);
 
+  const variant = getVariant(normalizedVariantId);
   return {
     variantId: normalizedVariantId,
     turn: 0,
     status: 'playing',
+    winner: null,
+    phase: variant.initialPhase ?? 'choose',
+    pairs: null,
+    ...(variant.createRoundData?.() ?? {}),
     players: {
-      p1: createPlayerState(normalizedVariantId),
-      p2: createPlayerState(normalizedVariantId),
+      p1: createPlayerState(normalizedVariantId, resources?.p1),
+      p2: createPlayerState(normalizedVariantId, resources?.p2),
     },
     history: [],
   };
@@ -31,6 +36,7 @@ export function playTurn(state, p1Move, p2Move, variantId = state.variantId ?? D
     p1Resource: getPlayerResource(state.players.p1),
     p2Resource: getPlayerResource(state.players.p2),
     variantId,
+    state,
   });
 
   if (!result.ok) {
@@ -45,7 +51,10 @@ export function playTurn(state, p1Move, p2Move, variantId = state.variantId ?? D
     ...state,
     turn: result.isRoundOver ? state.turn : state.turn + 1,
     status: result.isRoundOver ? 'finished' : 'playing',
-    winner: result.winner ?? state.winner,
+    winner: result.isRoundOver ? result.winner : null,
+    phase: result.nextPhase ?? state.phase,
+    pairs: result.pairs ?? state.pairs,
+    ...(result.nextStateData ?? {}),
     players: {
       p1: {
         ...state.players.p1,
@@ -91,12 +100,14 @@ export function playTurn(state, p1Move, p2Move, variantId = state.variantId ?? D
 }
 
 export function getPlayerLegalMoves(state, playerId, variantId = state.variantId ?? DEFAULT_VARIANT_ID) {
+  const variant = getVariant(variantId);
+  if (variant.getLegalMovesFromState) return variant.getLegalMovesFromState(state, playerId);
   const opponentId = playerId === 'p1' ? 'p2' : 'p1';
   return getLegalMoves(getPlayerResource(state.players[playerId]), getPlayerResource(state.players[opponentId]), variantId);
 }
 
-function createPlayerState(variantId) {
-  const resource = getVariantStartResource(variantId);
+function createPlayerState(variantId, carriedResource) {
+  const resource = carriedResource ?? getVariantStartResource(variantId);
 
   return {
     resource,

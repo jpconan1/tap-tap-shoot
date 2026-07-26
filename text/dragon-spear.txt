@@ -1,0 +1,8 @@
+Rock paper scissors with 2 extra moves: DRAGON and SPEAR.
+
+DRAGON is a trump card. Beats r/p/s. 
+SPEAR beats DRAGON, but loses to r/p/s.
+
+PERMADEATH: If your DRAGON gets beaten, you cannot use it in subsequent Rounds. It’s unavalible for the rest of the Game. 
+
+FT5 like classic RPS, with no Roud Lost/Win scenes-you pick your move for the next round without interupption.

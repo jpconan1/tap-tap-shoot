@@ -48,6 +48,17 @@ test('variant buttons omit difficulty for classic RPS', () => {
   assert.match(screen.renderVariantButton(variants[0], 1), /aria-label="Rock &amp; Paper"/);
 });
 
+test('generic variant buttons render escaped text over the placeholder art', () => {
+  const { screen } = createScreen();
+  const markup = screen.renderVariantButton({
+    id: 'prototype',
+    name: 'Kitchen & Sink!',
+    buttonDoodle: 'button_bg_generic2',
+  }, 1);
+
+  assert.match(markup, /class="variant-button-label">Kitchen &amp; Sink!<\/span>/);
+});
+
 test('variant detail copy emphasizes only the first sentence', () => {
   const { screen } = createScreen();
   const markup = screen.renderDetailCopy(variants[0]);

@@ -1,5 +1,5 @@
 import { VARIANT_IDS, getLegalMoves, normalizeVariantId } from './moves.js';
-import { getPlayerResource } from './gameState.js';
+import { getPlayerLegalMoves, getPlayerResource } from './gameState.js';
 import tapTapShootXPolicy from './tap_tap_shoot_policy.json' with { type: 'json' };
 
 export const RIVAL_DIFFICULTIES = Object.freeze({
@@ -38,9 +38,10 @@ export function chooseRivalMove(state, rng = Math.random, difficulty = RIVAL_DIF
   const enemyResource = getPlayerResource(state.players.p1);
   const variantId = normalizeVariantId(state.variantId);
   const normalizedDifficulty = normalizeDifficulty(difficulty);
+  const stateLegalMoves = getPlayerLegalMoves(state, 'p2', variantId);
 
   if (normalizedDifficulty === RIVAL_DIFFICULTIES.easy || variantId === VARIANT_IDS.rockPaperScissors) {
-    return chooseRandomLegalMove(ownResource, enemyResource, rng, variantId);
+    return chooseRandomMove(stateLegalMoves, rng);
   }
 
   const hardPolicy = getHardVariantPolicy(enemyResource, ownResource, variantId);
@@ -48,7 +49,7 @@ export function chooseRivalMove(state, rng = Math.random, difficulty = RIVAL_DIF
     return chooseWeightedLegalMove(ownResource, enemyResource, hardPolicy, rng, variantId);
   }
 
-  return chooseRandomLegalMove(ownResource, enemyResource, rng, variantId);
+  return chooseRandomMove(stateLegalMoves, rng);
 }
 
 function normalizeDifficulty(difficulty) {
@@ -74,6 +75,10 @@ function chooseWeightedLegalMove(ownBullets, enemyBullets, policy, rng, variantI
 
 function chooseRandomLegalMove(ownBullets, enemyBullets, rng, variantId) {
   const legalMoves = getLegalMoves(ownBullets, enemyBullets, variantId);
+  return chooseRandomMove(legalMoves, rng);
+}
+
+function chooseRandomMove(legalMoves, rng) {
   return legalMoves[Math.min(Math.floor(rng() * legalMoves.length), legalMoves.length - 1)];
 }
 

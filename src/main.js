@@ -52,7 +52,11 @@ import { createLobbyScreen } from './presentation/lobbyScreen.js';
 import { createRankedScreens } from './presentation/rankedScreens.js';
 import { getResourcePresentation, shouldShowPickHistoryForVariant } from './variantPresentation.js';
 import { resolveReadyScene, resolveScene, swapScenePerspective } from './sceneResolver.js';
-import { VARIANT_SELECT_PAGE_SIZE, VARIANT_SELECT_VARIANTS } from './variantSelectConfig.js';
+import {
+  RANKED_VARIANT_SELECT_VARIANTS,
+  VARIANT_SELECT_PAGE_SIZE,
+  VARIANT_SELECT_VARIANTS,
+} from './variantSelectConfig.js';
 import nameGeneratorData from './nameGeneratorData.json' with { type: 'json' };
 import {
   DOODLE_FRAME_RATE,
@@ -83,6 +87,7 @@ import { createAlertSystem } from './alertSystem.js';
 import { createLayoutLoader, DEFAULT_LAYOUT_STATE_ID } from './layoutLoader.js';
 import { createLobbyWhiteboard, LOBBY_BOARD_COLORS } from './lobbyWhiteboard.js';
 import { LocalTurnController } from './localTurnController.js';
+import { mountRulesSandbox } from './rulesSandbox/ui.js';
 
 const BEAT_MS = 750;
 const BAN_ANIMATION_DURATION_MS = 7 * 58;
@@ -122,6 +127,11 @@ const VARIANT_LAYOUT_URLS = Object.freeze({
   [VARIANT_IDS.fireballWar]: './assets/fireball-war/fireball-war-layout.json',
   [VARIANT_IDS.gunKnifeFist]: './assets/gun-knife-fist/gun-knife-fist-layout.json',
   [VARIANT_IDS.tapTapShootX]: './assets/tap-tap-shoot-x/tap-tap-shoot-x-layout.json',
+  [VARIANT_IDS.rpsDragonSpear]: './assets/rps-dragon-spear/rps-dragon-spear-layout.json',
+  [VARIANT_IDS.rpsMinusOne]: './assets/rps-minus-one/rps-minus-one-layout.json',
+  [VARIANT_IDS.kitchenSink]: './assets/kitchen-sink/kitchen-sink-layout.json',
+  [VARIANT_IDS.rpsRpg]: './assets/rps-rpg/rps-rpg-layout.json',
+  [VARIANT_IDS.rpsPoker]: './assets/rps-poker/rps-poker-layout.json',
 });
 const DISADVANTAGED_LAYOUT_STATE_ID = 'playing.disadvantaged';
 const BETWEEN_ROUND_LAYOUT_STATE_ID = 'round.between';
@@ -194,6 +204,45 @@ const VARIANT_MOVE_BUTTON_DOODLES = Object.freeze({
     stab: 'tap-tap-shoot-x/stab_ap_button',
     duck: 'tap-tap-shoot-x/duck_button',
     counterstab: 'tap-tap-shoot-x/counterstab_button',
+  }),
+  [VARIANT_IDS.rpsDragonSpear]: Object.freeze({
+    dragon: 'button_bg_generic1',
+    rock: 'button_bg_generic2',
+    paper: 'button_bg_generic2',
+    scissors: 'button_bg_generic2',
+    spear: 'button_bg_generic3',
+  }),
+  [VARIANT_IDS.rpsMinusOne]: Object.freeze({
+    rockPaper: 'button_bg_generic1',
+    paperScissors: 'button_bg_generic2',
+    scissorsRock: 'button_bg_generic3',
+    rock: 'button_bg_generic1',
+    paper: 'button_bg_generic2',
+    scissors: 'button_bg_generic3',
+  }),
+  [VARIANT_IDS.kitchenSink]: Object.freeze({
+    strike: 'button_bg_generic1',
+    advance: 'button_bg_generic2',
+    bait: 'button_bg_generic3',
+    charge: 'button_bg_generic1',
+    fireball: 'button_bg_generic2',
+    poweredStrike: 'button_bg_generic2',
+    reversal: 'button_bg_generic2',
+    super: 'button_bg_generic3',
+    wait: 'button_bg_generic3',
+  }),
+  [VARIANT_IDS.rpsRpg]: Object.freeze({
+    str: 'button_bg_generic1',
+    int: 'button_bg_generic2',
+    dex: 'button_bg_generic3',
+    sword: 'button_bg_generic1',
+    staff: 'button_bg_generic2',
+    bow: 'button_bg_generic3',
+  }),
+  [VARIANT_IDS.rpsPoker]: Object.freeze({
+    rock: 'button_bg_generic1', paper: 'button_bg_generic2', scissors: 'button_bg_generic3',
+    check: 'button_bg_generic1', bet: 'button_bg_generic2', fold: 'button_bg_generic1',
+    call: 'button_bg_generic2', raise: 'button_bg_generic3', wait: 'button_bg_generic3',
   }),
 });
 const MOVE_ICON_DOODLES = Object.freeze({
@@ -368,6 +417,7 @@ const pausableTimers = new Set();
 let loopToken = 0;
 let turnPhase = 'idle';
 let p1QueuedMove = null;
+let pokerWagerAmount = 1;
 let localRoundTimedOutPlayer = null;
 let rankedSnapshot = null;
 let ignoredRankedMatchId = null;
@@ -518,7 +568,7 @@ const lobbyScreen = createLobbyScreen({
 });
 const rankedScreens = createRankedScreens({
   app,
-  variants: COMPUTER_VARIANTS,
+  variants: RANKED_VARIANT_SELECT_VARIANTS,
   getSnapshot: () => rankedSnapshot,
   getDisplayName: () => rankedDisplayName,
   isBanAnimationComplete: (variantId) => completedBanAnimationVariants.has(variantId),
@@ -577,19 +627,27 @@ const gameFlowDirector = new GameFlowDirector({
   advanceRound: advanceLocalRoundPreservingReveal,
 });
 
-configureAudio({ getMusicTopperFile });
-setBoilEnabled(isBoilEnabled);
-setMusicVolume(musicVolume);
-setSfxVolume(sfxVolume);
+const isRulesSandbox = new URLSearchParams(window.location.search).get('rules-sandbox') === '1';
 
-updateFrameScale();
-window.addEventListener('resize', handleViewportResize);
-window.visualViewport?.addEventListener('resize', handleViewportResize);
-window.addEventListener('keydown', handleGlobalKeydown);
-window.addEventListener('pointermove', lobbyWhiteboard.followTool);
-window.addEventListener('pointerdown', lobbyWhiteboard.releaseToolOutside, true);
-installAudioUnlockListeners();
-boot();
+if (isRulesSandbox) {
+  document.documentElement.classList.add('rules-sandbox-root');
+  document.body.classList.add('rules-sandbox-mode');
+  mountRulesSandbox(app);
+} else {
+  configureAudio({ getMusicTopperFile });
+  setBoilEnabled(isBoilEnabled);
+  setMusicVolume(musicVolume);
+  setSfxVolume(sfxVolume);
+
+  updateFrameScale();
+  window.addEventListener('resize', handleViewportResize);
+  window.visualViewport?.addEventListener('resize', handleViewportResize);
+  window.addEventListener('keydown', handleGlobalKeydown);
+  window.addEventListener('pointermove', lobbyWhiteboard.followTool);
+  window.addEventListener('pointerdown', lobbyWhiteboard.releaseToolOutside, true);
+  installAudioUnlockListeners();
+  boot();
+}
 
 async function boot() {
   const loadingScreen = renderLoadingScreen();
@@ -931,6 +989,7 @@ function getGamePreloadDoodles() {
     'variant_play_button',
     'select_button',
     ...COMPUTER_VARIANTS.map((variant) => variant.buttonDoodle),
+    ...RANKED_VARIANT_SELECT_VARIANTS.map((variant) => variant.buttonDoodle),
     ...getMoveButtonDoodlesForPreload(),
     ...Object.values(MOVE_ICON_DOODLES),
     ...getResourceDoodlesForPreload(),
@@ -1625,6 +1684,9 @@ function renderLayoutGameScreen(legalMoves) {
         ${renderLayoutSlot('turn-counter', renderTurnCounter(), 'hud-art-slot')}
         ${renderLayoutSlot('p1-win-counter', renderWinCounter('p1'), 'hud-art-slot')}
         ${renderLayoutSlot('p2-win-counter', renderWinCounter('p2'), 'hud-art-slot')}
+        ${renderKitchenSinkHud()}
+        ${renderRpsRpgHud()}
+        ${renderRpsPokerHud()}
         ${renderLayoutBulletSlots('p1')}
         ${renderLayoutBulletSlots('p2')}
         ${renderLayoutPickHistorySlots('p1')}
@@ -1644,6 +1706,9 @@ function renderLayoutGameScreen(legalMoves) {
   `;
 
   installMoveButtonHandlers();
+  app.querySelector('[data-poker-wager]')?.addEventListener('input', (event) => {
+    pokerWagerAmount = Number(event.currentTarget.value);
+  });
   installLayoutActionHandlers();
   mountSpriteRenderers(app.querySelectorAll('.sprite-canvas'));
   app.querySelector('.ready-waiting-overlay')?.addEventListener('ready-waiting-split', handleReadyWaitingSplit);
@@ -1656,6 +1721,73 @@ function renderLayoutGameScreen(legalMoves) {
     audioKey: `${state.turn}:${turnPhase}:${stagePresentation.name}:${stagePresentation.flip}`,
   });
   maybeStartComputerTurnChoice();
+}
+
+function renderRpsRpgHud() {
+  if (getCurrentVariantId() !== VARIANT_IDS.rpsRpg) return '';
+  return `
+    ${renderLayoutSlot('p1-rpg-state', renderRpgPlayerState('p1'), 'rpg-state-slot')}
+    ${renderLayoutSlot('p2-rpg-state', renderRpgPlayerState('p2'), 'rpg-state-slot')}
+    ${renderLayoutSlot('rpg-phase', `<div class="rpg-phase">${state.phase === 'level' ? 'LEVEL A STAT' : 'CHOOSE A WEAPON'}</div>`, 'rpg-phase-slot')}
+  `;
+}
+
+function renderRpsPokerHud() {
+  if (getCurrentVariantId() !== VARIANT_IDS.rpsPoker) return '';
+  const legal = getPlayerLegalMoves(state, 'p1');
+  const wagers = legal.filter((move) => /^(bet|raise):\d+$/.test(move)).map((move) => Number(move.split(':')[1]));
+  const min = wagers.length ? Math.min(...wagers) : 1;
+  const max = wagers.length ? Math.max(...wagers) : 1;
+  pokerWagerAmount = Math.max(min, Math.min(max, pokerWagerAmount));
+  return `
+    ${renderLayoutSlot('poker-state', `<div class="poker-state">
+      <strong>HAND ${state.hand} · ANTE ${state.ante} · POT ${state.pot}</strong>
+      <span>YOU ${state.stacks.p1} · RIVAL ${state.stacks.p2}</span>
+      <span>COMMUNITY ${state.community?.toUpperCase() ?? '?'}</span>
+      <span>${state.phase === 'betting' ? `${state.actor?.toUpperCase()} TO ACT` : state.phase.toUpperCase()}</span>
+    </div>`, 'poker-state-slot')}
+    ${wagers.length ? renderLayoutSlot('poker-amount', `<label class="poker-wager">AMOUNT<input data-poker-wager type="number" min="${min}" max="${max}" value="${pokerWagerAmount}"></label>`, 'poker-wager-slot') : ''}
+  `;
+}
+
+function renderRpgPlayerState(playerId) {
+  const stats = state.stats[playerId];
+  return `
+    <div class="rpg-player-state">
+      <strong>${playerId.toUpperCase()}</strong>
+      <span>STR ${stats.str}</span>
+      <span>INT ${stats.int}</span>
+      <span>DEX ${stats.dex}</span>
+    </div>
+  `;
+}
+
+function renderKitchenSinkHud() {
+  if (getCurrentVariantId() !== VARIANT_IDS.kitchenSink) return '';
+  const position = state.position === 'neutral'
+    ? 'P1  .  P2'
+    : state.position === 'p1-center'
+      ? '.  P1  P2'
+      : 'P1  P2  .';
+  return `
+    ${renderLayoutSlot('p1-kitchen-state', renderKitchenPlayerState('p1'), 'kitchen-state-slot')}
+    ${renderLayoutSlot('p2-kitchen-state', renderKitchenPlayerState('p2'), 'kitchen-state-slot')}
+    ${renderLayoutSlot('position-state', `<div class="kitchen-position"><strong>POSITION</strong><span>${position}</span></div>`, 'kitchen-position-slot')}
+  `;
+}
+
+function renderKitchenPlayerState(playerId) {
+  const hp = Math.max(0, state.hp?.[playerId] ?? 3);
+  const bars = Math.max(0, getPlayerResource(state.players[playerId]));
+  const glyphs = (filled, mark) => Array.from({ length: 3 }, (_, index) => index < filled ? mark : '.').join('  ');
+  return `
+    <div class="kitchen-player-state">
+      <strong>${playerId.toUpperCase()}</strong>
+      <span>HP&nbsp;&nbsp;${glyphs(hp, '=')}</span>
+      <span>BAR&nbsp;${glyphs(bars, 'X')}</span>
+      ${bars === 3 ? '<em>SUPER AVAILABLE</em>' : ''}
+    </div>
+  `;
 }
 
 function installLayoutActionHandlers() {
@@ -1772,6 +1904,15 @@ function renderTurnCounter() {
 function renderWinCounter(playerId) {
   const targetRoundWins = getVariantTargetRoundWins(getCurrentVariantId());
   const counter = Math.min(roundWins[playerId], targetRoundWins);
+  if (getCurrentVariantId() === VARIANT_IDS.rpsMinusOne) {
+    return `<span class="pip-counter" aria-label="${counter} pips">${counter}</span>`;
+  }
+  if (getCurrentVariantId() === VARIANT_IDS.kitchenSink) {
+    return `<span class="kitchen-round-counter" aria-label="${counter} of 2 rounds">${counter} / 2</span>`;
+  }
+  if (getCurrentVariantId() === VARIANT_IDS.rpsRpg) {
+    return `<span class="rpg-score-counter" aria-label="${counter} of 4 points">${counter} / 4</span>`;
+  }
   const doodle = getWinCounterDoodle(getCurrentVariantId(), counter);
   return renderStaticDoodle(doodle, WIN_MARK_FRAME_WIDTH, WIN_MARK_FRAME_HEIGHT, 'win-mark');
 }
@@ -1838,8 +1979,21 @@ function renderLayoutPickHistorySlots(playerId) {
 
   return `
     ${renderLayoutSlot(`${playerId}-${isPlayer ? 'you-picked' : 'they-picked'}`, renderStaticDoodle(label, labelWidth, PICK_LABEL_FRAME_HEIGHT, 'pick-label'), 'hud-art-slot')}
-    ${renderLayoutSlot(`${playerId}-previous-move-icon`, renderStaticDoodle(getMoveButtonDoodle(move), BUTTON_FRAME_WIDTH, BUTTON_FRAME_HEIGHT, 'previous-move-button'), 'hud-art-slot')}
+    ${renderLayoutSlot(`${playerId}-previous-move-icon`, renderPreviousMove(move), 'hud-art-slot')}
   `;
+}
+
+function renderPreviousMove(moveId) {
+  const doodle = getMoveButtonDoodle(moveId);
+  const art = renderStaticDoodle(doodle, BUTTON_FRAME_WIDTH, BUTTON_FRAME_HEIGHT, 'previous-move-button');
+  if (!doodle.startsWith('button_bg_generic')) return art;
+  return `<div class="previous-move-placeholder">${art}<span>${escapeHtml(getMoveLabel(moveId))}</span></div>`;
+}
+
+function getMoveLabel(moveId) {
+  const [baseMoveId, amount] = String(moveId).split(':');
+  const label = MOVES[baseMoveId]?.label ?? baseMoveId;
+  return amount ? `${label} ${amount}` : label;
 }
 
 function renderLayoutMoveControls(legalMoves) {
@@ -1860,6 +2014,7 @@ function renderLayoutMoveArrows() {
     ${renderLayoutSlot('right-red-arrow', renderStaticDoodle('right_red', 128, 128, 'move-arrow'), 'move-arrow-slot')}
     ${renderLayoutSlot('down-right-red-arrow', renderStaticDoodle('down-right_red', 128, 128, 'move-arrow'), 'move-arrow-slot')}
     ${renderLayoutSlot('up-right-red-arrow', renderStaticDoodle('up-right_red', 128, 128, 'move-arrow'), 'move-arrow-slot')}
+    ${renderLayoutSlot('rpg-dex-str-arrow', renderStaticDoodle('up-right_red', 128, 128, 'move-arrow', { flip: true }), 'move-arrow-slot')}
     ${renderLayoutSlot('left-red-arrow', renderStaticDoodle('left_red', 128, 128, 'move-arrow'), 'move-arrow-slot')}
     ${renderLayoutSlot('down-left-red-arrow', renderStaticDoodle('down-left_red', 128, 128, 'move-arrow'), 'move-arrow-slot')}
     ${renderLayoutSlot('up-blue-arrow', renderStaticDoodle('up_blue', 128, 128, 'move-arrow'), 'move-arrow-slot')}
@@ -1879,12 +2034,17 @@ function renderLayoutActionButtons(legalMoves) {
   }
 
   const slottedButtons = getActiveMoveIds()
-    .map((moveId) => renderLayoutSlot(`${moveId}-button`, renderMoveButton(MOVES[moveId], legalMoves.has(moveId)), 'move-button-slot'))
+    .map((moveId) => renderLayoutSlot(`${moveId}-button`, renderMoveButton(MOVES[moveId], isDisplayedMoveLegal(moveId, legalMoves)), 'move-button-slot'))
     .join('');
 
   return slottedButtons || getActiveMoveIds()
-    .map((moveId) => renderMoveButton(MOVES[moveId], legalMoves.has(moveId)))
+    .map((moveId) => renderMoveButton(MOVES[moveId], isDisplayedMoveLegal(moveId, legalMoves)))
     .join('');
+}
+
+function isDisplayedMoveLegal(moveId, legalMoves) {
+  return legalMoves.has(moveId)
+    || [...legalMoves].some((legalMove) => legalMove.startsWith(`${moveId}:`));
 }
 
 function renderLayoutRoundActions() {
@@ -1953,6 +2113,20 @@ function getLayoutStateId(legalMoves) {
     return DISADVANTAGED_LAYOUT_STATE_ID;
   }
 
+  if (
+    getCurrentVariantId() === VARIANT_IDS.rpsMinusOne
+    && ['keep', 'suddenDeath'].includes(state.phase)
+  ) {
+    return 'playing.keep';
+  }
+  if (getCurrentVariantId() === VARIANT_IDS.rpsRpg && state.phase === 'move') {
+    return 'playing.move';
+  }
+  if (getCurrentVariantId() === VARIANT_IDS.rpsPoker) {
+    if (state.phase === 'betting') return 'playing.betting';
+    if (state.phase === 'forcedRps') return 'playing.forced';
+  }
+
   return DEFAULT_LAYOUT_STATE_ID;
 }
 
@@ -1976,9 +2150,16 @@ function renderPickHistories() {
 }
 
 function shouldShowPickHistory() {
-  const hasPersistedRpsReveal = getCurrentVariantId() === VARIANT_IDS.rockPaperScissors
+  const variantId = getCurrentVariantId();
+  const hasPersistedRpsReveal = (
+    variantId === VARIANT_IDS.rockPaperScissors
     && stagePresentation.kind === 'doodle'
-    && stagePresentation.name !== 'rock-paper-scissors/rps-standoff';
+    && stagePresentation.name !== 'rock-paper-scissors/rps-standoff'
+  ) || (
+    variantId === VARIANT_IDS.rpsDragonSpear
+    && stagePresentation.kind === 'placeholder'
+    && stagePresentation.name !== 'rps-ds-standoff'
+  );
 
   return (state.history.length > 0 || hasPersistedRpsReveal)
     && turnPhase !== 'round-over'
@@ -2077,10 +2258,28 @@ function renderResultMoveButton(playerId) {
     ? 'timeout_button'
     : getMoveButtonDoodle(lastMoves[playerId]);
 
+  if (timedOutPlayer !== playerId && doodle.startsWith('button_bg_generic')) {
+    return `
+      <div class="last-pick-placeholder">
+        ${renderStaticDoodle(doodle, BUTTON_FRAME_WIDTH, BUTTON_FRAME_HEIGHT, 'last-pick-button')}
+        <span>${escapeHtml(getMoveLabel(lastMoves[playerId]))}</span>
+      </div>
+    `;
+  }
+
   return renderStaticDoodle(doodle, timedOutPlayer === playerId ? 258 : BUTTON_FRAME_WIDTH, BUTTON_FRAME_HEIGHT, 'last-pick-button');
 }
 
 function renderSingleStagePresentation(presentation, extraClass = '') {
+  if (presentation.kind === 'placeholder') {
+    return `
+      <div class="stage-placeholder ${extraClass}" data-placeholder-scene="${escapeHtml(presentation.name)}">
+        <strong>${escapeHtml(presentation.title ?? presentation.name)}</strong>
+        ${(presentation.lines ?? []).map((line) => `<span>${escapeHtml(line)}</span>`).join('')}
+      </div>
+    `;
+  }
+
   if (presentation.kind === 'cue') {
     return `
       <canvas
@@ -3041,12 +3240,16 @@ function renderMoveButton(move, isLegal) {
         height="${BUTTON_FRAME_HEIGHT}"
         aria-label="${move.label}"
       ></canvas>
+      ${getMoveButtonDoodle(move.id).startsWith('button_bg_generic') ? `<span class="move-button-label">${escapeHtml(move.label)}</span>` : ''}
     </button>
   `;
 }
 
 function getMoveButtonDoodle(moveId, variantId = getCurrentVariantId()) {
-  return VARIANT_MOVE_BUTTON_DOODLES[variantId]?.[moveId] ?? DEFAULT_MOVE_BUTTON_DOODLES[moveId];
+  const baseMoveId = String(moveId).split(':')[0];
+  return VARIANT_MOVE_BUTTON_DOODLES[variantId]?.[baseMoveId]
+    ?? DEFAULT_MOVE_BUTTON_DOODLES[baseMoveId]
+    ?? 'button_bg_generic3';
 }
 
 function getMoveButtonDoodlesForPreload() {
@@ -3066,6 +3269,22 @@ function getResourceDoodlesForPreload() {
 }
 
 function getActiveMoveIds() {
+  if (getCurrentVariantId() === VARIANT_IDS.rpsPoker) {
+    if (['lock', 'forcedRps'].includes(state.phase)) return ['rock', 'paper', 'scissors'];
+    return [...new Set(getPlayerLegalMoves(state, 'p1').map((moveId) => moveId.split(':')[0]))]
+      .filter((moveId) => moveId !== 'wait');
+  }
+  if (getCurrentVariantId() === VARIANT_IDS.rpsRpg) {
+    return state.phase === 'level' ? ['str', 'int', 'dex'] : ['sword', 'staff', 'bow'];
+  }
+  if (getCurrentVariantId() === VARIANT_IDS.kitchenSink) {
+    return ['strike', 'advance', 'bait', 'charge', 'fireball', 'poweredStrike', 'reversal', 'super'];
+  }
+  if (getCurrentVariantId() === VARIANT_IDS.rpsMinusOne) {
+    return ['keep', 'suddenDeath'].includes(state.phase)
+      ? ['rock', 'paper', 'scissors']
+      : ['rockPaper', 'paperScissors', 'scissorsRock'];
+  }
   return getVariantMoveIds(getCurrentVariantId());
 }
 
@@ -3134,6 +3353,11 @@ function submitMove(p1Move) {
     return;
   }
 
+  if (getCurrentVariantId() === VARIANT_IDS.rpsPoker && ['bet', 'raise'].includes(p1Move)) {
+    const wagers = getCurrentLegalMoves().filter((moveId) => moveId.startsWith(`${p1Move}:`));
+    p1Move = wagers.find((moveId) => Number(moveId.split(':')[1]) === pokerWagerAmount) ?? wagers[0];
+  }
+
   if (
     isTransitioning ||
     turnPhase !== 'scene' ||
@@ -3167,6 +3391,9 @@ function maybeStartComputerTurnChoice() {
   }
 
   getOrCreateLocalTurnChoice();
+  if (getPlayerLegalMoves(state, 'p1').length === 1 && getPlayerLegalMoves(state, 'p1')[0] === 'wait') {
+    queueLocalPlayerMove('wait');
+  }
 }
 
 function submitTestOpponentMove(p2Move) {
@@ -3207,6 +3434,13 @@ function getLocalTurnChoiceKey() {
     getPlayerResource(state.players.p2),
     roundWins.p1,
     roundWins.p2,
+    state.phase,
+    state.position,
+    state.actor,
+    state.hand,
+    state.pot,
+    state.committed?.p1,
+    state.committed?.p2,
   ].join(':');
 }
 
@@ -3868,6 +4102,74 @@ function setNewRoundAtReloadScene() {
 }
 
 function getIdleStagePresentation(variantId = getCurrentVariantId()) {
+  if (variantId === VARIANT_IDS.rpsPoker) {
+    return {
+      kind: 'placeholder',
+      name: `rps-poker-${state.phase}`,
+      title: state.phase === 'betting'
+        ? `${state.actor === 'p1' ? 'YOUR' : 'RIVAL'} ACTION!`
+        : state.phase === 'forcedRps' ? 'ALL IN! RPS!' : 'LOCK YOUR MOVE!',
+      lines: [
+        `HAND ${state.hand}  ANTE ${state.ante}  POT ${state.pot}`,
+        `STACKS: ${state.stacks.p1} - ${state.stacks.p2}`,
+        `COMMUNITY: ${state.community ? getMoveLabel(state.community).toUpperCase() : '?'}`,
+      ],
+    };
+  }
+
+  if (variantId === VARIANT_IDS.rpsRpg) {
+    return {
+      kind: 'placeholder',
+      name: state.phase === 'level' ? 'rps-rpg-level' : 'rps-rpg-fight',
+      title: state.phase === 'level' ? 'LEVEL UP!' : 'RPS RPG!',
+      lines: [
+        `YOU: STR ${state.stats.p1.str}  INT ${state.stats.p1.int}  DEX ${state.stats.p1.dex}`,
+        `RIVAL: STR ${state.stats.p2.str}  INT ${state.stats.p2.int}  DEX ${state.stats.p2.dex}`,
+      ],
+    };
+  }
+
+  if (variantId === VARIANT_IDS.kitchenSink) {
+    return {
+      kind: 'placeholder',
+      name: state.phase === 'freeMove' ? 'kitchen-sink-free-move' : 'kitchen-sink-standoff',
+      title: state.phase === 'freeMove'
+        ? `${state.freeMoveActor?.toUpperCase()} FREE MOVE!`
+        : 'KITCHEN SINK!',
+      lines: [
+        `POSITION: ${String(state.position).toUpperCase()}`,
+        `HP: ${state.hp.p1} - ${state.hp.p2}`,
+        `BARS: ${getPlayerResource(state.players.p1)} - ${getPlayerResource(state.players.p2)}`,
+      ],
+    };
+  }
+
+  if (variantId === VARIANT_IDS.rpsMinusOne) {
+    return {
+      kind: 'placeholder',
+      name: state.phase === 'keep' ? 'rps-minus-one-keep' : 'rps-minus-one-standoff',
+      title: state.phase === 'keep' ? 'KEEP ONE!' : 'RPS MINUS ONE!',
+      lines: state.phase === 'keep'
+        ? [
+          `YOUR PAIR: ${MOVES[state.pairs?.p1]?.label ?? ''}`,
+          `RIVAL PAIR: ${MOVES[state.pairs?.p2]?.label ?? ''}`,
+        ]
+        : [`PIPS: ${roundWins.p1} - ${roundWins.p2}`],
+    };
+  }
+
+  if (variantId === VARIANT_IDS.rpsDragonSpear) {
+    return {
+      kind: 'placeholder',
+      name: 'rps-ds-standoff',
+      title: 'RPS DS STANDOFF!',
+      lines: [
+        `YOUR DRAGON: ${getPlayerResource(state.players.p1) > 0 ? 'ALIVE' : 'DEAD'}`,
+        `RIVAL DRAGON: ${getPlayerResource(state.players.p2) > 0 ? 'ALIVE' : 'DEAD'}`,
+      ],
+    };
+  }
+
   if (variantId === VARIANT_IDS.fireballWar) {
     return {
       kind: 'doodle',
@@ -4890,7 +5192,9 @@ function showRoundOverScene(resultLevel = 'round') {
       kind: 'doodle',
       name: resultLevel === 'match'
         ? 'system_scenes/round-game-match'
-        : getRoundOverDoodle(state.winner, useRoundDoodle),
+        : getCurrentVariantId() === VARIANT_IDS.rpsMinusOne && !state.winner
+          ? 'system_scenes/no_contest'
+          : getRoundOverDoodle(state.winner, useRoundDoodle),
       flip: false,
     },
   };

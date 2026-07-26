@@ -1,0 +1,104 @@
+{
+  "version": 3,
+  "layoutTarget": "variant",
+  "variantId": "rps-rpg",
+  "variant": "RPS RPG",
+  "variantFolder": "assets/rps-rpg",
+  "frame": { "width": 960, "height": 540 },
+  "portraitFrame": { "width": 540, "height": 960 },
+  "sceneAnchors": {},
+  "states": {
+    "playing.default": {
+      "name": "Level",
+      "elements": [
+        { "key": "p1-info", "kind": "slot", "x": 18, "y": 12, "width": 220, "height": 72 },
+        { "key": "p2-info", "kind": "slot", "x": 722, "y": 12, "width": 220, "height": 72 },
+        { "key": "p1-state", "kind": "slot", "x": 0, "y": 0, "width": 1, "height": 1 },
+        { "key": "p2-state", "kind": "slot", "x": 0, "y": 0, "width": 1, "height": 1 },
+        { "key": "score", "kind": "slot", "x": 0, "y": 0, "width": 1, "height": 1 },
+        { "key": "phase-prompt", "kind": "slot", "x": 0, "y": 0, "width": 1, "height": 1 },
+        { "key": "p1-win-label", "kind": "slot", "x": 245, "y": 0, "width": 128, "height": 64 },
+        { "key": "p1-win-counter", "kind": "slot", "x": 282, "y": 52, "width": 64, "height": 64 },
+        { "key": "turn-counter", "kind": "slot", "x": 352, "y": 0, "width": 256, "height": 128 },
+        { "key": "p2-win-label", "kind": "slot", "x": 587, "y": 0, "width": 128, "height": 64 },
+        { "key": "p2-win-counter", "kind": "slot", "x": 614, "y": 52, "width": 64, "height": 64 },
+        { "key": "p1-rpg-state", "kind": "slot", "x": 20, "y": 110, "width": 220, "height": 92 },
+        { "key": "p2-rpg-state", "kind": "slot", "x": 720, "y": 110, "width": 220, "height": 92 },
+        { "key": "rpg-phase", "kind": "slot", "x": 370, "y": 112, "width": 220, "height": 54 },
+        { "key": "scene", "kind": "text", "text": "LEVEL UP!", "scene": true, "x": 250, "y": 176, "width": 460, "height": 175 },
+        { "key": "p1-you-picked", "kind": "slot", "x": 25, "y": 245, "width": 128, "height": 64 },
+        { "key": "p1-previous-move-icon", "kind": "slot", "x": 141, "y": 245, "width": 128, "height": 64 },
+        { "key": "p2-they-picked", "kind": "slot", "x": 807, "y": 245, "width": 150, "height": 64 },
+        { "key": "p2-previous-move-icon", "kind": "slot", "x": 691, "y": 245, "width": 128, "height": 64 },
+        { "key": "actions", "kind": "slot", "x": 0, "y": 0, "width": 1, "height": 1 },
+        { "key": "str-button", "kind": "slot", "x": 385, "y": 326, "width": 190, "height": 95 },
+        { "key": "int-button", "kind": "slot", "x": 278, "y": 426, "width": 190, "height": 95 },
+        { "key": "dex-button", "kind": "slot", "x": 492, "y": 426, "width": 190, "height": 95 },
+        { "key": "down-left-red-arrow", "kind": "slot", "x": 353, "y": 380, "width": 64, "height": 64 },
+        { "key": "right-red-arrow", "kind": "slot", "x": 448, "y": 448, "width": 64, "height": 64 },
+        { "key": "rpg-dex-str-arrow", "kind": "slot", "x": 543, "y": 380, "width": 64, "height": 64 },
+        { "key": "rules-button", "kind": "slot", "x": 8, "y": 474, "width": 112, "height": 56 }
+      ],
+      "portraitElements": [
+        { "key": "p1-info", "kind": "slot", "x": 14, "y": 12, "width": 190, "height": 72 },
+        { "key": "p2-info", "kind": "slot", "x": 336, "y": 12, "width": 190, "height": 72 },
+        { "key": "p1-state", "kind": "slot", "x": 0, "y": 0, "width": 1, "height": 1 },
+        { "key": "p2-state", "kind": "slot", "x": 0, "y": 0, "width": 1, "height": 1 },
+        { "key": "score", "kind": "slot", "x": 0, "y": 0, "width": 1, "height": 1 },
+        { "key": "phase-prompt", "kind": "slot", "x": 0, "y": 0, "width": 1, "height": 1 },
+        { "key": "p1-win-label", "kind": "slot", "x": 8, "y": 82, "width": 128, "height": 64 },
+        { "key": "p1-win-counter", "kind": "slot", "x": 104, "y": 88, "width": 64, "height": 64 },
+        { "key": "turn-counter", "kind": "slot", "x": 142, "y": 70, "width": 256, "height": 128 },
+        { "key": "p2-win-label", "kind": "slot", "x": 404, "y": 82, "width": 128, "height": 64 },
+        { "key": "p2-win-counter", "kind": "slot", "x": 372, "y": 88, "width": 64, "height": 64 },
+        { "key": "p1-rpg-state", "kind": "slot", "x": 14, "y": 180, "width": 245, "height": 100 },
+        { "key": "p2-rpg-state", "kind": "slot", "x": 281, "y": 180, "width": 245, "height": 100 },
+        { "key": "rpg-phase", "kind": "slot", "x": 160, "y": 292, "width": 220, "height": 54 },
+        { "key": "scene", "kind": "text", "text": "LEVEL UP!", "scene": true, "x": 14, "y": 360, "width": 512, "height": 220 },
+        { "key": "actions", "kind": "slot", "x": 0, "y": 0, "width": 1, "height": 1 },
+        { "key": "str-button", "kind": "slot", "x": 160, "y": 600, "width": 220, "height": 110 },
+        { "key": "int-button", "kind": "slot", "x": 35, "y": 750, "width": 220, "height": 110 },
+        { "key": "dex-button", "kind": "slot", "x": 285, "y": 750, "width": 220, "height": 110 },
+        { "key": "down-left-red-arrow", "kind": "slot", "x": 130, "y": 690, "width": 64, "height": 64 },
+        { "key": "right-red-arrow", "kind": "slot", "x": 238, "y": 785, "width": 64, "height": 64 },
+        { "key": "rpg-dex-str-arrow", "kind": "slot", "x": 346, "y": 690, "width": 64, "height": 64 }
+      ]
+    },
+    "playing.move": {
+      "name": "Fight",
+      "extends": "playing.default",
+      "elements": [
+        { "key": "str-button", "hidden": true },
+        { "key": "int-button", "hidden": true },
+        { "key": "dex-button", "hidden": true },
+        { "key": "sword-button", "kind": "slot", "x": 385, "y": 326, "width": 190, "height": 95 },
+        { "key": "staff-button", "kind": "slot", "x": 278, "y": 426, "width": 190, "height": 95 },
+        { "key": "bow-button", "kind": "slot", "x": 492, "y": 426, "width": 190, "height": 95 }
+      ],
+      "portraitElements": []
+    },
+    "round.game-over": {
+      "name": "Game over",
+      "extends": "playing.move",
+      "elements": [
+        { "key": "sword-button", "hidden": true },
+        { "key": "staff-button", "hidden": true },
+        { "key": "bow-button", "hidden": true },
+        { "key": "continue-button", "kind": "slot", "x": 274, "y": 405, "width": 192, "height": 96 },
+        { "key": "quit-button", "kind": "slot", "x": 494, "y": 405, "width": 192, "height": 96 }
+      ],
+      "portraitElements": []
+    },
+    "round.between": {
+      "name": "Timeout",
+      "extends": "playing.default",
+      "elements": [
+        { "key": "str-button", "hidden": true },
+        { "key": "int-button", "hidden": true },
+        { "key": "dex-button", "hidden": true },
+        { "key": "continue-button", "kind": "slot", "x": 384, "y": 405, "width": 192, "height": 96 }
+      ],
+      "portraitElements": []
+    }
+  }
+}

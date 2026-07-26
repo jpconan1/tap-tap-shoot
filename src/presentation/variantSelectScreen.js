@@ -72,6 +72,7 @@ export function createVariantSelectScreen({
     return `
       <button class="variant-button variant-slot-${slot} ${className}" ${dataAttribute}="${variant.id}" data-variant-slot="${slot}" aria-label="${escapeHtml(variant.name)}" ${disabled ? 'disabled' : ''}>
         <canvas class="sprite-canvas variant-button-art" data-doodle="${variant.buttonDoodle}" data-frame-width="${VARIANT_BUTTON_FRAME_WIDTH}" data-frame-height="${VARIANT_BUTTON_FRAME_HEIGHT}" width="${VARIANT_BUTTON_FRAME_WIDTH}" height="${VARIANT_BUTTON_FRAME_HEIGHT}" aria-hidden="true"></canvas>
+        ${variant.buttonDoodle.startsWith('button_bg_generic') ? `<span class="variant-button-label">${escapeHtml(variant.name)}</span>` : ''}
         ${difficultyToggle}
       </button>
     `;
@@ -105,7 +106,7 @@ export function createVariantSelectScreen({
   function render() {
     requestMusicTrack('title');
     app.innerHTML = `
-      <section class="title-screen opponent-select-screen" aria-label="Choose variant">
+      <section class="title-screen opponent-select-screen computer-variant-select" aria-label="Choose variant">
         ${renderOpenCurtainBorder()}
         <canvas class="sprite-canvas pick-variant-header" data-doodle-file="pick_variant_sheet.webp" data-frame-width="${PICK_VARIANT_FRAME_WIDTH}" data-frame-height="${PICK_VARIANT_FRAME_HEIGHT}" width="${PICK_VARIANT_FRAME_WIDTH}" height="${PICK_VARIANT_FRAME_HEIGHT}" aria-label="Pick variant"></canvas>
         <div class="variant-actions">${getPageVariants().map((variant, index) => renderVariantButton(variant, index + 1)).join('')}${renderBackButton()}</div>

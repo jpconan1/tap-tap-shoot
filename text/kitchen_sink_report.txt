@@ -1,0 +1,425 @@
+Kitchen Sink Rules Report
+
+Status
+- This is the authoritative rules specification for Kitchen Sink.
+- It records confirmed rules and matchup outcomes only.
+- It does not contain Nash values or calculated balance claims.
+
+
+Core idea
+- Kitchen Sink combines the position game from Spacing Game with the meter game from Charge Block Fireball.
+- Players choose actions simultaneously unless one player is Punished.
+- Each player has 3 HP.
+- The first player to win 2 rounds wins the game.
+
+
+Match and round structure
+- Both players begin the game with 0 bars.
+- A player can hold at most 3 bars.
+- Both players keep their post-action bars between rounds.
+- At the start of each new round:
+  - Both players return to 3 HP.
+  - Position resets to Neutral.
+- A round ends immediately when a player reaches 0 HP.
+- There are no simultaneous damage trades.
+- Resource costs and successful resource gains from the lethal action resolve before bars carry into the next round.
+- A resource gain explicitly interrupted by the opposing action does not resolve.
+
+
+Position
+- Neutral: both players are in their own corner.
+- Center/Corner: one player has Center and the other player is Cornered.
+- "Hold" means the current position does not change.
+- "Reset" means position returns to Neutral.
+- Position changes still resolve normally after nonlethal damage.
+- Position is reset to Neutral at the beginning of every round.
+
+
+Actions
+- Strike.
+- Advance.
+- Bait.
+- Charge, replaced by Super while the player has 3 bars.
+- Special, whose identity depends on the player's position:
+  - Neutral: Fireball.
+  - Center: Powered Strike.
+  - Cornered: Reversal.
+
+Bait permanently replaces the old move name Back.
+
+
+Meter rules
+- Charge gives the user 1 bar when it succeeds.
+- Charge cannot raise meter above 3 bars.
+- A Charge that moves a player from 2 bars to 3 bars remains a Charge for that action.
+- Super becomes selectable on that player's next action.
+- At 3 bars, Charge is unavailable and is replaced by Super.
+- At 3 bars, the player may still choose Special instead of Super.
+- Fireball, Powered Strike, and Reversal each cost 1 bar.
+- A player with 0 bars cannot choose Special.
+- Super costs all 3 bars.
+- Every selected Special or Super pays its cost, including when it is blocked, baited, countered, cancelled, or used during a lethal action.
+
+
+Concrete outcome language
+- This report does not use "beats" as a complete rules result.
+- Every matchup states its concrete effects on HP, bars, position, or turn flow.
+- "Interrupted" means the charging player receives no bar.
+- Unless an outcome says otherwise, no HP, bar, position, or turn-flow change occurs.
+
+
+Punished and free moves
+- Center Bait can Punish a Cornered player's Strike or Reversal.
+- When Punished:
+  - The Cornered player cannot act on the next action.
+  - The Center player keeps Center and chooses any currently legal action.
+  - The chosen action resolves unopposed.
+- Examples of unopposed actions:
+  - Strike deals 1 damage.
+  - Charge gives 1 bar.
+  - Powered Strike costs 1 bar and deals 2 damage.
+  - Super costs 3 bars and deals 3 damage.
+  - Advance and Bait have no useful effect while the player already has Center.
+- If the round survives, normal simultaneous action selection resumes after the free move.
+
+
+Neutral matchup table
+
+The table lists each unordered matchup once.
+
+Strike vs Strike
+- Draw.
+
+Strike vs Advance
+- The Advance player loses 1 HP.
+- Position remains Neutral.
+
+Strike vs Bait
+- The Bait player gains Center.
+- No damage.
+
+Strike vs Charge
+- Charge is interrupted and gives no bar.
+- No damage.
+- Position remains Neutral.
+
+Strike vs Fireball
+- Fireball costs 1 bar.
+- The Strike player loses 1 HP.
+- Position remains Neutral.
+
+Strike vs Super
+- Super costs 3 bars.
+- The Strike player loses 3 HP.
+
+Advance vs Advance
+- Draw.
+
+Advance vs Bait
+- The Advance player gains Center.
+- No damage.
+
+Advance vs Charge
+- The Charge player gains 1 bar.
+- The Advance player gains Center.
+- No damage.
+
+Advance vs Fireball
+- Fireball costs 1 bar.
+- The Advance player loses 1 HP.
+- Position remains Neutral.
+
+Advance vs Super
+- Super costs 3 bars.
+- The Advance player loses 3 HP.
+
+Bait vs Bait
+- Draw.
+
+Bait vs Charge
+- The Charge player gains 1 bar.
+- The Bait player gains Center.
+- No damage.
+
+Bait vs Fireball
+- Fireball costs 1 bar.
+- Bait blocks the Fireball.
+- No damage.
+- Position remains Neutral.
+
+Bait vs Super
+- Super costs 3 bars.
+- The Bait player loses 1 HP.
+- Position remains Neutral.
+
+Charge vs Charge
+- Both players gain 1 bar.
+
+Charge vs Fireball
+- Fireball costs 1 bar.
+- The Charge player loses 1 HP.
+- Charge is interrupted and gives no bar.
+- Position remains Neutral.
+
+Charge vs Super
+- Super costs 3 bars.
+- The Charge player loses 3 HP.
+- Charge is interrupted and gives no bar.
+
+Fireball vs Fireball
+- Both players pay 1 bar.
+- The Fireballs cancel.
+- No damage.
+- Position remains Neutral.
+
+Fireball vs Super
+- Fireball costs 1 bar.
+- Super costs 3 bars.
+- The Fireball player loses 3 HP.
+
+Super vs Super
+- Both players spend all 3 bars.
+- Compare current HP first.
+- If one player has more HP, that player's Super connects for 3 damage and the other Super does nothing.
+- If HP is equal and position is Neutral:
+  - Both players are set to 1 HP.
+  - Both players have 0 bars.
+  - Position remains Neutral.
+
+
+Center player vs Cornered player matchup table
+
+This table is asymmetric.
+- C means the player with Center.
+- K means the Cornered player.
+- Every one of the 36 possible action pairings is listed.
+- Center Special is Powered Strike.
+- Corner Special is Reversal.
+
+
+Center Strike
+
+C Strike vs K Strike
+- K loses 1 HP.
+- Position holds.
+
+C Strike vs K Advance
+- K loses 1 HP.
+- Position holds.
+
+C Strike vs K Bait
+- No damage.
+- Position resets to Neutral.
+
+C Strike vs K Charge
+- K loses 1 HP.
+- K Charge is interrupted and gives no bar.
+- Position holds.
+
+C Strike vs K Reversal
+- Reversal costs 1 bar.
+- C loses 1 HP.
+- Position resets to Neutral.
+
+C Strike vs K Super
+- Super costs 3 bars.
+- C loses 3 HP.
+- Position holds if the round survives.
+
+
+Center Advance
+
+C Advance vs K Strike
+- C loses 1 HP.
+- Position holds.
+
+C Advance vs K Advance
+- Draw.
+- Position holds.
+
+C Advance vs K Bait
+- No damage.
+- Position resets to Neutral.
+
+C Advance vs K Charge
+- K loses 1 HP.
+- K Charge is interrupted and gives no bar.
+- Position holds.
+
+C Advance vs K Reversal
+- Reversal costs 1 bar.
+- C loses 1 HP.
+- Position resets to Neutral.
+
+C Advance vs K Super
+- Super costs 3 bars.
+- C loses 3 HP.
+- Position holds if the round survives.
+
+
+Center Bait
+
+C Bait vs K Strike
+- K is Punished.
+- Position holds through the free move.
+
+C Bait vs K Advance
+- No damage.
+- Position resets to Neutral.
+
+C Bait vs K Bait
+- Draw.
+- Position holds.
+
+C Bait vs K Charge
+- K gains 1 bar.
+- Position holds.
+
+C Bait vs K Reversal
+- Reversal costs 1 bar.
+- K is Punished.
+- Position holds through the free move.
+
+C Bait vs K Super
+- Super costs 3 bars.
+- C loses 1 HP.
+- Position resets to Neutral.
+
+
+Center Charge
+
+C Charge vs K Strike
+- C loses 1 HP.
+- C Charge is interrupted and gives no bar.
+- Position holds.
+
+C Charge vs K Advance
+- C gains 1 bar.
+- No damage.
+- Position resets to Neutral.
+
+C Charge vs K Bait
+- C gains 1 bar.
+- Position holds.
+
+C Charge vs K Charge
+- Both players gain 1 bar.
+- Position holds.
+
+C Charge vs K Reversal
+- Reversal costs 1 bar.
+- C loses 1 HP.
+- C Charge is interrupted and gives no bar.
+- Position resets to Neutral.
+
+C Charge vs K Super
+- Super costs 3 bars.
+- C loses 3 HP.
+- C Charge is interrupted and gives no bar.
+- Position holds if the round survives.
+
+
+Center Powered Strike
+
+C Powered Strike vs K Strike
+- Powered Strike costs 1 bar.
+- K loses 2 HP.
+- Position holds.
+
+C Powered Strike vs K Advance
+- Powered Strike costs 1 bar.
+- K loses 2 HP.
+- Position holds.
+
+C Powered Strike vs K Bait
+- Powered Strike costs 1 bar.
+- No damage.
+- Position holds.
+
+C Powered Strike vs K Charge
+- Powered Strike costs 1 bar.
+- K loses 2 HP.
+- K Charge is interrupted and gives no bar.
+- Position holds.
+
+C Powered Strike vs K Reversal
+- Powered Strike and Reversal each cost 1 bar.
+- C loses 1 HP.
+- Position resets to Neutral.
+
+C Powered Strike vs K Super
+- Powered Strike costs 1 bar.
+- Super costs 3 bars.
+- C loses 3 HP.
+- Position holds if the round survives.
+
+
+Center Super
+
+C Super vs K Strike
+- Super costs 3 bars.
+- K loses 3 HP.
+- Position holds if the round survives.
+
+C Super vs K Advance
+- Super costs 3 bars.
+- K loses 3 HP.
+- Position holds if the round survives.
+
+C Super vs K Bait
+- Super costs 3 bars.
+- K loses 1 HP.
+- Position holds.
+
+C Super vs K Charge
+- Super costs 3 bars.
+- K loses 3 HP.
+- K Charge is interrupted and gives no bar.
+- Position holds if the round survives.
+
+C Super vs K Reversal
+- Super costs 3 bars.
+- Reversal costs 1 bar.
+- K loses 3 HP.
+- Position holds if the round survives.
+
+C Super vs K Super
+- Both players spend all 3 bars.
+- Compare current HP first.
+- If one player has more HP, that player's Super connects for 3 damage and the other Super does nothing.
+- If HP is equal, C wins the clash because Center is the better position.
+- C Super connects for 3 damage and K Super does nothing.
+
+
+Strategic reading
+- Bait is a broad defensive and positioning tool.
+- In Neutral, Bait gains Center against Strike and Charge, and blocks Fireball.
+- Bait reduces Super from 3 damage to 1 damage.
+- Center Bait can create a free move by Punishing Corner Strike or Reversal.
+- Center makes ordinary attacks more dangerous and makes Charge easier to interrupt.
+- Powered Strike converts 1 bar into a 2-damage threat while preserving Center in most matchups.
+- Corner has active escape and counterplay:
+  - Bait escapes Center Strike.
+  - Advance escapes Center Bait.
+  - Reversal damages and resets against Center Strike, Advance, Charge, and Powered Strike.
+- Reversal itself can be Punished by Center Bait.
+- Super is a 3-damage threat against every action except Bait.
+- Super also defeats Reversal.
+- A player's current HP and position matter when both players spend Super together.
+- Because bars carry between rounds, spending meter to secure the current round competes with saving meter for later rounds.
+
+
+Requirements for later Nash analysis
+- The solver must model simultaneous action selection except during a Punished free move.
+- A complete match state must include:
+  - Each player's round wins.
+  - Each player's current HP.
+  - Each player's current bars.
+  - Current position: Neutral, player one has Center, or player two has Center.
+  - Whether a player is Punished and which player receives the free move.
+- Legal actions depend on bars and position.
+- At 0 bars, Special is unavailable.
+- At 3 bars, Super replaces Charge while Special remains available.
+- Terminal round states must apply action costs and successful gains before carrying bars into the next round.
+- Terminal game states occur when either player earns a second round win.
+- Any future Nash report must be calculated from these rules rather than copied from either source game's results.

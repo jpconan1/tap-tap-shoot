@@ -1,0 +1,132 @@
+Kitchen Sink Balance Exploration
+
+Status
+- Final choice: players start the game at 0 bars.
+- Final choice: Fireball deals 1 damage.
+- Neutral Strike vs Charge is a soft interrupt:
+  - Charge gains no bar.
+  - Neither player takes damage.
+  - Position remains Neutral.
+- Neutral Bait vs Charge:
+  - Charge gains 1 bar.
+  - Bait gains Center.
+- This report explains the tested alternatives and the reasoning behind the final choice.
+- Values and mixes below came from approximate Nash solves of all 2,880 legal match states.
+
+
+Why the opening was sensitive
+- Neutral Advance vs Charge and Neutral Bait vs Charge produce the same strategic trade:
+  - The Advance or Bait player gains Center.
+  - The Charge player gains 1 bar.
+- The opening therefore depends on which is worth more:
+  - Center with 0 bars.
+  - Being Cornered with 1 bar.
+- A small change to Fireball damage moved this resulting state across 50% value.
+- Crossing that boundary caused a large, discontinuous change in the opening equilibrium.
+
+
+Version explored: Strike does not interrupt Neutral Charge
+- Neutral Strike allowed Charge to gain its bar.
+- Opening Nash mix:
+  - Strike 1.23%.
+  - Advance 39.67%.
+  - Charge 59.09%.
+- Strike mainly existed to stop Advance from becoming automatic.
+- Charge was too safe because Strike could not deny its permanent, round-carrying resource gain.
+- This version was rejected.
+
+
+Version explored: hard Strike interrupt
+- Neutral Strike interrupted Charge, denied its bar, and dealt 1 damage.
+- With Bait still gaining Center against Charge, the opening became:
+  - Strike 31.83%.
+  - Advance 31.83%.
+  - Bait 36.35%.
+  - Charge 0%.
+- Equal-resource Neutral states also lost most Charge and Fireball use.
+- Strike became healthy, but the punishment was strong enough to suppress the Neutral meter game.
+- Removing Bait's Center reward did not solve this because Charge was already outside the equilibrium support.
+- This version was rejected.
+
+
+Version explored: soft Strike interrupt
+- Neutral Strike interrupted Charge and denied its bar, but dealt no damage.
+- Position remained Neutral.
+- With Bait gaining Center against Charge and Fireball dealing 1, the opening became:
+  - Strike 31.97%.
+  - Advance 31.97%.
+  - Bait 36.07%.
+  - Charge 0%.
+- Charge returned after position or meter developed.
+- This produced a useful game structure:
+  - Opening footsies establish position.
+  - Position creates safer Charge opportunities.
+  - Bars introduce Specials and Super.
+- This Strike rule was selected.
+
+
+Version explored: Bait does not gain Center against Charge
+- Charge gained 1 bar while Bait left position Neutral.
+- With soft Strike interruption, the opening developed many equivalent Strike/Charge equilibria.
+- Charge could safely build toward the meter game.
+- Strike could stop the bar but caused no damage or position change, creating a repeatable no-progress interaction.
+- The solver could return different-looking optimal mixes for the two players because it selected different endpoints from a degenerate equilibrium set.
+- Restoring Bait's Center reward made Charge carry a positional risk and produced the preferred opening structure.
+- This version was rejected.
+
+
+Version explored: Fireball deals 2
+- Fireball became a serious equal-resource move.
+- At Neutral with 1 bar each:
+  - Advance 33.77%.
+  - Bait 47.38%.
+  - Fireball 18.86%.
+- However, stronger Fireball increased the value of gaining the first bar.
+- Center with 0 bars against Cornered with 1 bar fell to about 49.55% value.
+- Because a bar became slightly more valuable than Center, the clean opening equilibrium became Charge vs Charge.
+- Strike could stall Charge, but Advance and Bait were slightly losing choices against it.
+- Starting at 1 bar would remove the automatic first Charge:
+  - Fireball 2 with a 1-bar start produced an Advance/Bait/Fireball opening.
+- This version was viable but rejected because it skipped the desired gradual development from spacing into meter play.
+
+
+Selected version: Fireball 1, start at 0
+- With Fireball dealing 1, Center with 0 bars against Cornered with 1 bar is worth about 50.31%.
+- Position is therefore slightly more valuable than the first bar.
+- Neutral Charge can be challenged by Advance or Bait gaining Center.
+- Opening Nash mix:
+  - Strike 31.97%.
+  - Advance 31.97%.
+  - Bait 36.07%.
+- At Neutral with 1 bar each:
+  - Strike 17.22%.
+  - Advance 17.90%.
+  - Bait 30.94%.
+  - Charge 33.09%.
+  - Fireball 0.85%.
+- At Neutral with 2 bars against 1 bar, the leading player's mix includes:
+  - Advance 20.59%.
+  - Bait 9.30%.
+  - Charge 38.83%.
+  - Fireball 31.29%.
+
+
+Final reasoning
+- The opening is a spacing game rather than an automatic meter-building turn.
+- Position determines where Charge is safe and makes the position system structurally important.
+- Meter play emerges after the opening instead of replacing it.
+- Fireball has a distinct role:
+  - It is rare when resources are equal.
+  - It becomes a strong conversion tool when a player has a bar lead.
+- Powered Strike converts Center and meter into damage.
+- Reversal converts meter into escape from Corner.
+- Super converts full meter into a round-ending threat.
+- Bars carrying between rounds preserve long-term resource decisions.
+- This version best combines the two source games while giving the match a gradual increase in complexity.
+
+
+Known caveat
+- Soft Strike vs Charge is a no-progress result.
+- Repeating that exact interaction can theoretically stall.
+- In the selected opening equilibrium, Charge is unsupported because Advance and Bait can gain favorable position against it.
+- The interaction remains worth monitoring during human playtests.

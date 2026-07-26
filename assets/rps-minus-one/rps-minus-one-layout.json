@@ -1,0 +1,90 @@
+{
+  "version": 3,
+  "layoutTarget": "variant",
+  "variantId": "rps-minus-one",
+  "variant": "RPS Minus One",
+  "variantFolder": "assets/rps-minus-one",
+  "frame": { "width": 960, "height": 540 },
+  "portraitFrame": { "width": 540, "height": 960 },
+  "sceneAnchors": {},
+  "states": {
+    "playing.default": {
+      "name": "Choose pair",
+      "elements": [
+        { "key": "p1-info", "kind": "slot", "x": 20, "y": 18, "width": 220, "height": 72 },
+        { "key": "p2-info", "kind": "slot", "x": 720, "y": 18, "width": 220, "height": 72 },
+        { "key": "p1-state", "kind": "slot", "x": 0, "y": 0, "width": 1, "height": 1 },
+        { "key": "p2-state", "kind": "slot", "x": 0, "y": 0, "width": 1, "height": 1 },
+        { "key": "score", "kind": "slot", "x": 0, "y": 0, "width": 1, "height": 1 },
+        { "key": "phase-prompt", "kind": "slot", "x": 0, "y": 0, "width": 1, "height": 1 },
+        { "key": "p1-win-label", "kind": "slot", "x": 245, "y": 3, "width": 128, "height": 64 },
+        { "key": "p1-win-counter", "kind": "slot", "x": 282, "y": 56, "width": 64, "height": 64 },
+        { "key": "turn-counter", "kind": "slot", "x": 352, "y": 0, "width": 256, "height": 128 },
+        { "key": "p2-win-label", "kind": "slot", "x": 587, "y": 3, "width": 128, "height": 64 },
+        { "key": "p2-win-counter", "kind": "slot", "x": 614, "y": 56, "width": 64, "height": 64 },
+        { "key": "scene", "kind": "text", "text": "RPS MINUS ONE!", "scene": true, "x": 224, "y": 126, "width": 512, "height": 185 },
+        { "key": "actions", "kind": "slot", "x": 0, "y": 0, "width": 1, "height": 1 },
+        { "key": "rockPaper-button", "kind": "slot", "x": 385, "y": 318, "width": 190, "height": 95 },
+        { "key": "paperScissors-button", "kind": "slot", "x": 278, "y": 420, "width": 190, "height": 95 },
+        { "key": "scissorsRock-button", "kind": "slot", "x": 492, "y": 420, "width": 190, "height": 95 },
+        { "key": "rules-button", "kind": "slot", "x": 12, "y": 472, "width": 120, "height": 60 }
+      ],
+      "portraitElements": [
+        { "key": "p1-info", "kind": "slot", "x": 14, "y": 16, "width": 190, "height": 72 },
+        { "key": "p2-info", "kind": "slot", "x": 336, "y": 16, "width": 190, "height": 72 },
+        { "key": "p1-state", "kind": "slot", "x": 0, "y": 0, "width": 1, "height": 1 },
+        { "key": "p2-state", "kind": "slot", "x": 0, "y": 0, "width": 1, "height": 1 },
+        { "key": "score", "kind": "slot", "x": 0, "y": 0, "width": 1, "height": 1 },
+        { "key": "phase-prompt", "kind": "slot", "x": 0, "y": 0, "width": 1, "height": 1 },
+        { "key": "p1-win-label", "kind": "slot", "x": 8, "y": 88, "width": 128, "height": 64 },
+        { "key": "p1-win-counter", "kind": "slot", "x": 104, "y": 94, "width": 64, "height": 64 },
+        { "key": "turn-counter", "kind": "slot", "x": 142, "y": 76, "width": 256, "height": 128 },
+        { "key": "p2-win-label", "kind": "slot", "x": 404, "y": 88, "width": 128, "height": 64 },
+        { "key": "p2-win-counter", "kind": "slot", "x": 372, "y": 94, "width": 64, "height": 64 },
+        { "key": "scene", "kind": "text", "text": "RPS MINUS ONE!", "scene": true, "x": 14, "y": 190, "width": 512, "height": 230 },
+        { "key": "actions", "kind": "slot", "x": 0, "y": 0, "width": 1, "height": 1 },
+        { "key": "rockPaper-button", "kind": "slot", "x": 160, "y": 470, "width": 220, "height": 110 },
+        { "key": "paperScissors-button", "kind": "slot", "x": 35, "y": 610, "width": 220, "height": 110 },
+        { "key": "scissorsRock-button", "kind": "slot", "x": 285, "y": 610, "width": 220, "height": 110 },
+        { "key": "rules-button", "kind": "slot", "x": 214, "y": 830, "width": 112, "height": 56 }
+      ]
+    },
+    "playing.keep": {
+      "name": "Keep one",
+      "extends": "playing.default",
+      "elements": [
+        { "key": "rockPaper-button", "hidden": true },
+        { "key": "paperScissors-button", "hidden": true },
+        { "key": "scissorsRock-button", "hidden": true },
+        { "key": "p1-you-picked", "kind": "slot", "x": 30, "y": 285, "width": 128, "height": 64 },
+        { "key": "p1-previous-move-icon", "kind": "slot", "x": 146, "y": 285, "width": 128, "height": 64 },
+        { "key": "p2-they-picked", "kind": "slot", "x": 802, "y": 285, "width": 150, "height": 64 },
+        { "key": "p2-previous-move-icon", "kind": "slot", "x": 686, "y": 285, "width": 128, "height": 64 },
+        { "key": "rock-button", "kind": "slot", "x": 170, "y": 405, "width": 190, "height": 95 },
+        { "key": "paper-button", "kind": "slot", "x": 385, "y": 405, "width": 190, "height": 95 },
+        { "key": "scissors-button", "kind": "slot", "x": 600, "y": 405, "width": 190, "height": 95 }
+      ],
+      "portraitElements": []
+    },
+    "round.between": {
+      "name": "Between rounds",
+      "extends": "playing.keep",
+      "elements": [
+        { "key": "rock-button", "hidden": true },
+        { "key": "paper-button", "hidden": true },
+        { "key": "scissors-button", "hidden": true },
+        { "key": "continue-button", "kind": "slot", "x": 384, "y": 405, "width": 192, "height": 96 }
+      ],
+      "portraitElements": []
+    },
+    "round.game-over": {
+      "name": "Game over",
+      "extends": "round.between",
+      "elements": [
+        { "key": "continue-button", "kind": "slot", "x": 274, "y": 405, "width": 192, "height": 96 },
+        { "key": "quit-button", "kind": "slot", "x": 494, "y": 405, "width": 192, "height": 96 }
+      ],
+      "portraitElements": []
+    }
+  }
+}

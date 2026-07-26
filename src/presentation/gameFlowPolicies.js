@@ -11,6 +11,10 @@ const POLICIES = Object.freeze({
     ...DEFAULT_POLICY,
     roundResult: 'persist-reveal',
   }),
+  rpsDragonSpear: Object.freeze({
+    ...DEFAULT_POLICY,
+    roundResult: 'persist-reveal',
+  }),
   fireballWar: Object.freeze({
     ...DEFAULT_POLICY,
     super: true,

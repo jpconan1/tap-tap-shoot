@@ -1,0 +1,110 @@
+Spacing Game Nash Report
+
+Core idea
+- The game is played on a line of three slots.
+- One player can have center advantage while the other is cornered.
+- Neutral means both players are in their own corner.
+- There are three moves: advance, strike, back.
+
+Modeled states
+- Neutral.
+- You have center.
+- Opponent has center.
+
+This is effectively two states plus a mirror:
+- Neutral.
+- Advantage/cornered.
+
+
+Original version
+
+Rules modeled
+- In neutral, ties do nothing.
+- In neutral, strike beats advance.
+- In neutral, advance vs back gives the advancing player center.
+- In neutral, back vs strike gives the backing player center.
+- With center, strike beats advance.
+- With center, advance beats back.
+- With center, back beats strike.
+- When cornered, strike neutralizes advance and resets to neutral.
+- When cornered, back neutralizes strike and resets to neutral.
+- When cornered, advance beats back.
+- Ties hold current state.
+
+Nash table
+
+State             Value    Your mix
+Neutral           50%      advance 22%, strike 22%, back 56%
+You have center   70%      advance 31%, strike 48%, back 21%
+You are cornered  30%      advance 21%, strike 48%, back 31%
+
+Read
+- Center is a strong advantage.
+- Corner is bad but live.
+- Neutral is very back-heavy because back dodges strike and can win center.
+- This version is closer to Charge Block Fireball in shape:
+  - fair neutral
+  - strong advantage
+  - disadvantaged player still has comeback routes
+
+
+Alternate version
+
+Rule change
+- Center advance vs corner strike is no longer a reset.
+- Corner strike beats center advance.
+
+Nash table
+
+State             Value    Your mix
+Neutral           50%      advance 17%, strike 17%, back 66%
+You have center   63%      advance 18%, strike 52%, back 30%
+You are cornered  37%      advance 18%, strike 30%, back 52%
+
+Read
+- Center is still good, but much softer.
+- Corner defense has more teeth.
+- Neutral becomes even more back-heavy.
+- This version is further from Charge Block Fireball.
+- It feels more like footsies: advantage matters, but the cornered player has a stronger defensive answer.
+
+
+CBF comparison
+
+Game/state                    Value
+CBF neutral/start             50%
+CBF 2 bars vs 1 bar           74%
+CBF 1 bar vs 2 bars           26%
+Original spacing center       70%
+Original spacing cornered     30%
+Alternate spacing center      63%
+Alternate spacing cornered    37%
+
+Take
+- Original spacing is close to CBF.
+- Alternate spacing is more distinct from CBF.
+- If variety is the goal, alternate spacing is probably better.
+- If the goal is a position-based CBF cousin, original spacing is better.
+
+
+Design recommendation
+
+Use the alternate rule:
+- Center advance loses to corner strike.
+
+Reason
+- It makes spacing less similar to Charge Block Fireball.
+- It keeps center meaningful without making it too snowbally.
+- It gives the cornered player a clear defensive threat.
+- It creates a distinct core thought:
+  "Who controls position, and can the cornered player call out the approach?"
+
+Hard CPU implementation
+- Use weighted random from the Nash table.
+- Never always choose the highest-percent option.
+- From neutral, CPU should usually back, but still advance/strike sometimes.
+- From center, CPU should mostly strike.
+- From corner, CPU should mostly back in the alternate version.
+
+Files
+- Script: nash_spacing_game.py

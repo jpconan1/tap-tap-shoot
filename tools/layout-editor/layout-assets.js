@@ -67,6 +67,11 @@ const VARIANT_SCENES = {
     "stab-kill",
     "standoff-tts",
   ],
+  "rps-minus-one": [],
+  "rps-rpg": [],
+  "rps-poker": [],
+  "kitchen-sink": [],
+  "rps-dragon-spear": [],
 };
 
 window.LAYOUT_VARIANTS = [
@@ -75,6 +80,11 @@ window.LAYOUT_VARIANTS = [
   { id: "gun-knife-fist", name: "Gun Knife Fist", folder: "assets/gun-knife-fist" },
   { id: "tap-tap-shoot-y", name: "Tap Tap Shoot Y", folder: "assets/tap-tap-shoot-y" },
   { id: "tap-tap-shoot-x", name: "Tap Tap Shoot X", folder: "assets/tap-tap-shoot-x" },
+  { id: "rps-minus-one", name: "RPS Minus One", folder: "assets/rps-minus-one" },
+  { id: "rps-rpg", name: "RPS RPG", folder: "assets/rps-rpg" },
+  { id: "rps-poker", name: "RPS Poker", folder: "assets/rps-poker" },
+  { id: "kitchen-sink", name: "Kitchen Sink", folder: "assets/kitchen-sink" },
+  { id: "rps-dragon-spear", name: "RPS Dragon Spear", folder: "assets/rps-dragon-spear" },
 ];
 
 window.LAYOUT_PARENT_ELEMENTS = [
@@ -189,6 +199,20 @@ const VARIANT_ELEMENTS = {
     ...PREVIOUS_MOVE_ELEMENTS,
   ],
 };
+
+const PLACEHOLDER_ELEMENTS = [
+  { key: "scene", name: "Text scene", kind: "text", text: "INTERACTION\\nSTATE", width: 512, height: 192 },
+  { key: "phase-prompt", name: "Phase prompt", kind: "text", text: "PHASE PROMPT", width: 320, height: 64 },
+  { key: "p1-state", name: "P1 state", kind: "text", text: "P1 STATE", width: 220, height: 96 },
+  { key: "p2-state", name: "P2 state", kind: "text", text: "P2 STATE", width: 220, height: 96 },
+  { key: "score", name: "Score", kind: "text", text: "SCORE", width: 180, height: 64 },
+  { key: "actions", name: "Dynamic actions", asset: "assets/button_bg_generic1_sheet.webp" },
+  { key: "amount-control", name: "Amount control", kind: "text", text: "AMOUNT", width: 180, height: 64 },
+];
+
+for (const id of ["rps-minus-one", "rps-rpg", "rps-poker", "kitchen-sink", "rps-dragon-spear"]) {
+  VARIANT_ELEMENTS[id] = PLACEHOLDER_ELEMENTS;
+}
 
 const LEGACY_ARROWS = [
   { key: "stab-to-duck-arrow", name: "Stab to duck arrow", asset: "assets/stab-to-duck_arrow_sheet.webp" },
