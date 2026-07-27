@@ -34,6 +34,7 @@ import {
   queueMusicTrackOnce,
   READY_AUDIO,
   requestMusicTrack,
+  RPS_POKER_CHECK_AUDIO,
   RPS_POKER_CHIP_AUDIO,
   RPS_POKER_DEAL_AUDIO,
   RPS_POKER_FLIP_AUDIO,
@@ -51,6 +52,8 @@ import {
 import { RankedClient, RankedUpdateQueue } from './rankedClient.js';
 import { getServerHttpUrl } from './serverUrl.js';
 import { OnlineFlowDirector } from './presentation/onlineFlowDirector.js';
+import { PresentationFlowDirector } from './presentation/presentationFlowDirector.js';
+import { LOCAL_FLOW_SEQUENCE } from './presentation/localFlowSequences.js';
 import { interpretOnlineSnapshot } from './presentation/onlineFlowSequences.js';
 import { GameFlowDirector } from './presentation/gameFlowDirector.js';
 import {
@@ -87,7 +90,9 @@ import {
 import { createTitleScreen } from './presentation/titleScreen.js';
 import { createVariantSelectScreen } from './presentation/variantSelectScreen.js';
 import { createLobbyScreen } from './presentation/lobbyScreen.js';
+import { createPresentationLayers } from './presentation/presentationLayers.js';
 import { createRankedScreens } from './presentation/rankedScreens.js';
+import { TUTORIAL_INTRO_ALERTS, TUTORIAL_VARIANT_ID } from './tutorial.js';
 import { getResourcePresentation, shouldShowPickHistoryForVariant } from './variantPresentation.js';
 import { resolveReadyScene, resolveScene, swapScenePerspective } from './sceneResolver.js';
 import {
@@ -109,7 +114,6 @@ import {
   mountReadyWaitingOverlays,
   mountWaitingDotsOverlays,
   mountSpriteRenderers,
-  mountNineSliceRenderers,
   closeCurtainWipe,
   openCurtainWipe,
   pauseRendererClock,
@@ -148,9 +152,6 @@ const MOVE_ICON_FRAME_WIDTH = 128;
 const MOVE_ICON_FRAME_HEIGHT = 128;
 const TITLE_BUTTON_FRAME_WIDTH = 256;
 const TITLE_BUTTON_FRAME_HEIGHT = 128;
-const TUTORIAL_MAIN_SLIDE_COUNT = 6;
-const TUTORIAL_REVEAL_SLIDE_INDEX = 5;
-const TUTORIAL_TIPS_SLIDE_COUNT = 3;
 const REMATCH_BUTTON_FRAME_WIDTH = 256;
 const REMATCH_BUTTON_FRAME_HEIGHT = 128;
 const BULLET_SLOT_COUNT = MAX_BULLETS;
@@ -195,14 +196,6 @@ const LOADING_BAR_EMPTY_URL = './assets/progress_bar_empty_sheet.webp';
 const LOADING_BAR_FULL_URL = './assets/progress_bar_full_sheet.webp';
 const LOADING_CLICK_MESSAGE_URL = './assets/click_msg_sheet.webp';
 const PAPER_BACKGROUND_URL = './assets/crumpled_paper_background.webp';
-const TITLE_ALERT_SHOWCASE = Object.freeze([
-  Object.freeze({ width: 320, height: 150, label: '320 by 150 alert', message: '320 × 150' }),
-  Object.freeze({ width: 440, height: 190, label: '440 by 190 alert', message: '440 × 190' }),
-  Object.freeze({ width: 560, height: 240, label: '560 by 240 alert', message: '560 × 240' }),
-  Object.freeze({ width: 700, height: 310, label: '700 by 310 alert', message: '700 × 310' }),
-  Object.freeze({ width: 840, height: 400, label: '840 by 400 alert', message: '840 × 400' }),
-]);
-const ENABLE_TITLE_ALERT_SHOWCASE = false;
 const ONLINE_STATUS_POLL_MS = 5000;
 const RANKED_DISPLAY_NAME_KEY = 'tapTapShootX.rankedDisplayName';
 const BOIL_ENABLED_KEY = 'tapTapShootX.boilEnabled';
@@ -297,133 +290,37 @@ const MOVE_ICON_DOODLES = Object.freeze({
   duck: 'dodge_icon',
   counterstab: 'counterstab_icon',
 });
-const TUTORIAL_OUTCOMES = Object.freeze({
-  '1-1:reload': Object.freeze({
-    p2Move: 'stab',
-    lines: Object.freeze([
-      Object.freeze({ text: 'Reloading while your opponent has a Bullet' }),
-      Object.freeze({ text: 'is a bad idea.' }),
-      Object.freeze({ text: 'They get a Win.' }),
-    ]),
-  }),
-  '1-1:shoot': Object.freeze({
-    p2Move: 'duck',
-    lines: Object.freeze([
-      Object.freeze({ text: 'Watch out!', size: 'big' }),
-      Object.freeze({ text: 'They have a Bullet' }),
-      Object.freeze({ text: "and you don't." }),
-    ]),
-  }),
-  '1-1:stab': Object.freeze({
-    p2Move: 'duck',
-    lines: Object.freeze([
-      Object.freeze({ text: 'Nice.', size: 'big' }),
-      Object.freeze({ text: 'They thought you were' }),
-      Object.freeze({ text: 'going to shoot.' }),
-      Object.freeze({ text: 'You get a Win.' }),
-    ]),
-  }),
-  '1-1:duck': Object.freeze({
-    p2Move: 'shoot',
-    lines: Object.freeze([
-      Object.freeze({ text: 'Nice.', size: 'big' }),
-      Object.freeze({ text: 'Now you have an advantage.' }),
-      Object.freeze({ text: "Your opponent can't" }),
-      Object.freeze({ text: 'attack next round.' }),
-    ]),
-  }),
-  '1-0:reload': Object.freeze({
-    p2Move: 'duck',
-    lines: Object.freeze([
-      Object.freeze({ text: 'Cunning.', size: 'big' }),
-      Object.freeze({ text: 'Your advantage grew' }),
-      Object.freeze({ text: 'and the game continues.' }),
-    ]),
-  }),
-  '1-0:shoot': Object.freeze({
-    p2Move: 'duck',
-    lines: Object.freeze([
-      Object.freeze({ text: 'Back to even.', size: 'big' }),
-      Object.freeze({ text: 'They guessed right.' }),
-      Object.freeze({ text: 'How mysterious.', size: 'small' }),
-    ]),
-  }),
-  '1-0:stab': Object.freeze({
-    p2Move: 'duck',
-    lines: Object.freeze([
-      Object.freeze({ text: 'Back to even.', size: 'big' }),
-      Object.freeze({ text: 'They guessed right.' }),
-      Object.freeze({ text: 'How mysterious.', size: 'small' }),
-    ]),
-  }),
-  '1-0:duck': Object.freeze({
-    p2Move: 'reload',
-    lines: Object.freeze([
-      Object.freeze({ text: 'Odd choice.', size: 'big' }),
-      Object.freeze({ text: 'You made a defensive move' }),
-      Object.freeze({ text: 'when your opponent' }),
-      Object.freeze({ text: "couldn't attack." }),
-      Object.freeze({ text: 'Back to even.' }),
-    ]),
-  }),
-  '0-1:reload': Object.freeze({
-    p2Move: 'shoot',
-    lines: Object.freeze([
-      Object.freeze({ text: 'Low key smart.', size: 'big' }),
-      Object.freeze({ text: "But it won't work" }),
-      Object.freeze({ text: 'in this tutorial.' }),
-    ]),
-  }),
-  '0-1:duck': Object.freeze({
-    p2Move: 'shoot',
-    lines: Object.freeze([
-      Object.freeze({ text: 'Whew!', size: 'big' }),
-      Object.freeze({ text: 'You avoided the attack!' }),
-      Object.freeze({ text: 'Back to even.' }),
-    ]),
-  }),
-  'advantage:reload': Object.freeze({
-    p2Move: 'duck',
-    lines: Object.freeze([
-      Object.freeze({ text: 'Cunning.', size: 'big' }),
-      Object.freeze({ text: 'Your advantage grew' }),
-      Object.freeze({ text: 'and the game continues.' }),
-    ]),
-  }),
-  'advantage:shoot': Object.freeze({
-    p2Move: 'duck',
-    lines: Object.freeze([
-      Object.freeze({ text: 'They guessed right.' }),
-      Object.freeze({ text: 'How mysterious.', size: 'small' }),
-    ]),
-  }),
-  'advantage:stab': Object.freeze({
-    p2Move: 'duck',
-    lines: Object.freeze([
-      Object.freeze({ text: 'They guessed right.' }),
-      Object.freeze({ text: 'How mysterious.', size: 'small' }),
-    ]),
-  }),
-  'advantage:duck': Object.freeze({
-    p2Move: 'duck',
-    lines: Object.freeze([
-      Object.freeze({ text: 'Odd choice.', size: 'big' }),
-      Object.freeze({ text: 'You made a defensive move' }),
-      Object.freeze({ text: 'when your opponent' }),
-      Object.freeze({ text: "couldn't attack." }),
-    ]),
-  }),
-});
-const COMPUTER_VARIANTS = VARIANT_SELECT_VARIANTS;
+ const COMPUTER_VARIANTS = VARIANT_SELECT_VARIANTS;
 const COMPUTER_VARIANT_IDS = Object.freeze(COMPUTER_VARIANTS.map((variant) => variant.id));
 
 const app = document.querySelector('#app');
+const presentationLayers = createPresentationLayers(app);
+const screenRoot = presentationLayers.screen;
+const modalRoot = presentationLayers.modal;
+const transitionRoot = presentationLayers.transition;
 const alertSystem = createAlertSystem({
-  root: app,
+  root: modalRoot,
   mountSprites: mountSpriteRenderers,
-  mountNineSlices: mountNineSliceRenderers,
+  renderGraphic: renderAlertGraphic,
+  getViewportMode: () => app.dataset.viewportMode,
 });
-let hasShownTitleAlertShowcase = false;
+
+function renderAlertGraphic(graphicId) {
+  if (graphicId !== 'gun-knife-fist-triangle') return null;
+  const graphic = document.createElement('div');
+  graphic.className = 'alert-box-graphic gkf-triangle-graphic';
+  graphic.setAttribute('role', 'img');
+  graphic.setAttribute('aria-label', 'Fist beats Gun, Gun beats Knife, and Knife beats Fist');
+  graphic.innerHTML = `
+    <canvas class="sprite-canvas gkf-triangle-arrow is-up-right" data-doodle="up-right_red" data-frame-width="128" data-frame-height="128" width="128" height="128" aria-hidden="true"></canvas>
+    <canvas class="sprite-canvas gkf-triangle-arrow is-down-right" data-doodle="down-right_red" data-frame-width="128" data-frame-height="128" width="128" height="128" aria-hidden="true"></canvas>
+    <canvas class="sprite-canvas gkf-triangle-arrow is-left" data-doodle="left_red" data-frame-width="128" data-frame-height="128" width="128" height="128" aria-hidden="true"></canvas>
+    <canvas class="sprite-canvas gkf-triangle-move is-fist" data-doodle="gun-knife-fist/fist_button" data-frame-width="256" data-frame-height="128" width="256" height="128" aria-hidden="true"></canvas>
+    <canvas class="sprite-canvas gkf-triangle-move is-knife" data-doodle="gun-knife-fist/knife_button" data-frame-width="256" data-frame-height="128" width="256" height="128" aria-hidden="true"></canvas>
+    <canvas class="sprite-canvas gkf-triangle-move is-gun" data-doodle="gun-knife-fist/gun_button" data-frame-width="256" data-frame-height="128" width="256" height="128" aria-hidden="true"></canvas>
+  `;
+  return graphic;
+}
 
 function getSharpCanvasContext(canvas) {
   const context = canvas?.getContext('2d');
@@ -436,6 +333,7 @@ function getSharpCanvasContext(canvas) {
 let state = createRoundState();
 let screen = 'title';
 let playMode = 'local';
+let localSessionKind = 'standard';
 let selectedVariantId = DEFAULT_VARIANT_ID;
 let variantSelectPage = 0;
 let variantDifficultyToggleState = 'easy';
@@ -489,11 +387,6 @@ let lobbySelectedPlayerId = null;
 let lobbyUnreadCount = 0;
 let lobbyConnected = false;
 let lobbyRosterOpen = false;
-let tutorialSlideIndex = 0;
-let tutorialTipsSlideIndex = 0;
-let tutorialStageMode = 'slide';
-let tutorialFeedbackMarkup = '';
-let tutorialPendingFeedbackMarkup = '';
 let stagePresentation = getIdleStagePresentation();
 let gameLayout = null;
 let activeLayoutStateId = DEFAULT_LAYOUT_STATE_ID;
@@ -527,7 +420,7 @@ const layoutLoader = createLayoutLoader({
   defaultVariantId: DEFAULT_VARIANT_ID,
 });
 const lobbyWhiteboard = createLobbyWhiteboard({
-  root: app,
+  root: screenRoot,
   isActive: () => screen === 'lobby',
   isBoilEnabled: () => isBoilEnabled,
   mountSprites: mountSpriteRenderers,
@@ -537,7 +430,7 @@ const lobbyWhiteboard = createLobbyWhiteboard({
   frameCount: DOODLE_FRAME_COUNT,
 });
 const titleScreen = createTitleScreen({
-  app,
+  app: screenRoot,
   getState: () => ({ isSoundEnabled, isBoilEnabled, musicVolume, sfxVolume, rankedDisplayName }),
   getSharpCanvasContext,
   loadImageAsset,
@@ -553,14 +446,9 @@ const titleScreen = createTitleScreen({
   setVolume: setTitleVolume,
   escapeHtml,
   maxDisplayNameLength: MAX_RANKED_DISPLAY_NAME_LENGTH,
-  showAlertShowcase: () => {
-    if (!ENABLE_TITLE_ALERT_SHOWCASE || hasShownTitleAlertShowcase) return;
-    hasShownTitleAlertShowcase = true;
-    alertSystem.show(TITLE_ALERT_SHOWCASE);
-  },
 });
 const variantSelectScreen = createVariantSelectScreen({
-  app,
+  app: screenRoot,
   variants: COMPUTER_VARIANTS,
   pageSize: VARIANT_SELECT_PAGE_SIZE,
   getPage: () => variantSelectPage,
@@ -573,9 +461,10 @@ const variantSelectScreen = createVariantSelectScreen({
   onSelectVariant: showVariantDetail,
   onBack: returnToLobbyFromOpponentSelect,
   onCloseDetail: closeVariantDetail,
+  detailRoot: modalRoot,
 });
 const lobbyScreen = createLobbyScreen({
-  app,
+  app: screenRoot,
   boardColors: LOBBY_BOARD_COLORS,
   whiteboard: lobbyWhiteboard,
   getState: () => ({
@@ -599,6 +488,7 @@ const lobbyScreen = createLobbyScreen({
   onOpenPlayer: openLobbyPlayer,
   onToggleMatchmaking: toggleMatchmaking,
   onOpenPractice: () => openLobbyPlayer('computer'),
+  onOpenTutorial: startTutorial,
   onOpenSettings: openPauseMenu,
   onBack: returnToTitleFromLobby,
   onCloseOverlay: () => { lobbySelectedPlayerId = null; render(); },
@@ -609,7 +499,7 @@ const lobbyScreen = createLobbyScreen({
   onCloseChallenge: () => { lobbyChallenge = null; lobbyChallengeStatus = null; render(); },
 });
 const rankedScreens = createRankedScreens({
-  app,
+  app: screenRoot,
   variants: RANKED_VARIANT_SELECT_VARIANTS,
   getSnapshot: () => rankedSnapshot,
   getDisplayName: () => rankedDisplayName,
@@ -632,9 +522,9 @@ const rankedScreens = createRankedScreens({
   onMainMenu: wipeToLobbyFromScoreboard,
 });
 const onlineFlowDirector = new OnlineFlowDirector({
-  closeCurtains: (onCreate) => closeCurtainWipe(app, playCurtainCloseAudio, 'online-flow-curtain', onCreate),
+  closeCurtains: (onCreate) => closeCurtainWipe(transitionRoot, playCurtainCloseAudio, 'online-flow-curtain', onCreate),
   openCurtains: (curtain) => openCurtainWipe(curtain, playCurtainOpenAudio),
-  reattachCurtain: (curtain) => app.append(curtain),
+  reattachCurtain: (curtain) => transitionRoot.append(curtain),
   spikeWipe: (nextStage) => playWipeTransition(() => {
     screen = nextStage;
     render();
@@ -661,6 +551,55 @@ const onlineFlowDirector = new OnlineFlowDirector({
   },
   disconnect: () => {},
   exitRanked: resetRankedSession,
+});
+const localFlowDirector = new PresentationFlowDirector({
+  sequences: LOCAL_FLOW_SEQUENCE,
+  effects: {
+    prepare: async (step, context) => {
+      if (step.action === 'prepareTutorial') {
+        localSessionKind = 'tutorial';
+        selectedVariantId = TUTORIAL_VARIANT_ID;
+        variantDifficultyToggleState = 'easy';
+      } else if (step.action === 'prepareLocalGame') {
+        localSessionKind = 'standard';
+        selectedVariantId = COMPUTER_VARIANT_IDS.includes(context.variantId)
+          ? context.variantId
+          : DEFAULT_VARIANT_ID;
+      }
+      await setActiveGameLayoutForVariant(selectedVariantId);
+      playMode = 'local';
+      clearLocalTurnChoice();
+      requestMusicTrack('game');
+      unlockSceneAudio();
+      resetRoundWins();
+      rankedClient.setPresence('playing_computer');
+    },
+    curtainSwap: (step) => playCurtainMenuTransition(() => {
+      if (step.action === 'enterPracticeSelect') {
+        localSessionKind = 'standard';
+        playMode = 'local';
+        screen = 'opponent-select';
+        p1QueuedMove = null;
+        rankedSnapshot = null;
+        render();
+      }
+    }),
+    starburstSwap: () => playWipeTransition(() => setNewRound()),
+    commit: (step) => {
+      if (step.action === 'enterLocalGame') setNewRound();
+    },
+    revealCurtain: (_step, context) => openCurtainWipe(context.curtain, playCurtainOpenAudio),
+    showAlert: async (step) => {
+      if (step.alert === 'tutorialIntro') {
+        return alertSystem.show(TUTORIAL_INTRO_ALERTS);
+      }
+      return null;
+    },
+    unlockInput: () => {
+      isTransitioning = false;
+    },
+    openingCues: () => beginOpeningCues(),
+  },
 });
 const gameFlowDirector = new GameFlowDirector({
   playSuper: (animation) => playSuperAnimation(animation, loopToken),
@@ -736,7 +675,7 @@ async function boot() {
 }
 
 function renderLoadingScreen() {
-  app.innerHTML = `
+  screenRoot.innerHTML = `
     <section class="loading-screen" aria-label="Loading">
       <button class="loading-start" type="button" aria-label="Start" disabled>
         <img
@@ -985,8 +924,9 @@ function getGamePreloadDoodles() {
     'rules_button',
     'continue_button',
     'continue_t_button',
-    'next_slide_button',
-    'Prev_slide_button',
+    'tutorial/continue_tutorial_button',
+    'tutorial/next_slide_button',
+    'tutorial/Prev_slide_button',
     'quit_button',
     'leave_button',
     'stop_button',
@@ -998,6 +938,7 @@ function getGamePreloadDoodles() {
     'down-left_red',
     'up_blue',
     'left_red',
+    'arrow-bullet-point',
     'down-right_blue',
     'left_blue',
     'rematch_button',
@@ -1012,12 +953,11 @@ function getGamePreloadDoodles() {
     'system_scenes/no_contest',
     'system_scenes/round_won',
     'system_scenes/round_lost',
-    'tip1graphic',
-    'tip2graphicgraphic',
     'new-logo-rev-2-alpha',
     'name_button',
     'lobby_button',
     'title/playvcom_button',
+    'tutorial/tutorial_button',
     'title/playonline',
     'title/sound_button',
     'title/sound_button_checked',
@@ -1344,7 +1284,7 @@ async function openPauseMenu() {
   const menuScreen = screen;
   if (menuScreen === 'playing') pauseGameplayTimers();
   isTransitioning = true;
-  const curtain = await closeCurtainWipe(app, playCurtainCloseAudio);
+  const curtain = await closeCurtainWipe(transitionRoot, playCurtainCloseAudio);
 
   if (screen !== menuScreen) {
     curtain.remove();
@@ -1376,7 +1316,7 @@ function renderPauseMenu(menuScreen) {
   const overlay = document.createElement('div');
   overlay.className = 'pause-menu-overlay';
   overlay.innerHTML = `
-    <div class="pause-menu" role="dialog" aria-modal="true" aria-label="Pause menu">
+    <div class="alert-box pause-menu" role="dialog" aria-modal="true" aria-label="Pause menu">
       ${titleScreen.renderSettingsControls()}
       <div class="pause-menu-actions">
         ${menuScreen === 'lobby'
@@ -1386,7 +1326,7 @@ function renderPauseMenu(menuScreen) {
       </div>
     </div>
   `;
-  app.append(overlay);
+  modalRoot.append(overlay);
   titleScreen.installSettingsHandlers(overlay, refreshPauseMenuSettings);
   overlay.querySelector('[data-action="pause-back"]')?.addEventListener('click', closePauseMenu);
   overlay.querySelector('[data-action="pause-continue"]')?.addEventListener('click', closePauseMenu);
@@ -1409,7 +1349,7 @@ function renderPauseQuitConfirmation() {
   const menu = pauseMenu;
   if (!menu || menu.screen !== 'playing') return;
   menu.overlay.innerHTML = `
-    <div class="pause-menu pause-confirmation" role="alertdialog" aria-modal="true" aria-label="Forfeit game">
+    <div class="alert-box pause-menu pause-confirmation" role="alertdialog" aria-modal="true" aria-label="Forfeit game">
       <p>Forfeit game and return to lobby?</p>
       <div class="pause-menu-actions">
         ${renderSheetButton('pause-cancel-quit', 'back_button_w', 'Back', 'pause-sheet-button')}
@@ -1457,13 +1397,15 @@ async function quitFromPauseMenu() {
   }
   screen = 'lobby';
   render();
-  app.append(menu.curtain);
+  transitionRoot.append(menu.curtain);
   await openCurtainWipe(menu.curtain, playCurtainOpenAudio);
   isTransitioning = false;
   resumeGameplayTimers();
 }
 
 function resetLocalMatchToLobby() {
+  localFlowDirector.cancel();
+  alertSystem.cancel('left-local-match');
   requestMusicTrack('title');
   unlockSceneAudio();
   loopToken += 1;
@@ -1471,6 +1413,7 @@ function resetLocalMatchToLobby() {
   clearPausableTimers();
   resetRoundWins();
   playMode = 'local';
+  localSessionKind = 'standard';
   turnPhase = 'idle';
   state = createRoundState();
   p1QueuedMove = null;
@@ -1488,14 +1431,10 @@ function quitToVariantMenu() {
   clearPausableTimers();
   resetRoundWins();
   playMode = 'local';
+  localSessionKind = 'standard';
   screen = 'opponent-select';
   turnPhase = 'idle';
   state = createRoundState();
-  tutorialSlideIndex = 0;
-  tutorialTipsSlideIndex = 0;
-  tutorialStageMode = 'slide';
-  tutorialFeedbackMarkup = '';
-  tutorialPendingFeedbackMarkup = '';
   p1QueuedMove = null;
   rankedSnapshot = null;
   pendingSuperAnimation = null;
@@ -1584,6 +1523,7 @@ function resumePausableTimers() {
 
 function render() {
   updateFrameScale();
+  queueMicrotask(alertSystem.refresh);
   queueMicrotask(lobbyScreen.syncMatchmakingIndicator);
   queueMicrotask(() => onlineFlowDirector.syncLayers());
 
@@ -1591,7 +1531,8 @@ function render() {
   if (activePauseMenu) {
     queueMicrotask(() => {
       if (pauseMenu !== activePauseMenu) return;
-      app.append(activePauseMenu.curtain, activePauseMenu.overlay);
+      transitionRoot.append(activePauseMenu.curtain);
+      modalRoot.append(activePauseMenu.overlay);
       resumeClosedCurtainBoil(activePauseMenu.curtain);
     });
   }
@@ -1625,11 +1566,6 @@ function render() {
     return;
   }
 
-  if (screen === 'tutorial') {
-    renderTutorialScreen();
-    return;
-  }
-
   const legalMoves = new Set(getCurrentLegalMoves());
 
   if (playMode === 'online' && rankedSnapshot?.phase === 'variantSelection') {
@@ -1642,7 +1578,7 @@ function render() {
     return;
   }
 
-  app.innerHTML = `
+  screenRoot.innerHTML = `
     <section class="arena ${state.status}">
       ${renderStageHud()}
       ${renderPickHistories()}
@@ -1718,7 +1654,7 @@ function renderLayoutGameScreen(legalMoves) {
   const pokerCutaway = getCurrentVariantId() === VARIANT_IDS.rpsPoker
     && isRpsPokerCutawayPresentation(stagePresentation);
 
-  app.innerHTML = `
+  screenRoot.innerHTML = `
     <section class="arena layout-arena ${state.status} ${getCurrentVariantId() === VARIANT_IDS.rpsPoker ? 'rps-poker-arena' : ''} ${pokerCutaway ? 'rps-poker-cutaway' : ''}">
       <div
         class="layout-stage"
@@ -1886,6 +1822,7 @@ function renderGameplayRulesOverlay() {
   const variant = variantSelectScreen.getVariant(getCurrentVariantId());
   return `
     <div class="variant-detail-overlay gameplay-rules-overlay">
+      <div class="alert-box variant-detail-panel" aria-hidden="true"></div>
       <div class="variant-detail-copy" role="dialog" aria-modal="true" aria-label="${escapeHtml(variant.name)} rules">
         ${variantSelectScreen.renderDetailCopy(variant)}
       </div>
@@ -2667,7 +2604,7 @@ function renderSceneGallery() {
   requestMusicTrack('title');
   const groups = buildSceneGalleryGroups();
 
-  app.innerHTML = `
+  screenRoot.innerHTML = `
     <section class="scene-gallery" aria-label="Scene gallery">
       <header class="scene-gallery-header">
         <button class="text-link" data-action="close-scene-gallery" type="button">Back</button>
@@ -2853,214 +2790,7 @@ function playAudioToggleSound() {
   unlockSceneAudio();
 }
 
-function renderTutorialScreen() {
-  requestMusicTrack('game');
-
-  app.innerHTML = `
-    <section class="arena tutorial-arena">
-      ${renderStageHud()}
-      ${renderPickHistories()}
-      ${renderTutorialNav()}
-      <figure class="doodle-stage tutorial-stage">
-        ${renderTutorialStage()}
-      </figure>
-      ${renderBulletMeters()}
-    </section>
-
-    <section class="moves tutorial-moves" aria-label="Tutorial controls">
-      ${renderTutorialButtons()}
-    </section>
-  `;
-
-  installMoveButtonHandlers();
-  app.querySelector('[data-action="back-tutorial"]')?.addEventListener('click', goBackTutorial);
-  app.querySelector('[data-action="next-tutorial"]')?.addEventListener('click', advanceTutorialSlide);
-  app.querySelector('[data-action="tips-tutorial"]')?.addEventListener('click', openTutorialTips);
-  app.querySelector('[data-action="rematch"]')?.addEventListener('click', restartTutorialPractice);
-  app.querySelector('[data-action="quit"]')?.addEventListener('click', quitLocalGame);
-  mountSpriteRenderers(app.querySelectorAll('.sprite-canvas'));
-  playStageAudio({
-    isTransitioning: isTransitioning || tutorialStageMode !== 'scene',
-    presentation: stagePresentation,
-    audioKey: `tutorial:${state.turn}:${turnPhase}:${stagePresentation.name}:${stagePresentation.flip}`,
-  });
-}
-
-function renderTutorialStage() {
-  if (tutorialStageMode === 'scene') {
-    return renderStagePresentation();
-  }
-
-  if (tutorialStageMode === 'feedback') {
-    return renderTutorialFeedback();
-  }
-
-  if (tutorialStageMode === 'tips') {
-    return renderTutorialTipsSlide();
-  }
-
-  return renderTutorialSlide();
-}
-
-function renderTutorialNav() {
-  if (turnPhase === 'round-over' && isGameOver()) {
-    return '';
-  }
-
-  if (tutorialStageMode === 'scene' || tutorialStageMode === 'feedback') {
-    return `
-      <nav class="tutorial-nav tutorial-nav-practice" aria-label="Tutorial navigation">
-        ${renderSheetButton('tips-tutorial', 'tips_button', 'Tips', 'tutorial-nav-button tutorial-next-button')}
-      </nav>
-    `;
-  }
-
-  if (tutorialStageMode === 'tips') {
-    return `
-      <nav class="tutorial-nav" aria-label="Tutorial navigation">
-        ${renderSheetButton('back-tutorial', 'Prev_slide_button', 'Back', 'tutorial-nav-button tutorial-back-button')}
-        ${tutorialTipsSlideIndex === TUTORIAL_TIPS_SLIDE_COUNT - 1
-          ? renderSheetButton('quit', 'quit_button', 'Return to menu', 'tutorial-nav-button tutorial-next-button')
-          : renderSheetButton('next-tutorial', 'next_slide_button', 'Next', 'tutorial-nav-button tutorial-next-button')}
-      </nav>
-    `;
-  }
-
-  return `
-    <nav class="tutorial-nav" aria-label="Tutorial navigation">
-      ${renderSheetButton('back-tutorial', 'Prev_slide_button', 'Back', 'tutorial-nav-button tutorial-back-button')}
-      ${tutorialSlideIndex === TUTORIAL_REVEAL_SLIDE_INDEX
-        ? ''
-        : renderSheetButton('next-tutorial', 'next_slide_button', 'Next', 'tutorial-nav-button tutorial-next-button')}
-    </nav>
-  `;
-}
-
-function renderTutorialSlide() {
-  const slideNumber = tutorialSlideIndex + 1;
-  const slides = [
-    `
-      <p><strong>Tap Tap Shoot!</strong></p>
-      <p>is a guessing game like</p>
-      <p><strong>Rock Paper Scissors.</strong></p>
-    `,
-    `
-      <p><strong>But more violent.</strong></p>
-      <p>The goal is to</p>
-      <p><strong>Shoot</strong> or <strong>Stab</strong></p>
-      <p>your opponent.</p>
-    `,
-    `
-      <p>You need an</p>
-      <p><strong>Bullet</strong></p>
-      <p>to attack.</p>
-      <p>Each player starts with one.</p>
-      <p>Defensive moves are free.</p>
-    `,
-    `
-      <p><strong>Reloading</strong></p>
-      <p>stocks a Bullet,</p>
-      <p>but leaves you open.</p>
-    `,
-    `
-      <p>Games are</p>
-      <p><strong>First to Five.</strong></p>
-    `,
-    `
-      <p>Hover over the buttons</p>
-      <p>to see what beats what.</p>
-      <p>Choose one and</p>
-      <p>see what happens!</p>
-    `,
-  ];
-
-  return `
-    <div class="tutorial-slide tutorial-slide-${slideNumber}" aria-label="Tutorial ${slideNumber}">
-      ${slides[tutorialSlideIndex]}
-    </div>
-  `;
-}
-
-function renderTutorialFeedback() {
-  return `
-    <div class="tutorial-slide tutorial-feedback" aria-label="Tutorial result">
-      ${tutorialFeedbackMarkup}
-    </div>
-  `;
-}
-
-function renderTutorialTipsSlide() {
-  const slideNumber = tutorialTipsSlideIndex + 1;
-  const slides = [
-    `
-      ${renderTutorialTipArt('tip1graphic')}
-      <div class="tutorial-side-copy">
-        <p><strong>Tips</strong></p>
-        <p>The game is all about</p>
-        <p>relative Bullets.</p>
-        <p>When each player has</p>
-        <p>one, the game is like</p>
-        <p>Rock Paper Scissors.</p>
-      </div>
-    `,
-    `
-      ${renderTutorialTipArt('tip2graphicgraphic')}
-      <div class="tutorial-side-copy">
-        <p><strong>Tips</strong></p>
-        <p>But when a player has an</p>
-        <p>Bullet advantage,</p>
-        <p>they can enforce a mixup.</p>
-      </div>
-    `,
-    `
-      <p>Everyone has patterns.</p>
-      <p>Try to read your opponent!</p>
-      <p>And thanks for playing!!</p>
-      <p><strong>-JP</strong></p>
-    `,
-  ];
-
-  return `
-    <div class="tutorial-slide tutorial-tips-slide tutorial-tips-slide-${slideNumber}" aria-label="Tutorial tips ${slideNumber}">
-      ${slides[tutorialTipsSlideIndex]}
-    </div>
-  `;
-}
-
-function renderTutorialTipArt(doodle) {
-  return `
-    <canvas
-      class="sprite-canvas tutorial-tip-graphic"
-      data-doodle="${doodle}"
-      width="${DOODLE_FRAME_WIDTH}"
-      height="${DOODLE_FRAME_HEIGHT}"
-      aria-hidden="true"
-    ></canvas>
-  `;
-}
-
-function renderTutorialButtons() {
-  if (turnPhase === 'round-over' && isGameOver()) {
-    return renderGameOverButtons();
-  }
-
-  if (shouldShowTutorialMoveButtons()) {
-    const moves = Object.values(MOVES);
-
-    return moves.map((move) => renderTutorialMoveButton(move)).join('');
-  }
-
-  return '';
-}
-
-function shouldShowTutorialMoveButtons() {
-  return (tutorialStageMode === 'slide' && tutorialSlideIndex === TUTORIAL_REVEAL_SLIDE_INDEX)
-    || tutorialStageMode === 'scene'
-    || tutorialStageMode === 'feedback'
-    || tutorialStageMode === 'tips';
-}
-
-async function showVariantDetail(variantId, sourceButton) {
+ async function showVariantDetail(variantId, sourceButton) {
   if (isTransitioning || variantDetailMenu) {
     return;
   }
@@ -3068,7 +2798,7 @@ async function showVariantDetail(variantId, sourceButton) {
   const variant = variantSelectScreen.getVariant(variantId);
   const selectedButton = variantSelectScreen.promoteButton(sourceButton);
   isTransitioning = true;
-  const curtain = await closeCurtainWipe(app, playCurtainCloseAudio);
+  const curtain = await closeCurtainWipe(transitionRoot, playCurtainCloseAudio);
 
   if (screen !== 'opponent-select') {
     variantSelectScreen.restoreButton(selectedButton);
@@ -3077,7 +2807,7 @@ async function showVariantDetail(variantId, sourceButton) {
     return;
   }
 
-  app.classList.add('variant-detail-open');
+  screenRoot.classList.add('variant-detail-open');
   const overlay = variantSelectScreen.renderDetailOverlay(variant, playSelectedVariant, {
     slot: Number(selectedButton.dataset.variantSlot),
   });
@@ -3102,7 +2832,7 @@ async function showRankedVariantDetail(variantId, sourceButton) {
     return;
   }
 
-  app.classList.add('variant-detail-open');
+  screenRoot.classList.add('variant-detail-open');
   const overlay = variantSelectScreen.renderDetailOverlay(variant, confirmRankedVariantPick, {
     actionDoodle: 'select_button',
     slot: Number(selectedButton.dataset.variantSlot),
@@ -3440,21 +3170,7 @@ function renderTestOpponentControls() {
   `;
 }
 
-function renderTutorialMoveButton(move) {
-  const canUseMove = shouldShowTutorialMoveButtons()
-    && !isTransitioning
-    && (turnPhase === 'go' || turnPhase === 'scene')
-    && state.status === 'playing'
-    && getTutorialLegalMoves().includes(move.id);
-
-  return renderMoveButton(move, canUseMove);
-}
-
-function getTutorialLegalMoves() {
-  return getPlayerLegalMoves(state, 'p1');
-}
-
-function installMoveButtonHandlers() {
+ function installMoveButtonHandlers() {
   app.querySelectorAll('[data-move]').forEach((button) => {
     let submittedByPointer = false;
     button.addEventListener('pointerdown', (event) => {
@@ -3470,11 +3186,6 @@ function installMoveButtonHandlers() {
 }
 
 function submitMove(p1Move) {
-  if (screen === 'tutorial') {
-    submitTutorialMove(p1Move);
-    return;
-  }
-
   if (playMode === 'online') {
     submitRankedMove(p1Move);
     return;
@@ -3511,7 +3222,10 @@ function queueLocalPlayerMove(p1Move) {
 
 function getRpsPokerSelectionAudio(moveId) {
   const action = String(moveId).split(':')[0];
-  return ['bet', 'call', 'raise'].includes(action) ? RPS_POKER_CHIP_AUDIO : READY_AUDIO;
+  if (['bet', 'call', 'raise'].includes(action)) return RPS_POKER_CHIP_AUDIO;
+  if (action === 'check') return RPS_POKER_CHECK_AUDIO;
+  if (action === 'fold') return LOSE_JINGLE_AUDIO;
+  return READY_AUDIO;
 }
 
 function playDelayedRpsPokerFlipAudio() {
@@ -3627,9 +3341,11 @@ function handleLocalMoveQueued(playerId) {
 
 function beginLocalSafePhase(readyPlayerId) {
   const choice = localTurnController.beginWaiting(readyPlayerId, {
-    safeDurationMs: getCurrentVariantId() === VARIANT_IDS.rpsPoker
-      ? 60 * 60 * 1000
-      : READY_WAITING_SAFE_PHASE_MS,
+    safeDurationMs: localSessionKind === 'tutorial'
+      ? null
+      : getCurrentVariantId() === VARIANT_IDS.rpsPoker
+        ? 60 * 60 * 1000
+        : READY_WAITING_SAFE_PHASE_MS,
     onSafeElapsed: beginLocalCountdownPhase,
   });
 
@@ -3764,26 +3480,7 @@ async function loseLocalRoundOnTimeout(playerId) {
   }
 }
 
-function submitTutorialMove(p1Move) {
-  if (
-    !shouldShowTutorialMoveButtons() ||
-    isTransitioning ||
-    (turnPhase !== 'go' && turnPhase !== 'scene') ||
-    state.status !== 'playing' ||
-    !getTutorialLegalMoves().includes(p1Move)
-  ) {
-    return;
-  }
-
-  unlockSceneAudio();
-  tutorialFeedbackMarkup = '';
-  tutorialPendingFeedbackMarkup = '';
-  p1QueuedMove = p1Move;
-  render();
-  resolvePlayerSelection();
-}
-
-async function restartGame() {
+ async function restartGame() {
   if (playMode === 'online') {
     leaveRanked();
     return;
@@ -3812,16 +3509,20 @@ async function openPracticeVariantSelect() {
   }
 
   isTransitioning = true;
-  await playCurtainMenuTransition(() => {
-    playMode = 'local';
-    screen = 'opponent-select';
-    p1QueuedMove = null;
-    rankedSnapshot = null;
-    render();
-  });
+  await localFlowDirector.play('OPEN_PRACTICE_SELECT');
   rankedClient.setPresence('playing_computer');
   isTransitioning = false;
   render();
+}
+
+async function startTutorial() {
+  if (isTransitioning) {
+    return;
+  }
+
+  isTransitioning = true;
+  await localFlowDirector.play('START_TUTORIAL');
+  isTransitioning = false;
 }
 
 async function returnToLobbyFromOpponentSelect() {
@@ -3884,37 +3585,6 @@ async function closeVariantDetail() {
   isTransitioning = false;
 }
 
-async function startTutorialFromTitle() {
-  if (isTransitioning) {
-    return;
-  }
-
-  playMode = 'local';
-  clearLocalTurnChoice();
-  requestMusicTrack('game');
-  unlockSceneAudio();
-  resetRoundWins();
-  loopToken += 1;
-  isTransitioning = true;
-  await playWipeTransition(() => {
-    state = createRoundState();
-    screen = 'tutorial';
-    turnPhase = 'scene';
-    tutorialSlideIndex = 0;
-    tutorialTipsSlideIndex = 0;
-    tutorialStageMode = 'slide';
-    tutorialFeedbackMarkup = '';
-    tutorialPendingFeedbackMarkup = '';
-    p1QueuedMove = null;
-    rankedSnapshot = null;
-    pendingSuperAnimation = null;
-    stagePresentation = getIdleStagePresentation();
-    render();
-  });
-  isTransitioning = false;
-  render();
-}
-
 async function startTestModeFromTitle() {
   if (isTransitioning) {
     return;
@@ -3939,18 +3609,9 @@ async function startLocalGame(variantId) {
     return;
   }
 
-  selectedVariantId = COMPUTER_VARIANT_IDS.includes(variantId) ? variantId : DEFAULT_VARIANT_ID;
-  await setActiveGameLayoutForVariant(selectedVariantId);
-  playMode = 'local';
-  clearLocalTurnChoice();
-  requestMusicTrack('game');
-  unlockSceneAudio();
-  resetRoundWins();
   isTransitioning = true;
-  await playWipeTransition(setNewRound);
+  await localFlowDirector.play('START_LOCAL_GAME', { variantId });
   isTransitioning = false;
-  render();
-  beginOpeningCues();
 }
 
 async function playSelectedVariant(variantId) {
@@ -3964,20 +3625,11 @@ async function playSelectedVariant(variantId) {
   isTransitioning = true;
   menu.overlay.remove();
   variantSelectScreen.restoreButton(menu.selectedButton);
-  selectedVariantId = COMPUTER_VARIANT_IDS.includes(variantId) ? variantId : DEFAULT_VARIANT_ID;
-  await setActiveGameLayoutForVariant(selectedVariantId);
-  playMode = 'local';
-  clearLocalTurnChoice();
-  requestMusicTrack('game');
-  unlockSceneAudio();
-  resetRoundWins();
-  setNewRound();
-  render();
-  app.append(menu.curtain);
-  await openCurtainWipe(menu.curtain, playCurtainOpenAudio);
+  await localFlowDirector.play('CONFIRM_LOCAL_VARIANT', {
+    variantId,
+    curtain: menu.curtain,
+  });
   isTransitioning = false;
-  render();
-  beginOpeningCues();
 }
 
 async function confirmRankedVariantPick(variantId) {
@@ -4012,135 +3664,7 @@ async function confirmRankedVariantPick(variantId) {
   mountReadyWaitingOverlays(selectButton.querySelectorAll('.variant-detail-ready'));
 }
 
-async function advanceTutorialSlide() {
-  if (isTransitioning || screen !== 'tutorial') {
-    return;
-  }
-
-  if (tutorialStageMode === 'tips') {
-    if (tutorialTipsSlideIndex >= TUTORIAL_TIPS_SLIDE_COUNT - 1) {
-      return;
-    }
-
-    unlockSceneAudio();
-    isTransitioning = true;
-    await playWipeTransition(() => {
-      tutorialTipsSlideIndex += 1;
-      render();
-    });
-    isTransitioning = false;
-    render();
-    return;
-  }
-
-  if (tutorialStageMode !== 'slide' || tutorialSlideIndex >= TUTORIAL_MAIN_SLIDE_COUNT - 1) {
-    return;
-  }
-
-  unlockSceneAudio();
-  isTransitioning = true;
-  await playWipeTransition(() => {
-    settleTutorialScene();
-    tutorialSlideIndex += 1;
-    tutorialStageMode = 'slide';
-    render();
-  });
-  isTransitioning = false;
-  render();
-}
-
-async function openTutorialTips() {
-  if (isTransitioning || screen !== 'tutorial') {
-    return;
-  }
-
-  loopToken += 1;
-  unlockSceneAudio();
-  isTransitioning = true;
-  await playWipeTransition(() => {
-    if (tutorialStageMode === 'scene') {
-      settleTutorialScene();
-    }
-    tutorialStageMode = 'tips';
-    tutorialFeedbackMarkup = '';
-    tutorialPendingFeedbackMarkup = '';
-    render();
-  });
-  isTransitioning = false;
-  render();
-}
-
-async function restartTutorialPractice() {
-  if (isTransitioning || screen !== 'tutorial') {
-    return;
-  }
-
-  requestMusicTrack('game');
-  unlockSceneAudio();
-  loopToken += 1;
-  isTransitioning = true;
-  await playWipeTransition(() => {
-    resetRoundWins();
-    state = createRoundState();
-    turnPhase = 'scene';
-    tutorialSlideIndex = TUTORIAL_REVEAL_SLIDE_INDEX;
-    tutorialTipsSlideIndex = 0;
-    tutorialStageMode = 'slide';
-    tutorialFeedbackMarkup = '';
-    tutorialPendingFeedbackMarkup = '';
-    clearLocalTurnChoice();
-    p1QueuedMove = null;
-    rankedSnapshot = null;
-    resetStageAudioKey();
-    lastMoves = {
-      p1: 'reload',
-      p2: 'reload',
-    };
-    stagePresentation = getIdleStagePresentation();
-    render();
-  });
-  isTransitioning = false;
-  render();
-}
-
-async function goBackTutorial() {
-  if (isTransitioning || screen !== 'tutorial') {
-    return;
-  }
-
-  if (tutorialStageMode === 'slide' && tutorialSlideIndex === 0) {
-    return;
-  }
-
-  unlockSceneAudio();
-  isTransitioning = true;
-  await playWipeTransition(() => {
-    if (tutorialStageMode === 'tips') {
-      if (tutorialTipsSlideIndex > 0) {
-        tutorialTipsSlideIndex -= 1;
-      } else {
-        tutorialSlideIndex = TUTORIAL_REVEAL_SLIDE_INDEX;
-        tutorialStageMode = 'slide';
-      }
-      render();
-      return;
-    }
-
-    if (tutorialStageMode === 'scene') {
-      settleTutorialScene();
-      tutorialStageMode = 'slide';
-      render();
-      return;
-    }
-
-    tutorialSlideIndex = Math.max(0, tutorialSlideIndex - 1);
-    render();
-  });
-  isTransitioning = false;
-  render();
-}
-
-async function continueGame() {
+ async function continueGame() {
   if (playMode === 'online') {
     submitRankedContinue();
     return;
@@ -4181,11 +3705,6 @@ async function quitLocalGame() {
     state = createRoundState();
     screen = 'lobby';
     turnPhase = 'idle';
-    tutorialSlideIndex = 0;
-    tutorialTipsSlideIndex = 0;
-    tutorialStageMode = 'slide';
-    tutorialFeedbackMarkup = '';
-    tutorialPendingFeedbackMarkup = '';
     p1QueuedMove = null;
     rankedSnapshot = null;
     stagePresentation = getIdleStagePresentation();
@@ -4483,7 +4002,9 @@ function interruptLocalPlayForRankedMatch() {
   clearLocalTurnChoice();
   clearPausableTimers();
   gameFlowDirector.cancel();
+  localFlowDirector.cancel();
   onlineFlowDirector.cancel();
+  alertSystem.cancel('ranked-interrupt');
   pauseMenu?.overlay.remove();
   pauseMenu?.curtain.remove();
   pauseMenu = null;
@@ -4947,6 +4468,7 @@ function leaveRanked() {
 }
 
 function resetRankedSession() {
+  alertSystem.cancel('ranked-reset');
   if (rankedDisconnectReturnTimer) {
     clearTimeout(rankedDisconnectReturnTimer);
     rankedDisconnectReturnTimer = null;
@@ -4955,6 +4477,7 @@ function resetRankedSession() {
   variantDetailMenu = null;
   clearRankedReadyWaitingTimer();
   playMode = 'local';
+  localSessionKind = 'standard';
   selectedVariantId = DEFAULT_VARIANT_ID;
   setCachedActiveGameLayoutForVariant(DEFAULT_VARIANT_ID);
   clearLocalTurnChoice();
@@ -5145,18 +4668,14 @@ async function resolvePlayerSelection() {
 
   if (isActiveLoop(token)) {
     render();
-    if (screen === 'tutorial') {
-      maybeShowTutorialFeedback(token);
-    } else {
-      const animation = pendingSuperAnimation;
-      pendingSuperAnimation = null;
-      await gameFlowDirector.reveal({
-        variantId: getCurrentVariantId(),
-        superAnimation: animation,
-        roundFinished: state.status === 'finished',
-        resultLevel: getLocalResultLevel(),
-      });
-    }
+    const animation = pendingSuperAnimation;
+    pendingSuperAnimation = null;
+    await gameFlowDirector.reveal({
+      variantId: getCurrentVariantId(),
+      superAnimation: animation,
+      roundFinished: state.status === 'finished',
+      resultLevel: getLocalResultLevel(),
+    });
   }
 }
 
@@ -5165,6 +4684,8 @@ async function resolveRpsPokerBettingSelection(token) {
   const action = String(localTurnController.choice?.moves?.[previousActor] ?? '').split(':')[0];
   if (previousActor === 'p2' && ['bet', 'call', 'raise'].includes(action)) {
     playOneShotAudio(RPS_POKER_CHIP_AUDIO);
+  } else if (previousActor === 'p2' && action === 'check') {
+    playOneShotAudio(RPS_POKER_CHECK_AUDIO);
   }
   const isShowdown = action === 'call' || (action === 'check' && state.checkedOnce);
   const previousPokerState = {
@@ -5245,6 +4766,11 @@ async function playRpsPokerShowdown(previousPokerState, token) {
 
   pokerReadyCards.animateReveal = false;
   render();
+  if (winner === 'p1') {
+    playOneShotAudio(WIN_SOUND_AUDIO);
+  } else if (winner === 'p2') {
+    playOneShotAudio(LOSE_JINGLE_AUDIO);
+  }
   await waitBeats(3, token);
   if (!isActiveLoop(token)) return;
 
@@ -5313,6 +4839,9 @@ function removeOnePokerPotChip() {
 
 async function playRpsPokerFoldResolution(folder, previousPokerState, token) {
   const winner = folder === 'p1' ? 'p2' : 'p1';
+  if (folder === 'p2') {
+    playOneShotAudio(WIN_SOUND_AUDIO);
+  }
   pokerChipTransfer = {
     stacks: { ...previousPokerState.stacks },
     counts: { ...previousPokerState.counts },
@@ -5334,6 +4863,9 @@ async function playRpsPokerFoldResolution(folder, previousPokerState, token) {
   pokerReadyCards.hiddenPlayerId = folder;
   if (folder === 'p1') pokerChipTransfer.locked.p1 = null;
   render();
+
+  await waitBeats(1, token);
+  if (!isActiveLoop(token)) return;
 
   let transferIndex = 0;
   while (pokerChipTransfer.counts.p1 + pokerChipTransfer.counts.p2 > 0) {
@@ -5485,53 +5017,15 @@ function waitMsWithoutToken(duration) {
 }
 
 function isActiveLoop(token) {
-  return token === loopToken && (screen === 'playing' || screen === 'tutorial');
-}
-
-function getTutorialOutcome(p1Move) {
-  const p1Resource = getPlayerResource(state.players.p1);
-  const p2Resource = getPlayerResource(state.players.p2);
-  const key = `${p1Resource}-${p2Resource}:${p1Move}`;
-  const outcome = TUTORIAL_OUTCOMES[key]
-    ?? (p2Resource === 0 && p1Resource >= 2 && p1Resource <= MAX_BULLETS ? TUTORIAL_OUTCOMES[`advantage:${p1Move}`] : null);
-
-  if (!outcome) {
-    return null;
-  }
-
-  return {
-    ...outcome,
-    feedbackMarkup: renderTutorialFeedbackMarkup(outcome.lines),
-  };
-}
-
-function renderTutorialFeedbackMarkup(lines) {
-  return lines.map((line) => {
-    if (line.size === 'big') {
-      return `<p><strong>${line.text}</strong></p>`;
-    }
-
-    if (line.size === 'small') {
-      return `<p class="tutorial-small">${line.text}</p>`;
-    }
-
-    return `<p>${line.text}</p>`;
-  }).join('');
+  return token === loopToken && screen === 'playing';
 }
 
 function resolveQueuedTurn({ shouldRender = true } = {}) {
   const requestedPlayerMove = p1QueuedMove;
-  let tutorialOutcome = null;
   const resolved = resolveLocalTurn({
     state,
     queuedPlayerMove: requestedPlayerMove,
     queuedOpponentMove: localTurnController.choice?.moves.p2,
-    getForcedOpponentMove: screen === 'tutorial'
-      ? (playerMove) => {
-        tutorialOutcome = getTutorialOutcome(playerMove);
-        return tutorialOutcome?.p2Move;
-      }
-      : null,
     chooseOpponentMove: (currentState) => chooseAiMove(currentState, Math.random, variantDifficultyToggleState),
     roundWins,
   });
@@ -5544,10 +5038,6 @@ function resolveQueuedTurn({ shouldRender = true } = {}) {
     roundWins = resolved.roundWins;
     if (getCurrentVariantId() === VARIANT_IDS.rpsPoker) syncMusicTopper();
     turnPhase = 'scene';
-    if (screen === 'tutorial') {
-      tutorialStageMode = 'scene';
-      tutorialPendingFeedbackMarkup = tutorialOutcome?.feedbackMarkup ?? '';
-    }
     lastMoves = {
       p1: p1Move,
       p2: p2Move,
@@ -5555,17 +5045,23 @@ function resolveQueuedTurn({ shouldRender = true } = {}) {
     pendingSuperAnimation = getSuperAnimation(turn.result);
     stagePresentation = getTurnStagePresentation(turn.result, p1Move, p2Move);
 
-    if (screen === 'tutorial' && state.status === 'finished' && state.winner) {
-      syncMusicTopper();
-    }
-
-    if (playMode === 'local' && state.status === 'finished' && state.winner === 'p2') {
+    if (
+      !(getCurrentVariantId() === VARIANT_IDS.rpsPoker && state.phase === 'betting')
+      && playMode === 'local'
+      && state.status === 'finished'
+      && state.winner === 'p2'
+    ) {
       if (isGameOver()) {
         interruptMusicFileOnce(LOSE_JINGLE_AUDIO, null, false);
       } else {
         interruptMusicFileOnce(LOSE_JINGLE_AUDIO, 'game');
       }
-    } else if (playMode === 'local' && state.status === 'finished' && state.winner === 'p1') {
+    } else if (
+      !(getCurrentVariantId() === VARIANT_IDS.rpsPoker && state.phase === 'betting')
+      && playMode === 'local'
+      && state.status === 'finished'
+      && state.winner === 'p1'
+    ) {
       if (isGameOver()) {
         interruptMusicFileOnce(WIN_SOUND_AUDIO, null, false);
       } else {
@@ -5657,60 +5153,10 @@ function advanceLocalRoundPreservingReveal() {
   render();
 }
 
-function settleTutorialScene() {
-  if (tutorialStageMode !== 'scene') {
-    return;
-  }
-
-  if (state.status === 'finished') {
-    setNewTutorialRound();
-  }
-}
-
-async function maybeShowTutorialFeedback(token) {
-  if (!isActiveLoop(token) || tutorialStageMode !== 'scene' || !tutorialPendingFeedbackMarkup) {
-    return;
-  }
-
-  await waitBeats(2, token);
-
-  if (!isActiveLoop(token) || tutorialStageMode !== 'scene' || !tutorialPendingFeedbackMarkup) {
-    return;
-  }
-
-  isTransitioning = true;
-  await playWipeTransition(() => {
-    const feedbackMarkup = tutorialPendingFeedbackMarkup;
-
-    if (isGameOver()) {
-      tutorialFeedbackMarkup = '';
-      tutorialPendingFeedbackMarkup = '';
-      tutorialStageMode = 'scene';
-      turnPhase = 'round-over';
-      showRoundOverScene();
-      return;
-    }
-
-    if (state.status === 'finished') {
-      setNewTutorialRound();
-    }
-
-    tutorialFeedbackMarkup = feedbackMarkup;
-    tutorialPendingFeedbackMarkup = '';
-    tutorialStageMode = 'feedback';
-    render();
-  });
-  isTransitioning = false;
-
-  if (isActiveLoop(token)) {
-    render();
-  }
-}
-
 function showRoundOverScene(resultLevel = 'round') {
   syncMusicTopper();
 
-  if (playMode === 'local' && screen !== 'tutorial' && !isGameOver()) {
+  if (playMode === 'local' && !isGameOver()) {
     if (state.winner === 'p1') {
       queueMusicTrackOnce('sax', 'game');
     }
@@ -5746,34 +5192,6 @@ function getRoundOverDoodle(winner, useRoundDoodle) {
   return useRoundDoodle ? 'system_scenes/round_lost' : 'system_scenes/game_lost';
 }
 
-function setNewTutorialRound() {
-  state = createRoundState();
-  state = {
-    ...state,
-    players: {
-      p1: {
-        ...state.players.p1,
-        resource: 0,
-        bullets: 0,
-      },
-      p2: {
-        ...state.players.p2,
-        resource: 0,
-        bullets: 0,
-      },
-    },
-  };
-  turnPhase = 'scene';
-  p1QueuedMove = null;
-  resetStageAudioKey();
-  lastMoves = {
-    p1: 'reload',
-    p2: 'reload',
-  };
-  stagePresentation = getIdleStagePresentation();
-  render();
-}
-
 function getWinStacks(wins) {
   const stacks = [];
   let remaining = wins;
@@ -5789,14 +5207,14 @@ function getWinStacks(wins) {
 
 function playWipeTransition(onCovered) {
   const generation = transitionGeneration;
-  return playStarburstWipeTransition(app, () => {
+  return playStarburstWipeTransition(transitionRoot, () => {
     if (generation === transitionGeneration) onCovered();
   }, () => playOneShotAudio(STARBURST_WIPE_AUDIO));
 }
 
 function playCurtainMenuTransition(onCovered) {
   const generation = transitionGeneration;
-  return playCurtainWipeTransition(app, () => {
+  return playCurtainWipeTransition(transitionRoot, () => {
     if (generation !== transitionGeneration) return false;
     onCovered();
     return true;

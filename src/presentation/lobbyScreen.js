@@ -28,6 +28,7 @@ export function createLobbyScreen({
   onOpenPlayer,
   onToggleMatchmaking,
   onOpenPractice,
+  onOpenTutorial,
   onOpenSettings,
   onBack,
   onCloseOverlay,
@@ -78,6 +79,7 @@ export function createLobbyScreen({
     app.querySelectorAll('[data-player-id]').forEach((button) => button.addEventListener('click', () => onOpenPlayer(button.dataset.playerId)));
     app.querySelector('[data-action="toggle-ready"]')?.addEventListener('click', onToggleMatchmaking);
     app.querySelector('[data-action="play-computer"]')?.addEventListener('click', onOpenPractice);
+    app.querySelector('[data-action="tutorial"]')?.addEventListener('click', onOpenTutorial);
     app.querySelector('[data-action="settings"]')?.addEventListener('click', onOpenSettings);
     app.querySelector('[data-action="back-to-title"]')?.addEventListener('click', onBack);
     app.querySelector('[data-action="toggle-roster"]')?.addEventListener('click', () => {
@@ -116,7 +118,7 @@ export function createLobbyScreen({
             <div class="whiteboard-scroll" tabindex="0" aria-label="Shared lobby whiteboard"><canvas class="whiteboard-text-canvas" aria-hidden="true"></canvas><canvas class="whiteboard-canvas"></canvas></div>
             <button class="whiteboard-tray-return-zone ${whiteboard.isToolHeld() ? 'is-active' : ''}" data-action="return-board-tool" type="button" aria-label="Return whiteboard tool"></button>
             <div class="whiteboard-tool-tray" role="group" aria-label="Whiteboard tools">${boardColors.map(whiteboard.renderTool).join('')}${whiteboard.renderTool('erase')}</div>
-            ${whiteboard.renderHeldTool()}<button class="whiteboard-new-marks" data-action="board-bottom" type="button" hidden>new marks ↓</button>
+            ${whiteboard.renderHeldTool()}
           </div>
           <aside class="lobby-roster-panel ${state.rosterOpen ? 'is-open' : ''}">
             <header class="lobby-heading"><strong>ONLINE</strong><span>${state.connected ? state.players.length : '…'}</span></header>
@@ -130,6 +132,7 @@ export function createLobbyScreen({
         <div class="lobby-action-row">
           ${renderSheetAction('back-to-title', 'back_button_w', 'Back to title')}
           ${renderSheetAction('play-computer', 'title/playvcom_button', 'Practice versus computer')}
+          ${renderSheetAction('tutorial', 'tutorial/tutorial_button', 'Play tutorial')}
           ${renderSheetAction('toggle-ready', 'match_button', 'Play a match', state.matchmakingStatus === 'searching', !state.connected)}
           ${renderSheetAction('settings', 'settings_button', 'Settings')}
         </div>

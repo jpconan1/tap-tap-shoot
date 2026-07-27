@@ -33,8 +33,8 @@ const DEFAULT_CHALLENGE_MS = 15 * 1000;
 const BOARD_WIDTH = 760;
 const BOARD_VIEW_HEIGHT = 450;
 const BOARD_MAX_HEIGHT = BOARD_VIEW_HEIGHT * 3.5;
-const BOARD_ROW_HEIGHT = 30;
-const BOARD_TEXT_COLUMNS = 74;
+const BOARD_ROW_HEIGHT = 60;
+const BOARD_TEXT_COLUMNS = 37;
 const BOARD_MAX_OPERATIONS = 800;
 const BOARD_MAX_POINTS = 180;
 const BOARD_STROKES_PER_SECOND = 12;
@@ -77,7 +77,7 @@ export class RankedDuelService {
     this.chatMessages = [];
     this.boardOperations = [];
     this.boardTop = 0;
-    this.boardNextY = 34;
+    this.boardNextY = 68;
     this.challenges = new Map();
   }
 
@@ -351,7 +351,7 @@ export class RankedDuelService {
     this.boardOperations = [];
     this.chatMessages = [];
     this.boardTop = 0;
-    this.boardNextY = 34;
+    this.boardNextY = 68;
     this.broadcastLobby('boardReset', { board: this.getBoardSnapshot() });
   }
 

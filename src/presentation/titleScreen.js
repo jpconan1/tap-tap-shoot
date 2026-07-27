@@ -31,7 +31,6 @@ export function createTitleScreen({
   setVolume,
   escapeHtml,
   maxDisplayNameLength,
-  showAlertShowcase = null,
 }) {
   let sliderImagesPromise = null;
 
@@ -201,7 +200,6 @@ export function createTitleScreen({
     startOnlineStatusPolling();
     mountSpriteRenderers(app.querySelectorAll('.sprite-canvas'));
     app.querySelector('.title-name-input')?.focus();
-    showAlertShowcase?.();
   }
 
   return { installSettingsHandlers, render, renderSettingsControls, updateSoundButton };

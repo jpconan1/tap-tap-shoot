@@ -11,7 +11,7 @@ const TOOL_LAYOUT = Object.freeze({
 });
 
 export function createEmptyLobbyBoard() {
-  return { width: 760, viewHeight: 450, maxHeight: 1575, rowHeight: 30, top: 0, nextY: 34, operations: [] };
+  return { width: 760, viewHeight: 450, maxHeight: 1575, rowHeight: 60, top: 0, nextY: 68, operations: [] };
 }
 
 export function createLobbyWhiteboard({ root, isActive, isBoilEnabled, mountSprites, sendStroke, sendErase, frameRate = 8, frameCount = 3 }) {
@@ -33,7 +33,7 @@ export function createLobbyWhiteboard({ root, isActive, isBoilEnabled, mountSpri
       ...message,
       color: LOBBY_BOARD_COLORS.includes(message.color) ? message.color : 'black',
       rowY: Number.isFinite(message.rowY) ? message.rowY : board.nextY,
-      rowSpan: Number.isFinite(message.rowSpan) ? message.rowSpan : Math.max(1, Math.min(3, Math.ceil(((message.displayName?.length ?? 0) + (message.text?.length ?? 0) + 2) / 74))),
+      rowSpan: Number.isFinite(message.rowSpan) ? message.rowSpan : Math.max(1, Math.min(3, Math.ceil(((message.displayName?.length ?? 0) + (message.text?.length ?? 0) + 2) / 37))),
     };
     board.operations.push({ kind: 'text', id: normalized.id, message: normalized });
     board.nextY = Math.max(board.nextY, normalized.rowY + (normalized.rowSpan * board.rowHeight));
@@ -118,14 +118,12 @@ export function createLobbyWhiteboard({ root, isActive, isBoilEnabled, mountSpri
     if (!canvas || !scroll) return;
     canvas.dataset.tool = tool;
     draw(canvas); animate(canvas);
-    requestAnimationFrame(() => { scroll.scrollTop = scroll.scrollHeight; updateNewMarksButton(); });
+    requestAnimationFrame(() => { scroll.scrollTop = scroll.scrollHeight; });
     canvas.addEventListener('pointerdown', beginStroke);
     canvas.addEventListener('pointermove', continueStroke);
     canvas.addEventListener('pointerup', finishStroke);
     canvas.addEventListener('pointercancel', finishStroke);
-    scroll.addEventListener('scroll', () => updateNewMarksButton());
     root.querySelector('[data-action="return-board-tool"]')?.addEventListener('pointerdown', releaseTool);
-    root.querySelector('[data-action="board-bottom"]')?.addEventListener('click', () => scroll.scrollTo({ top: scroll.scrollHeight, behavior: 'smooth' }));
   }
 
   function beginStroke(event) {
@@ -178,8 +176,7 @@ export function createLobbyWhiteboard({ root, isActive, isBoilEnabled, mountSpri
     if (!canvas || !scroll) return;
     const nearBottom = scroll.scrollHeight - scroll.scrollTop - scroll.clientHeight < 45;
     draw(canvas, activeStroke);
-    if (followNewContent && nearBottom) requestAnimationFrame(() => { scroll.scrollTop = scroll.scrollHeight; updateNewMarksButton(); });
-    else if (followNewContent) updateNewMarksButton(true);
+    if (followNewContent && nearBottom) requestAnimationFrame(() => { scroll.scrollTop = scroll.scrollHeight; });
   }
 
   function draw(canvas, preview = null) {
@@ -228,13 +225,13 @@ export function createLobbyWhiteboard({ root, isActive, isBoilEnabled, mountSpri
     const prefix = message.system ? '' : `${message.displayName}: `;
     const lines = wrapText(context, `${prefix}${message.text}`, message.rowSpan);
     context.save(); context.fillStyle = COLOR_VALUES[message.color] ?? COLOR_VALUES.black;
-    context.font = '19px "Architects Daughter", sans-serif'; context.textBaseline = 'top';
-    lines.forEach((line, index) => context.fillText(line, 18, message.rowY - board.top + (index * 24), board.width - 36));
+    context.font = '38px "Architects Daughter", sans-serif'; context.textBaseline = 'top';
+    lines.forEach((line, index) => context.fillText(line, 18, message.rowY - board.top + (index * 48), board.width - 36));
     context.restore();
   }
 
   function wrapText(context, text, maxLines) {
-    context.font = '19px "Architects Daughter", sans-serif';
+    context.font = '38px "Architects Daughter", sans-serif';
     const lines = []; let line = '';
     text.split(' ').forEach((word) => {
       const candidate = line ? `${line} ${word}` : word;
@@ -277,11 +274,6 @@ export function createLobbyWhiteboard({ root, isActive, isBoilEnabled, mountSpri
     if (!tray || tool === 'scroll') return;
     tray.insertAdjacentHTML('afterend', renderHeldTool()); mountSprites(root.querySelectorAll('.sprite-canvas'));
   }
-  function updateNewMarksButton(forceVisible = false) {
-    const scroll = root.querySelector('.whiteboard-scroll'); const button = root.querySelector('.whiteboard-new-marks');
-    if (scroll && button) button.hidden = !forceVisible && scroll.scrollHeight - scroll.scrollTop - scroll.clientHeight < 45;
-  }
-
   return Object.freeze({
     appendChat, appendOperation, followTool, getMarkerColor: () => markerColor, isToolHeld: () => tool !== 'scroll',
     mount, releaseTool, releaseToolOutside, renderHeldTool, renderTool, selectTool, setBoard, trim,

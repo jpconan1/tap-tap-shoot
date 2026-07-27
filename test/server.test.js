@@ -742,7 +742,7 @@ test('lobby whiteboard assigns colored text rows and shares validated strokes', 
   service.receive(p1.session, { type: 'sendChat', text: 'hello', color: 'red' });
   const chat = lastMessage(p2).message;
   assert.equal(chat.color, 'red');
-  assert.equal(chat.rowY, 34);
+  assert.equal(chat.rowY, 68);
   assert.equal(chat.rowSpan, 1);
 
   service.receive(p1.session, {

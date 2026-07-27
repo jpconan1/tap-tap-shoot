@@ -25,6 +25,7 @@ export function createVariantSelectScreen({
   onSelectVariant,
   onBack,
   onCloseDetail,
+  detailRoot = app,
 }) {
   function getPageCount() {
     return Math.max(1, Math.ceil(variants.length / pageSize));
@@ -82,8 +83,8 @@ export function createVariantSelectScreen({
     if (getPageCount() <= 1) return '';
     return `
       <div class="variant-page-controls">
-        <button class="variant-page-button" data-action="variant-page-prev" type="button" aria-label="Previous page"><canvas class="sprite-canvas variant-page-button-art" data-doodle="Prev_slide_button" data-frame-width="${TITLE_BUTTON_FRAME_WIDTH}" data-frame-height="${TITLE_BUTTON_FRAME_HEIGHT}" width="${TITLE_BUTTON_FRAME_WIDTH}" height="${TITLE_BUTTON_FRAME_HEIGHT}" aria-hidden="true"></canvas></button>
-        <button class="variant-page-button" data-action="variant-page-next" type="button" aria-label="Next page"><canvas class="sprite-canvas variant-page-button-art" data-doodle="next_slide_button" data-frame-width="${TITLE_BUTTON_FRAME_WIDTH}" data-frame-height="${TITLE_BUTTON_FRAME_HEIGHT}" width="${TITLE_BUTTON_FRAME_WIDTH}" height="${TITLE_BUTTON_FRAME_HEIGHT}" aria-hidden="true"></canvas></button>
+        <button class="variant-page-button" data-action="variant-page-prev" type="button" aria-label="Previous page"><canvas class="sprite-canvas variant-page-button-art" data-doodle="tutorial/Prev_slide_button" data-frame-width="${TITLE_BUTTON_FRAME_WIDTH}" data-frame-height="${TITLE_BUTTON_FRAME_HEIGHT}" width="${TITLE_BUTTON_FRAME_WIDTH}" height="${TITLE_BUTTON_FRAME_HEIGHT}" aria-hidden="true"></canvas></button>
+        <button class="variant-page-button" data-action="variant-page-next" type="button" aria-label="Next page"><canvas class="sprite-canvas variant-page-button-art" data-doodle="tutorial/next_slide_button" data-frame-width="${TITLE_BUTTON_FRAME_WIDTH}" data-frame-height="${TITLE_BUTTON_FRAME_HEIGHT}" width="${TITLE_BUTTON_FRAME_WIDTH}" height="${TITLE_BUTTON_FRAME_HEIGHT}" aria-hidden="true"></canvas></button>
       </div>
     `;
   }
@@ -155,16 +156,17 @@ export function createVariantSelectScreen({
     const overlay = document.createElement('div');
     overlay.className = `variant-detail-overlay variant-detail-${variant.id} variant-detail-slot-${slot}`;
     overlay.innerHTML = `
+      <div class="alert-box variant-detail-panel" aria-hidden="true"></div>
       <div class="variant-detail-copy" role="dialog" aria-modal="true" aria-label="${escapeHtml(variant.name)} rules">${renderDetailCopy(variant)}</div>
       <div class="variant-detail-actions">
         <button class="variant-detail-action" data-action="variant-back" type="button" aria-label="Back"><canvas class="sprite-canvas variant-detail-action-art" data-doodle="back_button_w" data-frame-width="${TITLE_BUTTON_FRAME_WIDTH}" data-frame-height="${TITLE_BUTTON_FRAME_HEIGHT}" width="${TITLE_BUTTON_FRAME_WIDTH}" height="${TITLE_BUTTON_FRAME_HEIGHT}" aria-hidden="true"></canvas></button>
         <button class="variant-detail-action" data-action="variant-play" type="button" aria-label="Play ${escapeHtml(variant.name)}"><canvas class="sprite-canvas variant-detail-action-art" data-doodle="${actionDoodle}" data-frame-width="${TITLE_BUTTON_FRAME_WIDTH}" data-frame-height="${TITLE_BUTTON_FRAME_HEIGHT}" width="${TITLE_BUTTON_FRAME_WIDTH}" height="${TITLE_BUTTON_FRAME_HEIGHT}" aria-hidden="true"></canvas></button>
       </div>
     `;
-    app.append(overlay);
+    detailRoot.append(overlay);
     overlay.querySelector('[data-action="variant-play"]').addEventListener('click', () => onPlay(variant.id));
     overlay.querySelector('[data-action="variant-back"]').addEventListener('click', onCloseDetail);
-    mountSpriteRenderers(app.querySelectorAll('.sprite-canvas'));
+    mountSpriteRenderers(overlay.querySelectorAll('.sprite-canvas'));
     overlay.querySelector('[data-action="variant-play"]').focus();
     return overlay;
   }

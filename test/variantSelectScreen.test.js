@@ -66,3 +66,29 @@ test('variant detail copy emphasizes only the first sentence', () => {
   assert.match(markup, /<span class="lead-sentence">First sentence\.<\/span> More words\./);
   assert.match(markup, /<p class="">Second line\.<\/p>/);
 });
+
+test('variant detail mounts in the dedicated modal layer', () => {
+  const mounted = [];
+  const detailRoot = { append: (element) => mounted.push(element) };
+  const fakeOverlay = {
+    className: '',
+    innerHTML: '',
+    querySelectorAll: () => [],
+    querySelector: () => ({
+      addEventListener() {},
+      focus() {},
+    }),
+  };
+  const previousDocument = globalThis.document;
+  globalThis.document = { createElement: () => fakeOverlay };
+
+  try {
+    const { screen } = createScreen({ detailRoot });
+    screen.renderDetailOverlay(variants[0], () => {});
+  } finally {
+    globalThis.document = previousDocument;
+  }
+
+  assert.deepEqual(mounted, [fakeOverlay]);
+  assert.match(fakeOverlay.innerHTML, /class="alert-box variant-detail-panel"/);
+});

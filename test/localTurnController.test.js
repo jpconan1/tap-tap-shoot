@@ -42,3 +42,25 @@ test('countdown reports whichever player is still waiting', () => {
   timers.at(-1).callback();
   assert.equal(timedOutPlayer, 'p1');
 });
+
+test('waiting can remain indefinite without scheduling a safe-phase timeout', () => {
+  const scheduled = [];
+  const controller = new LocalTurnController({
+    setTimer: (callback, duration) => {
+      scheduled.push({ callback, duration });
+      return scheduled.length;
+    },
+    clearTimer() {},
+  });
+
+  controller.getOrCreate('tutorial-turn');
+  const choice = controller.beginWaiting('p2', {
+    safeDurationMs: null,
+    onSafeElapsed() {},
+  });
+
+  assert.equal(choice.phase, 'safe');
+  assert.equal(choice.waitingPlayerId, 'p1');
+  assert.equal(choice.safeTimer, null);
+  assert.deepEqual(scheduled, []);
+});

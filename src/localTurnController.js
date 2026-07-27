@@ -34,7 +34,9 @@ export class LocalTurnController {
     choice.phase = 'safe';
     choice.readyPlayerId = readyPlayerId;
     choice.waitingPlayerId = readyPlayerId === 'p1' ? 'p2' : 'p1';
-    choice.safeTimer = this.setTimer(onSafeElapsed, safeDurationMs);
+    choice.safeTimer = safeDurationMs === null
+      ? null
+      : this.setTimer(onSafeElapsed, safeDurationMs);
     return choice;
   }
 

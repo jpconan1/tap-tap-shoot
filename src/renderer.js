@@ -175,8 +175,11 @@ const CURTAIN_WIPE_STEPS = Object.freeze([
 
 const doodleSheets = new Map();
 let doodleRenderers = [];
-let nineSliceRenderers = [];
 const curtainBoilStops = new WeakMap();
+const readyWaitingCanvases = new WeakSet();
+const banAnimationCanvases = new WeakSet();
+const waitingDotsCanvases = new WeakSet();
+const countdownCanvases = new WeakSet();
 let rendererPauseStartedAt = null;
 let rendererPausedDuration = 0;
 
@@ -235,16 +238,16 @@ export async function playStarburstWipeTransition(app, onCovered, playWipeAudio)
   playWipeAudio();
   await preloadStarburstWipe();
 
-  let overlay = createWipeOverlay(app);
+  const overlay = createWipeOverlay(app);
   const coveredStep = 5;
-  await animateWipeSteps(overlay, 0, coveredStep);
+  await holdWipeStep(overlay, 0, WIPE_STEP_DURATION);
+  await animateWipeSteps(overlay, 1, coveredStep);
 
   if (onCovered() === false) {
     overlay.remove();
     return;
   }
 
-  overlay = createWipeOverlay(app);
   drawWipeStep(overlay, STARBURST_WIPE_STEPS[coveredStep], performance.now());
   await animateWipeSteps(overlay, coveredStep + 1, STARBURST_WIPE_STEPS.length - 1);
   overlay.remove();
@@ -254,16 +257,18 @@ export async function playStarburstWipeTransition(app, onCovered, playWipeAudio)
 export async function playCurtainWipeTransition(app, onCovered, { playCloseAudio = null, playOpenAudio = null } = {}) {
   await preloadCurtainWipe();
 
-  let overlay = createCurtainOverlay(app);
+  const overlay = createCurtainOverlay(app);
   const closedStep = CURTAIN_WIPE_STEPS.length - 1;
 
   playCloseAudio?.();
   await animateCurtainSteps(overlay, 0, closedStep);
   await holdCurtainStep(overlay, CURTAIN_WIPE_STEPS[closedStep], CURTAIN_CLOSED_BEAT_MS);
 
-  onCovered();
+  if (onCovered() === false) {
+    overlay.remove();
+    return;
+  }
 
-  overlay = createCurtainOverlay(app);
   drawCurtainStep(overlay, CURTAIN_WIPE_STEPS[closedStep], performance.now());
   playOpenAudio?.();
   await animateCurtainSteps(overlay, closedStep - 1, 0);
@@ -395,35 +400,23 @@ export function getVariantSuperAnimation(result, { variantId = '', resourceMax =
 }
 
 export function mountSpriteRenderers(canvases) {
-  doodleRenderers = [...canvases].map((canvas) => ({
+  const nextCanvases = [...canvases];
+  const nextSet = new Set(nextCanvases);
+  doodleRenderers = [
+    ...doodleRenderers.filter(({ canvas }) => canvas.isConnected && !nextSet.has(canvas)),
+    ...nextCanvases.map((canvas) => ({
     canvas,
     context: getSharpContext(canvas),
     image: loadSpriteSheet(canvas),
     frameWidth: Number(canvas.dataset.frameWidth) || DOODLE_FRAME_WIDTH,
     frameHeight: Number(canvas.dataset.frameHeight) || DOODLE_FRAME_HEIGHT,
     flip: canvas.dataset.flip === 'true',
-  }));
+    })),
+  ];
 
   doodleRenderers.forEach(({ canvas, image }) => {
     installSpriteFallback(canvas, image);
   });
-  drawDoodleFrame(getRendererNow(performance.now()));
-  ensureDoodleLoop();
-}
-
-// Draw every slice from one full boil frame. This keeps the hand-drawn edges
-// phase-locked while allowing the middle of the box to grow in either axis.
-export function mountNineSliceRenderers(canvases) {
-  nineSliceRenderers = [...canvases].map((canvas) => ({
-    canvas,
-    context: getSharpContext(canvas),
-    image: loadSpriteSheet(canvas),
-    frameWidth: Number(canvas.dataset.frameWidth),
-    frameHeight: Number(canvas.dataset.frameHeight),
-    inset: Number(canvas.dataset.sliceInset),
-  }));
-
-  nineSliceRenderers.forEach(({ canvas, image }) => installSpriteFallback(canvas, image));
   drawDoodleFrame(getRendererNow(performance.now()));
   ensureDoodleLoop();
 }
@@ -435,24 +428,32 @@ export function setBoilEnabled(isEnabled) {
 
 export function mountReadyWaitingOverlays(canvases) {
   [...canvases].forEach((canvas) => {
+    if (readyWaitingCanvases.has(canvas)) return;
+    readyWaitingCanvases.add(canvas);
     startReadyWaitingLoop(canvas);
   });
 }
 
 export function mountBanAnimations(canvases) {
   [...canvases].forEach((canvas) => {
+    if (banAnimationCanvases.has(canvas)) return;
+    banAnimationCanvases.add(canvas);
     startBanAnimation(canvas);
   });
 }
 
 export function mountWaitingDotsOverlays(canvases) {
   [...canvases].forEach((canvas) => {
+    if (waitingDotsCanvases.has(canvas)) return;
+    waitingDotsCanvases.add(canvas);
     startWaitingDotsLoop(canvas);
   });
 }
 
 export function mountCountdownOverlays(canvases) {
   [...canvases].forEach((canvas) => {
+    if (countdownCanvases.has(canvas)) return;
+    countdownCanvases.add(canvas);
     startCountdownLoop(canvas);
   });
 }
@@ -763,6 +764,23 @@ function animateWipeSteps(canvas, firstStep, lastStep) {
         return;
       }
 
+      requestAnimationFrame(tick);
+    }
+
+    requestAnimationFrame(tick);
+  });
+}
+
+function holdWipeStep(canvas, stepIndex, duration) {
+  return new Promise((resolve) => {
+    const startedAt = performance.now();
+
+    function tick(now) {
+      drawWipeStep(canvas, STARBURST_WIPE_STEPS[stepIndex], now);
+      if (now - startedAt >= duration) {
+        resolve();
+        return;
+      }
       requestAnimationFrame(tick);
     }
 
@@ -1140,7 +1158,7 @@ function ensureDoodleLoop() {
 }
 
 function drawDoodleFrame(now) {
-  if (!doodleRenderers.length && !nineSliceRenderers.length) {
+  if (!doodleRenderers.length) {
     return;
   }
 
@@ -1175,32 +1193,6 @@ function drawDoodleFrame(now) {
     canvas.style.backgroundImage = 'none';
   });
 
-  nineSliceRenderers.forEach(({ canvas, context, image, frameWidth, frameHeight, inset }) => {
-    if (!canvas.isConnected || !image.complete || !image.naturalWidth || !frameWidth || !frameHeight || !inset) {
-      return;
-    }
-
-    context.clearRect(0, 0, canvas.width, canvas.height);
-    const sourceX = [0, inset, frameWidth - inset];
-    const sourceY = [frame * frameHeight, (frame * frameHeight) + inset, ((frame + 1) * frameHeight) - inset];
-    const sourceWidths = [inset, frameWidth - (inset * 2), inset];
-    const sourceHeights = [inset, frameHeight - (inset * 2), inset];
-    const destinationX = [0, inset, canvas.width - inset];
-    const destinationY = [0, inset, canvas.height - inset];
-    const destinationWidths = [inset, canvas.width - (inset * 2), inset];
-    const destinationHeights = [inset, canvas.height - (inset * 2), inset];
-
-    for (let row = 0; row < 3; row += 1) {
-      for (let column = 0; column < 3; column += 1) {
-        context.drawImage(
-          image,
-          sourceX[column], sourceY[row], sourceWidths[column], sourceHeights[row],
-          destinationX[column], destinationY[row], destinationWidths[column], destinationHeights[row],
-        );
-      }
-    }
-    canvas.style.backgroundImage = 'none';
-  });
 }
 
 function getBoilFrame(now) {

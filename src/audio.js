@@ -3,6 +3,7 @@ export const CURTAIN_CLOSE_AUDIO = 'curtains-close.m4a';
 export const CURTAIN_OPEN_AUDIO = 'curtains-open.m4a';
 export const LOSE_JINGLE_AUDIO = 'lose_jingle.mp3';
 export const READY_AUDIO = 'ready.mp3';
+export const RPS_POKER_CHECK_AUDIO = '../rps-poker/check.m4a';
 export const RPS_POKER_CHIP_AUDIO = '../rps-poker/chip.mp3';
 export const RPS_POKER_DEAL_AUDIO = '../rps-poker/deal.mp3';
 export const RPS_POKER_FLIP_AUDIO = '../rps-poker/flip.mp3';
@@ -1018,6 +1019,7 @@ function getAudioFiles() {
       CURTAIN_OPEN_AUDIO,
       LOSE_JINGLE_AUDIO,
       READY_AUDIO,
+      RPS_POKER_CHECK_AUDIO,
       RPS_POKER_CHIP_AUDIO,
       RPS_POKER_DEAL_AUDIO,
       RPS_POKER_FLIP_AUDIO,

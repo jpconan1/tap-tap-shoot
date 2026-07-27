@@ -27,6 +27,7 @@ function createScreen(state) {
     onOpenPlayer() {},
     onToggleMatchmaking() {},
     onOpenPractice() {},
+    onOpenTutorial() {},
     onOpenSettings() {},
     onBack() {},
     onCloseOverlay() {},
