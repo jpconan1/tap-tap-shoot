@@ -1,7 +1,13 @@
 .rps-poker-standoff .move-button-slot,
 .rps-poker-standoff .rps-poker-chips-slot,
+.rps-poker-standoff .rps-poker-pot-slot,
+.rps-poker-standoff [data-layout-key="turn-counter"],
 .rps-poker-standoff .layout-controls {
   visibility: hidden;
+}
+
+.rps-poker-arena [data-layout-key="turn-counter"] {
+  z-index: 60 !important;
 }
 
 .rps-poker-table {
@@ -39,6 +45,12 @@
   animation: rps-poker-deal-card 625ms steps(1, end) both;
 }
 
+.rps-poker-dealt-card.is-clearing,
+.rps-poker-facedown-card.is-clearing,
+.rps-poker-revealed-card.is-clearing {
+  animation: rps-poker-clear-card 625ms steps(1, end) both;
+}
+
 @keyframes rps-poker-deal-card {
   0% {
     top: -20%;
@@ -68,6 +80,28 @@
     top: 15.625%;
     left: 37.5%;
     transform: rotate(0);
+  }
+}
+
+@keyframes rps-poker-clear-card {
+  0% {
+    transform: translateY(0) rotate(0);
+  }
+
+  25% {
+    transform: translateY(10px) rotate(0.5deg);
+  }
+
+  50% {
+    transform: translateY(35px) rotate(1deg);
+  }
+
+  75% {
+    transform: translateY(100px) rotate(2deg);
+  }
+
+  100% {
+    transform: translateY(360px) rotate(4deg);
   }
 }
 
@@ -144,4 +178,120 @@
 
 .rps-poker-facedown-card.p2 {
   left: 540px;
+}
+
+.rps-poker-player-flip,
+.rps-poker-revealed-card {
+  position: absolute;
+  top: 171px;
+  z-index: 40;
+  display: block;
+  width: 131.25px;
+  height: 96px;
+  image-rendering: pixelated;
+  pointer-events: none;
+}
+
+.rps-poker-player-flip.p1,
+.rps-poker-revealed-card.p1 {
+  left: 296px;
+}
+
+.rps-poker-player-flip.p2,
+.rps-poker-revealed-card.p2 {
+  left: 540px;
+}
+
+.rps-poker-ante-turn {
+  position: relative;
+  width: 400px;
+  height: 180px;
+  overflow: visible;
+}
+
+.layout-slot .rps-poker-ante {
+  position: absolute;
+  top: 0;
+  left: 72px;
+  z-index: 4;
+  width: 256px;
+  height: 128px;
+}
+
+.layout-slot .rps-poker-turn-arrow {
+  position: absolute;
+  z-index: 3;
+}
+
+.layout-slot .rps-poker-turn-arrow.left {
+  top: 41px;
+  left: 20px;
+  width: 110px;
+  height: 99px;
+}
+
+.layout-slot .rps-poker-turn-arrow.right {
+  top: 36px;
+  right: 1px;
+  width: 131px;
+  height: 109px;
+}
+
+.layout-slot .rps-poker-turn-arrow.down {
+  top: 72px;
+  left: 142px;
+  width: 116px;
+  height: 123px;
+}
+
+.rps-poker-turn-swing {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 3;
+  width: 400px;
+  height: 220px;
+  pointer-events: none;
+}
+
+.rps-poker-not-your-turn {
+  color: rgba(33, 29, 25, 0.48);
+  font-size: 24px;
+  font-weight: 800;
+  text-align: center;
+}
+
+.rps-poker-pot {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.rps-poker-pot-pile {
+  position: absolute;
+  width: 124px;
+  height: 58px;
+}
+
+.rps-poker-pot-pile.p1 {
+  top: -4px;
+  left: 4px;
+}
+
+.rps-poker-pot-pile.p2 {
+  top: 140px;
+  right: 4px;
+}
+
+.layout-slot .rps-poker-pot-chip {
+  position: absolute;
+  width: 30px;
+  height: 30px;
+  object-fit: fill;
+}
+
+.layout-slot .rps-poker-hand-reminder {
+  width: 64px;
+  height: 88px;
 }

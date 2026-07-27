@@ -50,19 +50,30 @@ import {
   getRpsPokerCommunityPresentation,
   getRpsPokerIdlePresentation,
   getRpsPokerMoveCardDoodle,
+  getRpsPokerPotCounts,
   getRpsPokerStandoffPresentation,
   isRpsPokerStandoff,
   mountRpsPokerCommunityFlips,
+  mountRpsPokerPlayerFlips,
   mountRpsPokerReadyOverlays,
+  mountRpsPokerTurnSwings,
   playRpsPokerOpening,
   preloadRpsPokerCommunityFlips,
+  preloadRpsPokerPlayerFlips,
   preloadRpsPokerReadyAnimation,
+  preloadRpsPokerTurnSwings,
   renderRpsPokerChips,
+  renderRpsPokerHandReminder,
+  renderRpsPokerPot,
+  renderRpsPokerAnteTurn,
   renderRpsPokerReadyCards,
   renderRpsPokerReadyOverlay,
   renderRpsPokerStage,
+  RPS_POKER_CLEAR_DURATION_MS,
   RPS_POKER_FLIP_DURATION_MS,
   RPS_POKER_READY_DURATION_MS,
+  RPS_POKER_TURN_CENTER_DURATION_MS,
+  RPS_POKER_TURN_SWING_DURATION_MS,
 } from './presentation/rpsPokerPresentation.js';
 import { createTitleScreen } from './presentation/titleScreen.js';
 import { createVariantSelectScreen } from './presentation/variantSelectScreen.js';
@@ -437,6 +448,9 @@ let turnPhase = 'idle';
 let p1QueuedMove = null;
 let pokerWagerAmount = 1;
 let pokerReadyCards = null;
+let pokerTurnTransition = null;
+let pokerTurnActorOverride = null;
+let pokerChipTransfer = null;
 let localRoundTimedOutPlayer = null;
 let rankedSnapshot = null;
 let ignoredRankedMatchId = null;
@@ -1657,6 +1671,8 @@ function render() {
   mountReadyWaitingOverlays(app.querySelectorAll('.ready-waiting-overlay'));
   mountRpsPokerReadyOverlays(app.querySelectorAll('.rps-poker-ready-overlay'));
   mountRpsPokerCommunityFlips(app.querySelectorAll('.rps-poker-community-flip'));
+  mountRpsPokerPlayerFlips(app.querySelectorAll('.rps-poker-player-flip'));
+  mountRpsPokerTurnSwings(app.querySelectorAll('.rps-poker-turn-swing'));
   mountWaitingDotsOverlays(app.querySelectorAll('.waiting-dots-overlay'));
   mountCountdownOverlays(app.querySelectorAll('.countdown-overlay'));
   playStageAudio({
@@ -1694,7 +1710,7 @@ function renderLayoutGameScreen(legalMoves) {
     && isRpsPokerStandoff(stagePresentation);
 
   app.innerHTML = `
-    <section class="arena layout-arena ${state.status} ${pokerStandoff ? 'rps-poker-standoff' : ''}">
+    <section class="arena layout-arena ${state.status} ${getCurrentVariantId() === VARIANT_IDS.rpsPoker ? 'rps-poker-arena' : ''} ${pokerStandoff ? 'rps-poker-standoff' : ''}">
       <div
         class="layout-stage"
         style="width: ${layout.width}px; height: ${layout.height}px;"
@@ -1738,6 +1754,8 @@ function renderLayoutGameScreen(legalMoves) {
   mountReadyWaitingOverlays(app.querySelectorAll('.ready-waiting-overlay'));
   mountRpsPokerReadyOverlays(app.querySelectorAll('.rps-poker-ready-overlay'));
   mountRpsPokerCommunityFlips(app.querySelectorAll('.rps-poker-community-flip'));
+  mountRpsPokerPlayerFlips(app.querySelectorAll('.rps-poker-player-flip'));
+  mountRpsPokerTurnSwings(app.querySelectorAll('.rps-poker-turn-swing'));
   mountWaitingDotsOverlays(app.querySelectorAll('.waiting-dots-overlay'));
   mountCountdownOverlays(app.querySelectorAll('.countdown-overlay'));
   playStageAudio({
@@ -1763,10 +1781,22 @@ function renderRpsPokerHud() {
   const wagers = legal.filter((move) => /^(bet|raise):\d+$/.test(move)).map((move) => Number(move.split(':')[1]));
   const min = wagers.length ? Math.min(...wagers) : 1;
   const max = wagers.length ? Math.max(...wagers) : 1;
+  const displayStacks = pokerChipTransfer?.stacks ?? state.stacks;
+  const reminderMove = pokerChipTransfer?.locked?.p1 ?? state.locked?.p1;
   pokerWagerAmount = Math.max(min, Math.min(max, pokerWagerAmount));
   return `
-    ${renderLayoutSlot('p1-poker-chips', renderRpsPokerChips('p1', state.stacks.p1), 'rps-poker-chips-slot')}
-    ${renderLayoutSlot('p2-poker-chips', renderRpsPokerChips('p2', state.stacks.p2), 'rps-poker-chips-slot')}
+    ${renderLayoutSlot('p1-poker-chips', renderRpsPokerChips('p1', displayStacks.p1), 'rps-poker-chips-slot')}
+    ${renderLayoutSlot('p2-poker-chips', renderRpsPokerChips('p2', displayStacks.p2), 'rps-poker-chips-slot')}
+    ${['lock', 'forcedRps', 'betting'].includes(state.phase) || pokerChipTransfer
+      ? renderLayoutSlot(
+        'poker-pot',
+        renderRpsPokerPot(pokerChipTransfer ? { ...state, counts: pokerChipTransfer.counts } : state),
+        'rps-poker-pot-slot',
+      )
+      : ''}
+    ${reminderMove
+      ? renderLayoutSlot('p1-poker-reminder', renderRpsPokerHandReminder(reminderMove), 'rps-poker-reminder-slot')
+      : ''}
     ${wagers.length ? renderLayoutSlot('poker-amount', `<label class="poker-wager">AMOUNT<input data-poker-wager type="number" min="${min}" max="${max}" value="${pokerWagerAmount}"></label>`, 'poker-wager-slot') : ''}
   `;
 }
@@ -1909,6 +1939,14 @@ function renderStaticDoodle(doodle, width, height, className = '', { flip = fals
 }
 
 function renderTurnCounter() {
+  if (getCurrentVariantId() === VARIANT_IDS.rpsPoker) {
+    return renderRpsPokerAnteTurn(
+      state.ante,
+      pokerTurnActorOverride ?? state.actor,
+      pokerTurnTransition,
+    );
+  }
+
   return `
     <canvas
       class="sprite-canvas turn-counter"
@@ -1997,6 +2035,13 @@ function renderLayoutPickHistorySlots(playerId) {
   const label = isPlayer ? 'you_picked' : 'they_picked';
   const labelWidth = isPlayer ? PICK_LABEL_FRAME_WIDTH : THEY_PICKED_LABEL_FRAME_WIDTH;
   const move = lastMoves[playerId];
+  if (
+    getCurrentVariantId() === VARIANT_IDS.rpsPoker
+    && (
+      move === 'wait'
+      || (playerId === 'p2' && ['rock', 'paper', 'scissors'].includes(move))
+    )
+  ) return '';
 
   return `
     ${renderLayoutSlot(`${playerId}-${isPlayer ? 'you-picked' : 'they-picked'}`, renderStaticDoodle(label, labelWidth, PICK_LABEL_FRAME_HEIGHT, 'pick-label'), 'hud-art-slot')}
@@ -2052,6 +2097,18 @@ function renderLayoutMoveArrows() {
 function renderLayoutActionButtons(legalMoves) {
   if (turnPhase === 'round-over') {
     return renderLayoutRoundActions();
+  }
+
+  if (
+    getCurrentVariantId() === VARIANT_IDS.rpsPoker
+    && state.phase === 'betting'
+    && state.actor !== 'p1'
+  ) {
+    return renderLayoutSlot(
+      'poker-turn-message',
+      '<span class="rps-poker-not-your-turn">(not your turn)</span>',
+      'poker-turn-message-slot',
+    );
   }
 
   const slottedButtons = getActiveMoveIds()
@@ -3508,6 +3565,22 @@ function handleLocalMoveQueued(playerId) {
     return;
   }
 
+  if (
+    getCurrentVariantId() === VARIANT_IDS.rpsPoker
+    && state.phase === 'betting'
+    && playerId === state.actor
+    && !choice.readyPlayerId
+  ) {
+    const waitingPlayerId = playerId === 'p1' ? 'p2' : 'p1';
+    const command = localTurnController.submitMove(
+      waitingPlayerId,
+      'wait',
+      getPlayerLegalMoves(state, waitingPlayerId),
+    );
+    if (command.status === 'complete') resolvePlayerSelection();
+    return;
+  }
+
   if (!choice.readyPlayerId) {
     beginLocalSafePhase(playerId);
     return;
@@ -3521,7 +3594,9 @@ function handleLocalMoveQueued(playerId) {
 
 function beginLocalSafePhase(readyPlayerId) {
   const choice = localTurnController.beginWaiting(readyPlayerId, {
-    safeDurationMs: READY_WAITING_SAFE_PHASE_MS,
+    safeDurationMs: getCurrentVariantId() === VARIANT_IDS.rpsPoker
+      ? 60 * 60 * 1000
+      : READY_WAITING_SAFE_PHASE_MS,
     onSafeElapsed: beginLocalCountdownPhase,
   });
 
@@ -4136,6 +4211,9 @@ function isLocalChoiceMode() {
 function setNewRound() {
   clearLocalTurnChoice();
   pokerReadyCards = null;
+  pokerTurnTransition = null;
+  pokerTurnActorOverride = null;
+  pokerChipTransfer = null;
   localRoundTimedOutPlayer = null;
   pendingSuperAnimation = null;
   const game = startNextRound({ variantId: selectedVariantId, roundState: state, roundWins });
@@ -4963,12 +5041,22 @@ async function runOpeningCues(token) {
           'rps-poker/cardback',
           'rps-poker/cardback-side',
           'rps-poker/chip',
+          'rps-poker/chip-sm',
           'rps-poker/rock-card',
+          'rps-poker/rock-card-side',
           'rps-poker/paper-card',
+          'rps-poker/paper-card-side',
           'rps-poker/sci-card',
+          'rps-poker/sci-card-side',
+          ...Array.from({ length: 9 }, (_, index) => `rps-poker/ante-turns/ante${index + 1}`),
+          'rps-poker/ante-turns/turn-left',
+          'rps-poker/ante-turns/turn-right',
+          'rps-poker/ante-turns/down',
         ]),
         preloadRpsPokerReadyAnimation(),
         preloadRpsPokerCommunityFlips(),
+        preloadRpsPokerPlayerFlips(),
+        preloadRpsPokerTurnSwings(),
       ]),
       renderPresentation: (presentation) => {
         stagePresentation = presentation;
@@ -5000,6 +5088,11 @@ async function resolvePlayerSelection() {
     return;
   }
 
+  if (getCurrentVariantId() === VARIANT_IDS.rpsPoker && state.phase === 'betting') {
+    await resolveRpsPokerBettingSelection(token);
+    return;
+  }
+
   turnPhase = 'wipe';
   isTransitioning = true;
   await playWipeTransition(resolveQueuedTurn);
@@ -5020,6 +5113,196 @@ async function resolvePlayerSelection() {
       });
     }
   }
+}
+
+async function resolveRpsPokerBettingSelection(token) {
+  const previousActor = state.actor;
+  const action = String(localTurnController.choice?.moves?.[previousActor] ?? '').split(':')[0];
+  const isShowdown = action === 'call' || (action === 'check' && state.checkedOnce);
+  const previousPokerState = {
+    actor: previousActor,
+    community: state.community,
+    locked: { ...state.locked },
+    stacks: { ...state.stacks },
+    counts: getRpsPokerPotCounts(state),
+  };
+  if (isShowdown || action === 'fold') pokerTurnActorOverride = previousActor;
+  isTransitioning = true;
+  resolveQueuedTurn({ shouldRender: false });
+
+  if (!isActiveLoop(token)) return;
+
+  if (isShowdown) {
+    await playRpsPokerShowdown(previousPokerState, token);
+    return;
+  }
+
+  if (action === 'fold') {
+    await playRpsPokerFoldResolution(previousActor, previousPokerState, token);
+    return;
+  }
+
+  if (state.community) {
+    stagePresentation = getRpsPokerCommunityPresentation(state.community, false);
+  } else {
+    pokerReadyCards = null;
+    stagePresentation = getRpsPokerIdlePresentation();
+  }
+
+  if (
+    state.phase === 'betting'
+    && ['p1', 'p2'].includes(previousActor)
+    && ['p1', 'p2'].includes(state.actor)
+    && previousActor !== state.actor
+  ) {
+    pokerTurnTransition = { from: previousActor, to: state.actor };
+    render();
+    await waitMs(RPS_POKER_TURN_SWING_DURATION_MS, token);
+    if (!isActiveLoop(token)) return;
+    pokerTurnTransition = null;
+  }
+
+  isTransitioning = false;
+  render();
+}
+
+async function playRpsPokerShowdown(previousPokerState, token) {
+  const winner = getRpsPokerShowdownWinner(previousPokerState);
+  pokerChipTransfer = {
+    stacks: { ...previousPokerState.stacks },
+    counts: { ...previousPokerState.counts },
+    locked: { ...previousPokerState.locked },
+  };
+  stagePresentation = getRpsPokerCommunityPresentation(previousPokerState.community, false);
+  pokerReadyCards = {
+    earlyPlayerId: 'p1',
+    latePlayerId: 'p2',
+    revealedMoves: { ...previousPokerState.locked },
+    animateReveal: true,
+  };
+  render();
+  await waitMs(RPS_POKER_FLIP_DURATION_MS, token);
+  if (!isActiveLoop(token)) return;
+
+  pokerReadyCards.animateReveal = false;
+  render();
+
+  if (winner) {
+    while (getPokerTransferPotTotal() > 0) {
+      removeOnePokerPotChip();
+      pokerChipTransfer.stacks[winner] += 1;
+      render();
+      await waitMs(110, token);
+      if (!isActiveLoop(token)) return;
+    }
+  } else {
+    while (getPokerTransferPotTotal() > 0) {
+      removeOnePokerPotChip();
+      if (getPokerTransferPotTotal() > 0) removeOnePokerPotChip();
+      pokerChipTransfer.stacks.p1 += 1;
+      pokerChipTransfer.stacks.p2 += 1;
+      render();
+      await waitMs(110, token);
+      if (!isActiveLoop(token)) return;
+    }
+  }
+
+  stagePresentation = getRpsPokerCommunityPresentation(
+    previousPokerState.community,
+    false,
+    { clearing: true },
+  );
+  pokerReadyCards.clearingRevealed = true;
+  render();
+  await waitMs(RPS_POKER_CLEAR_DURATION_MS, token);
+  if (!isActiveLoop(token)) return;
+
+  await finishRpsPokerHand(previousPokerState.actor, token);
+}
+
+function getRpsPokerShowdownWinner({ locked, community }) {
+  const beats = { rock: 'scissors', scissors: 'paper', paper: 'rock' };
+  const strength = (move) => move === community ? 1 : beats[move] === community ? 2 : 0;
+  const p1Strength = strength(locked.p1);
+  const p2Strength = strength(locked.p2);
+  return p1Strength === p2Strength ? null : p1Strength > p2Strength ? 'p1' : 'p2';
+}
+
+function getPokerTransferPotTotal() {
+  return pokerChipTransfer.counts.p1 + pokerChipTransfer.counts.p2;
+}
+
+function removeOnePokerPotChip() {
+  const source = pokerChipTransfer.counts.p1 >= pokerChipTransfer.counts.p2 ? 'p1' : 'p2';
+  if (pokerChipTransfer.counts[source] > 0) {
+    pokerChipTransfer.counts[source] -= 1;
+    return;
+  }
+  pokerChipTransfer.counts[source === 'p1' ? 'p2' : 'p1'] -= 1;
+}
+
+async function playRpsPokerFoldResolution(folder, previousPokerState, token) {
+  const winner = folder === 'p1' ? 'p2' : 'p1';
+  pokerChipTransfer = {
+    stacks: { ...previousPokerState.stacks },
+    counts: { ...previousPokerState.counts },
+    locked: { ...previousPokerState.locked },
+  };
+  stagePresentation = getRpsPokerCommunityPresentation(previousPokerState.community, false);
+  pokerReadyCards = {
+    earlyPlayerId: 'p1',
+    latePlayerId: 'p2',
+    reversePlayerId: folder,
+  };
+  render();
+  await waitMs(RPS_POKER_READY_DURATION_MS, token);
+
+  if (!isActiveLoop(token)) return;
+
+  pokerReadyCards.reversePlayerId = null;
+  pokerReadyCards.hiddenPlayerId = folder;
+  if (folder === 'p1') pokerChipTransfer.locked.p1 = null;
+  render();
+
+  let transferIndex = 0;
+  while (pokerChipTransfer.counts.p1 + pokerChipTransfer.counts.p2 > 0) {
+    const preferred = transferIndex % 2 === 0 ? 'p1' : 'p2';
+    const source = pokerChipTransfer.counts[preferred] > 0
+      ? preferred
+      : preferred === 'p1' ? 'p2' : 'p1';
+    pokerChipTransfer.counts[source] -= 1;
+    pokerChipTransfer.stacks[winner] += 1;
+    transferIndex += 1;
+    render();
+    await waitMs(110, token);
+    if (!isActiveLoop(token)) return;
+  }
+
+  stagePresentation = getRpsPokerCommunityPresentation(
+    previousPokerState.community,
+    false,
+    { clearing: true },
+  );
+  pokerReadyCards.clearingPlayerId = winner;
+  render();
+  await waitMs(RPS_POKER_CLEAR_DURATION_MS, token);
+  if (!isActiveLoop(token)) return;
+
+  await finishRpsPokerHand(folder, token);
+}
+
+async function finishRpsPokerHand(lastActor, token) {
+  pokerChipTransfer = null;
+  pokerReadyCards = null;
+  stagePresentation = getRpsPokerIdlePresentation();
+  pokerTurnActorOverride = null;
+  pokerTurnTransition = { from: lastActor, to: 'center' };
+  render();
+  await waitMs(RPS_POKER_TURN_CENTER_DURATION_MS, token);
+  if (!isActiveLoop(token)) return;
+  pokerTurnTransition = null;
+  isTransitioning = false;
+  render();
 }
 
 async function resolveRpsPokerLockSelection(token) {
