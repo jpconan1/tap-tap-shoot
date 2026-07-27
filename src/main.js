@@ -46,6 +46,24 @@ import { getServerHttpUrl } from './serverUrl.js';
 import { OnlineFlowDirector } from './presentation/onlineFlowDirector.js';
 import { interpretOnlineSnapshot } from './presentation/onlineFlowSequences.js';
 import { GameFlowDirector } from './presentation/gameFlowDirector.js';
+import {
+  getRpsPokerCommunityPresentation,
+  getRpsPokerIdlePresentation,
+  getRpsPokerMoveCardDoodle,
+  getRpsPokerStandoffPresentation,
+  isRpsPokerStandoff,
+  mountRpsPokerCommunityFlips,
+  mountRpsPokerReadyOverlays,
+  playRpsPokerOpening,
+  preloadRpsPokerCommunityFlips,
+  preloadRpsPokerReadyAnimation,
+  renderRpsPokerChips,
+  renderRpsPokerReadyCards,
+  renderRpsPokerReadyOverlay,
+  renderRpsPokerStage,
+  RPS_POKER_FLIP_DURATION_MS,
+  RPS_POKER_READY_DURATION_MS,
+} from './presentation/rpsPokerPresentation.js';
 import { createTitleScreen } from './presentation/titleScreen.js';
 import { createVariantSelectScreen } from './presentation/variantSelectScreen.js';
 import { createLobbyScreen } from './presentation/lobbyScreen.js';
@@ -418,6 +436,7 @@ let loopToken = 0;
 let turnPhase = 'idle';
 let p1QueuedMove = null;
 let pokerWagerAmount = 1;
+let pokerReadyCards = null;
 let localRoundTimedOutPlayer = null;
 let rankedSnapshot = null;
 let ignoredRankedMatchId = null;
@@ -1636,6 +1655,8 @@ function render() {
   mountSpriteRenderers(app.querySelectorAll('.sprite-canvas'));
   app.querySelector('.ready-waiting-overlay')?.addEventListener('ready-waiting-split', handleReadyWaitingSplit);
   mountReadyWaitingOverlays(app.querySelectorAll('.ready-waiting-overlay'));
+  mountRpsPokerReadyOverlays(app.querySelectorAll('.rps-poker-ready-overlay'));
+  mountRpsPokerCommunityFlips(app.querySelectorAll('.rps-poker-community-flip'));
   mountWaitingDotsOverlays(app.querySelectorAll('.waiting-dots-overlay'));
   mountCountdownOverlays(app.querySelectorAll('.countdown-overlay'));
   playStageAudio({
@@ -1669,9 +1690,11 @@ async function wipeToLobbyFromScoreboard() {
 function renderLayoutGameScreen(legalMoves) {
   activeLayoutStateId = getLayoutStateId(legalMoves);
   const layout = getActiveGameLayout();
+  const pokerStandoff = getCurrentVariantId() === VARIANT_IDS.rpsPoker
+    && isRpsPokerStandoff(stagePresentation);
 
   app.innerHTML = `
-    <section class="arena layout-arena ${state.status}">
+    <section class="arena layout-arena ${state.status} ${pokerStandoff ? 'rps-poker-standoff' : ''}">
       <div
         class="layout-stage"
         style="width: ${layout.width}px; height: ${layout.height}px;"
@@ -1713,6 +1736,8 @@ function renderLayoutGameScreen(legalMoves) {
   mountSpriteRenderers(app.querySelectorAll('.sprite-canvas'));
   app.querySelector('.ready-waiting-overlay')?.addEventListener('ready-waiting-split', handleReadyWaitingSplit);
   mountReadyWaitingOverlays(app.querySelectorAll('.ready-waiting-overlay'));
+  mountRpsPokerReadyOverlays(app.querySelectorAll('.rps-poker-ready-overlay'));
+  mountRpsPokerCommunityFlips(app.querySelectorAll('.rps-poker-community-flip'));
   mountWaitingDotsOverlays(app.querySelectorAll('.waiting-dots-overlay'));
   mountCountdownOverlays(app.querySelectorAll('.countdown-overlay'));
   playStageAudio({
@@ -1740,12 +1765,8 @@ function renderRpsPokerHud() {
   const max = wagers.length ? Math.max(...wagers) : 1;
   pokerWagerAmount = Math.max(min, Math.min(max, pokerWagerAmount));
   return `
-    ${renderLayoutSlot('poker-state', `<div class="poker-state">
-      <strong>HAND ${state.hand} · ANTE ${state.ante} · POT ${state.pot}</strong>
-      <span>YOU ${state.stacks.p1} · RIVAL ${state.stacks.p2}</span>
-      <span>COMMUNITY ${state.community?.toUpperCase() ?? '?'}</span>
-      <span>${state.phase === 'betting' ? `${state.actor?.toUpperCase()} TO ACT` : state.phase.toUpperCase()}</span>
-    </div>`, 'poker-state-slot')}
+    ${renderLayoutSlot('p1-poker-chips', renderRpsPokerChips('p1', state.stacks.p1), 'rps-poker-chips-slot')}
+    ${renderLayoutSlot('p2-poker-chips', renderRpsPokerChips('p2', state.stacks.p2), 'rps-poker-chips-slot')}
     ${wagers.length ? renderLayoutSlot('poker-amount', `<label class="poker-wager">AMOUNT<input data-poker-wager type="number" min="${min}" max="${max}" value="${pokerWagerAmount}"></label>`, 'poker-wager-slot') : ''}
   `;
 }
@@ -2034,7 +2055,18 @@ function renderLayoutActionButtons(legalMoves) {
   }
 
   const slottedButtons = getActiveMoveIds()
-    .map((moveId) => renderLayoutSlot(`${moveId}-button`, renderMoveButton(MOVES[moveId], isDisplayedMoveLegal(moveId, legalMoves)), 'move-button-slot'))
+    .map((moveId) => {
+      const pokerCard = getCurrentVariantId() === VARIANT_IDS.rpsPoker
+        && Boolean(getRpsPokerMoveCardDoodle(moveId));
+      const slotClass = pokerCard
+        ? `move-button-slot rps-poker-card-slot rps-poker-card-${moveId}`
+        : 'move-button-slot';
+      return renderLayoutSlot(
+        `${moveId}-button`,
+        renderMoveButton(MOVES[moveId], isDisplayedMoveLegal(moveId, legalMoves)),
+        slotClass,
+      );
+    })
     .join('');
 
   return slottedButtons || getActiveMoveIds()
@@ -2271,6 +2303,9 @@ function renderResultMoveButton(playerId) {
 }
 
 function renderSingleStagePresentation(presentation, extraClass = '') {
+  const rpsPokerMarkup = renderRpsPokerStage(presentation);
+  if (rpsPokerMarkup) return rpsPokerMarkup;
+
   if (presentation.kind === 'placeholder') {
     return `
       <div class="stage-placeholder ${extraClass}" data-placeholder-scene="${escapeHtml(presentation.name)}">
@@ -2307,8 +2342,16 @@ function renderSingleStagePresentation(presentation, extraClass = '') {
 function renderReadyWaitingOverlay() {
   const readyWaiting = getActiveReadyWaiting();
 
+  if (getCurrentVariantId() === VARIANT_IDS.rpsPoker && pokerReadyCards) {
+    return renderRpsPokerReadyCards(pokerReadyCards);
+  }
+
   if (!readyWaiting) {
     return '';
+  }
+
+  if (getCurrentVariantId() === VARIANT_IDS.rpsPoker && !readyWaiting.isNoContest) {
+    return renderRpsPokerReadyOverlay(readyWaiting);
   }
 
   if (readyWaiting.isNoContest) {
@@ -3228,19 +3271,25 @@ function renderMoveButton(move, isLegal) {
       ? turnPhase === 'scene'
       : turnPhase === 'go' || turnPhase === 'scene'
   ) && !p1QueuedMove;
+  const pokerCardDoodle = getCurrentVariantId() === VARIANT_IDS.rpsPoker
+    ? getRpsPokerMoveCardDoodle(move.id)
+    : '';
+  const doodle = pokerCardDoodle || getMoveButtonDoodle(move.id);
+  const frameWidth = pokerCardDoodle ? 128 : BUTTON_FRAME_WIDTH;
+  const frameHeight = pokerCardDoodle ? 175 : BUTTON_FRAME_HEIGHT;
 
   return `
-    <button class="move-card ${isQueued ? 'selected' : ''}" data-move="${move.id}" ${isLegal && canChooseMove && state.status === 'playing' && (!isTransitioning || playMode === 'online') ? '' : 'disabled'}>
+    <button class="move-card ${pokerCardDoodle ? 'rps-poker-move-card' : ''} ${isQueued ? 'selected' : ''}" data-move="${move.id}" ${isLegal && canChooseMove && state.status === 'playing' && (!isTransitioning || playMode === 'online') ? '' : 'disabled'}>
       <canvas
         class="sprite-canvas move-button-art"
-        data-doodle="${getMoveButtonDoodle(move.id)}"
-        data-frame-width="${BUTTON_FRAME_WIDTH}"
-        data-frame-height="${BUTTON_FRAME_HEIGHT}"
-        width="${BUTTON_FRAME_WIDTH}"
-        height="${BUTTON_FRAME_HEIGHT}"
+        data-doodle="${doodle}"
+        data-frame-width="${frameWidth}"
+        data-frame-height="${frameHeight}"
+        width="${frameWidth}"
+        height="${frameHeight}"
         aria-label="${move.label}"
       ></canvas>
-      ${getMoveButtonDoodle(move.id).startsWith('button_bg_generic') ? `<span class="move-button-label">${escapeHtml(move.label)}</span>` : ''}
+      ${doodle.startsWith('button_bg_generic') ? `<span class="move-button-label">${escapeHtml(move.label)}</span>` : ''}
     </button>
   `;
 }
@@ -3478,6 +3527,16 @@ function beginLocalSafePhase(readyPlayerId) {
 
   if (!choice) {
     return;
+  }
+
+  if (getCurrentVariantId() === VARIANT_IDS.rpsPoker && state.phase === 'lock') {
+    const readyCards = { earlyPlayerId: readyPlayerId, animateEarly: true };
+    pokerReadyCards = readyCards;
+    setPausableTimeout(() => {
+      if (pokerReadyCards !== readyCards) return;
+      readyCards.animateEarly = false;
+      render();
+    }, RPS_POKER_READY_DURATION_MS);
   }
 
   render();
@@ -4076,6 +4135,7 @@ function isLocalChoiceMode() {
 
 function setNewRound() {
   clearLocalTurnChoice();
+  pokerReadyCards = null;
   localRoundTimedOutPlayer = null;
   pendingSuperAnimation = null;
   const game = startNextRound({ variantId: selectedVariantId, roundState: state, roundWins });
@@ -4090,7 +4150,9 @@ function setNewRound() {
     p1: getActiveMoveIds()[0] ?? 'reload',
     p2: getActiveMoveIds()[0] ?? 'reload',
   };
-  stagePresentation = getIdleStagePresentation();
+  stagePresentation = selectedVariantId === VARIANT_IDS.rpsPoker
+    ? getRpsPokerStandoffPresentation()
+    : getIdleStagePresentation();
   render();
 }
 
@@ -4103,18 +4165,7 @@ function setNewRoundAtReloadScene() {
 
 function getIdleStagePresentation(variantId = getCurrentVariantId()) {
   if (variantId === VARIANT_IDS.rpsPoker) {
-    return {
-      kind: 'placeholder',
-      name: `rps-poker-${state.phase}`,
-      title: state.phase === 'betting'
-        ? `${state.actor === 'p1' ? 'YOUR' : 'RIVAL'} ACTION!`
-        : state.phase === 'forcedRps' ? 'ALL IN! RPS!' : 'LOCK YOUR MOVE!',
-      lines: [
-        `HAND ${state.hand}  ANTE ${state.ante}  POT ${state.pot}`,
-        `STACKS: ${state.stacks.p1} - ${state.stacks.p2}`,
-        `COMMUNITY: ${state.community ? getMoveLabel(state.community).toUpperCase() : '?'}`,
-      ],
-    };
+    return getRpsPokerIdlePresentation();
   }
 
   if (variantId === VARIANT_IDS.rpsRpg) {
@@ -4900,6 +4951,38 @@ async function runOpeningCues(token) {
     return;
   }
 
+  if (getCurrentVariantId() === VARIANT_IDS.rpsPoker) {
+    turnPhase = 'scene';
+    isTransitioning = true;
+    await playRpsPokerOpening({
+      isActive: () => isActiveLoop(token),
+      preload: () => Promise.all([
+        preloadDoodleSheets([
+          'rps-poker/poker-standoff',
+          'rps-poker/table-blank',
+          'rps-poker/cardback',
+          'rps-poker/cardback-side',
+          'rps-poker/chip',
+          'rps-poker/rock-card',
+          'rps-poker/paper-card',
+          'rps-poker/sci-card',
+        ]),
+        preloadRpsPokerReadyAnimation(),
+        preloadRpsPokerCommunityFlips(),
+      ]),
+      renderPresentation: (presentation) => {
+        stagePresentation = presentation;
+        render();
+      },
+      waitBeats: (beats) => waitBeats(beats, token),
+      waitMilliseconds: (duration) => waitMs(duration, token),
+      spikeWipe: (onCovered) => playWipeTransition(onCovered),
+    });
+    isTransitioning = false;
+    if (isActiveLoop(token)) render();
+    return;
+  }
+
   turnPhase = 'scene';
   stagePresentation = getIdleStagePresentation();
   render();
@@ -4909,6 +4992,11 @@ async function resolvePlayerSelection() {
   const token = loopToken;
 
   if (!isActiveLoop(token) || isTransitioning || (turnPhase !== 'go' && turnPhase !== 'scene')) {
+    return;
+  }
+
+  if (getCurrentVariantId() === VARIANT_IDS.rpsPoker && state.phase === 'lock') {
+    await resolveRpsPokerLockSelection(token);
     return;
   }
 
@@ -4932,6 +5020,40 @@ async function resolvePlayerSelection() {
       });
     }
   }
+}
+
+async function resolveRpsPokerLockSelection(token) {
+  const choice = localTurnController.choice;
+  if (!choice?.readyPlayerId || !choice.waitingPlayerId) return;
+
+  isTransitioning = true;
+  pokerReadyCards = {
+    earlyPlayerId: choice.readyPlayerId,
+    latePlayerId: choice.waitingPlayerId,
+    animateLate: true,
+  };
+  render();
+  await waitMs(RPS_POKER_READY_DURATION_MS, token);
+
+  if (!isActiveLoop(token)) return;
+
+  pokerReadyCards.animateLate = false;
+  resolveQueuedTurn({ shouldRender: false });
+  if (!state.community) {
+    isTransitioning = false;
+    render();
+    return;
+  }
+
+  stagePresentation = getRpsPokerCommunityPresentation(state.community, true);
+  render();
+  await waitMs(RPS_POKER_FLIP_DURATION_MS, token);
+
+  if (!isActiveLoop(token)) return;
+
+  stagePresentation = getRpsPokerCommunityPresentation(state.community, false);
+  isTransitioning = false;
+  render();
 }
 
 function waitBeats(beats, token) {
@@ -4987,7 +5109,7 @@ function renderTutorialFeedbackMarkup(lines) {
   }).join('');
 }
 
-function resolveQueuedTurn() {
+function resolveQueuedTurn({ shouldRender = true } = {}) {
   const requestedPlayerMove = p1QueuedMove;
   let tutorialOutcome = null;
   const resolved = resolveLocalTurn({
@@ -5042,7 +5164,7 @@ function resolveQueuedTurn() {
   }
 
   p1QueuedMove = null;
-  render();
+  if (shouldRender) render();
 }
 
 function getTurnStagePresentation(result, p1Move, p2Move) {

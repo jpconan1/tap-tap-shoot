@@ -1,3 +1,5 @@
+@import url('./presentation/rpsPokerPresentation.css');
+
 @font-face {
   font-family: "Architects Daughter";
   src: url("../assets/ArchitectsDaughter-Regular.ttf") format("truetype");
