@@ -1,0 +1,33 @@
+Revised RPS Poker equilibrium report
+
+CFR iterations per normal state: 1,000
+Locks: Rock 33.33%, Paper 33.33%, Scissors 33.33% (rotation-symmetric equilibrium).
+Start value when player 0 acts first: 49.671442%
+Start value when player 1 acts first: 50.328558%
+Start value with random first actor: 50.000000%
+
+Starting betting mix when player 0 acts first
+strength    actions
+low         x 90.51%, b1 7.50%, b2 0.96%, b3 1.03%
+middle      x 81.19%, b1 18.81%
+high        x 54.98%, b1 41.27%, b2 1.91%, b3 1.82%
+
+Comparison with previous rules
+- Previous first-actor edge for player 0: -0.124869 percentage points.
+- Revised first-actor edge for player 0: -0.328558 percentage points.
+- Opening bet frequency with low: 9.71% previous, 9.49% revised (-0.22 points).
+- Opening bet frequency with middle: 22.41% previous, 18.81% revised (-3.60 points).
+- Opening bet frequency with high: 48.91% previous, 45.02% revised (-3.89 points).
+- Antes now last two hands, giving each player first position once before the risk level rises.
+- The slower schedule preserves more normal Poker decisions before insufficient-ante resolution.
+
+Insufficient ante
+- Unequal stacks: the shorter stack loses immediately before a hand is dealt.
+- Equal 9-9 stacks: both players play repeating all-in community-ranked Poker until decisive.
+- There is no standard-RPS or forced-RPS phase.
+- Previous random-first start value: 50.000000%.
+- Revised random-first start value: 50.000000%.
+
+Files
+- poker_policy.json contains every match-state value and betting information set.
+- Values are match-win probabilities; CFR policies are approximate Nash strategies.

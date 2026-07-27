@@ -1,8 +1,8 @@
-.rps-poker-standoff .move-button-slot,
-.rps-poker-standoff .rps-poker-chips-slot,
-.rps-poker-standoff .rps-poker-pot-slot,
-.rps-poker-standoff [data-layout-key="turn-counter"],
-.rps-poker-standoff .layout-controls {
+.rps-poker-cutaway .move-button-slot,
+.rps-poker-cutaway .rps-poker-chips-slot,
+.rps-poker-cutaway .rps-poker-pot-slot,
+.rps-poker-cutaway [data-layout-key="turn-counter"],
+.rps-poker-cutaway .layout-controls {
   visibility: hidden;
 }
 
@@ -238,10 +238,10 @@
 }
 
 .layout-slot .rps-poker-turn-arrow.down {
-  top: 72px;
-  left: 142px;
-  width: 116px;
-  height: 123px;
+  top: 102.75px;
+  left: 171px;
+  width: 58px;
+  height: 61.5px;
 }
 
 .rps-poker-turn-swing {

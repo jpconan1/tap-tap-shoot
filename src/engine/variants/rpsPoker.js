@@ -1,4 +1,13 @@
-const RPS = Object.freeze(['rock', 'paper', 'scissors']);
+import {
+  distributeRpsPokerPot,
+  getRpsPokerAnte,
+  getRpsPokerAnteLoser,
+  getRpsPokerAntePayment,
+  getRpsPokerShowdownWinner,
+  RPS_POKER_MOVES,
+} from './rpsPokerRules.js';
+
+const RPS = RPS_POKER_MOVES;
 
 export function createRpsPokerVariant({ id, moves }) {
   const variant = {
@@ -11,13 +20,13 @@ export function createRpsPokerVariant({ id, moves }) {
     resourceMax: 0,
     startResource: 0,
     initialPhase: 'lock',
-    createRoundData: () => beginHand({
+    createRoundData: ({ random = Math.random } = {}) => beginHand({
       stacks: { p1: 9, p2: 9 },
       hand: 0,
-      firstActor: 'p1',
+      firstActor: random() < 0.5 ? 'p1' : 'p2',
     }),
     getLegalMovesFromState(state, playerId) {
-      if (['lock', 'forcedRps'].includes(state.phase)) return RPS;
+      if (state.phase === 'lock') return RPS;
       if (state.phase !== 'betting' || state.actor !== playerId) return ['wait'];
       const foe = other(playerId);
       const toCall = state.committed[foe] - state.committed[playerId];
@@ -56,16 +65,8 @@ function resolvePokerTurn({ variant, state, p1Move, p2Move, p1Resource, p2Resour
       community: randomRps(),
       phase: 'betting',
       actor: state.firstActor,
+      bettingHistory: [],
     };
-  } else if (state.phase === 'forcedRps') {
-    const winner = rpsWinner(p1Move, p2Move);
-    if (!winner) next = { ...pokerData(state), phase: 'forcedRps' };
-    else {
-      const stacks = { ...state.stacks, [winner]: state.stacks[winner] + state.pot };
-      next = stacks[other(winner)] === 0
-        ? { ...pokerData(state), stacks, pot: 0, winner }
-        : beginHand({ ...pokerData(state), stacks, pot: 0 });
-    }
   } else {
     const actor = state.actor;
     next = reduceBetting(state, picks[actor]);
@@ -97,20 +98,22 @@ function reduceBetting(state, encodedAction) {
   const foe = other(player);
   const [action, amountText] = encodedAction.split(':');
   const amount = Number(amountText);
+  const bettingHistory = [...(state.bettingHistory ?? []), encodePolicyAction(action, amount)];
   if (action === 'fold') {
     const stacks = { ...state.stacks, [foe]: state.stacks[foe] + state.pot };
     return stacks[player] === 0
-      ? { ...pokerData(state), stacks, pot: 0, winner: foe }
+      ? { ...pokerData(state), bettingHistory, stacks, pot: 0, winner: foe }
       : beginHand({ ...pokerData(state), stacks, pot: 0 });
   }
   if (action === 'check') {
     if (state.checkedOnce) return showdown(state);
-    return { ...pokerData(state), checkedOnce: true, actor: foe };
+    return { ...pokerData(state), bettingHistory, checkedOnce: true, actor: foe };
   }
   if (action === 'call') {
     const callAmount = state.committed[foe] - state.committed[player];
     return showdown({
       ...pokerData(state),
+      bettingHistory,
       stacks: { ...state.stacks, [player]: state.stacks[player] - callAmount },
       committed: { ...state.committed, [player]: state.committed[player] + callAmount },
       pot: state.pot + callAmount,
@@ -120,6 +123,7 @@ function reduceBetting(state, encodedAction) {
   const add = amount - state.committed[player];
   return {
     ...pokerData(state),
+    bettingHistory,
     stacks: { ...state.stacks, [player]: state.stacks[player] - add },
     committed: { ...state.committed, [player]: amount },
     pot: state.pot + add,
@@ -130,22 +134,27 @@ function reduceBetting(state, encodedAction) {
 }
 
 function showdown(state) {
-  const strength = (move) => move === state.community ? 1 : rpsWinner(move, state.community) === 'p1' ? 2 : 0;
-  const p1 = strength(state.locked.p1);
-  const p2 = strength(state.locked.p2);
-  const stacks = { ...state.stacks };
-  if (p1 === p2) {
-    stacks.p1 += state.pot / 2;
-    stacks.p2 += state.pot / 2;
-  } else stacks[p1 > p2 ? 'p1' : 'p2'] += state.pot;
+  const showdownWinner = getRpsPokerShowdownWinner(state.locked, state.community);
+  const stacks = distributeRpsPokerPot(state.stacks, state.pot, showdownWinner);
   const winner = stacks.p1 === 0 ? 'p2' : stacks.p2 === 0 ? 'p1' : null;
   return winner ? { ...pokerData(state), stacks, pot: 0, winner } : beginHand({ ...pokerData(state), stacks, pot: 0 });
 }
 
 function beginHand(state) {
   const hand = state.hand + 1;
-  const ante = hand;
-  const paid = Math.min(ante, state.stacks.p1, state.stacks.p2);
+  const ante = getRpsPokerAnte(hand);
+  const anteLoser = getRpsPokerAnteLoser(state.stacks, ante);
+  if (anteLoser) {
+    return {
+      ...pokerData(state),
+      hand,
+      ante,
+      actor: null,
+      winner: other(anteLoser),
+      phase: 'anteLoss',
+    };
+  }
+  const paid = getRpsPokerAntePayment(state.stacks, ante);
   const stacks = { p1: state.stacks.p1 - paid, p2: state.stacks.p2 - paid };
   const base = {
     ...state,
@@ -158,14 +167,12 @@ function beginHand(state) {
     community: null,
     checkedOnce: false,
     minRaise: 1,
+    bettingHistory: [],
     actor: null,
     winner: null,
     firstActor: hand === 1 ? state.firstActor : other(state.firstActor),
   };
-  return {
-    ...base,
-    phase: stacks.p1 === 0 || stacks.p2 === 0 ? 'forcedRps' : 'lock',
-  };
+  return { ...base, phase: 'lock' };
 }
 
 function pokerData(state) {
@@ -183,12 +190,16 @@ function pokerData(state) {
     firstActor: state.firstActor,
     winner: state.winner ?? null,
     phase: state.phase,
+    bettingHistory: [...(state.bettingHistory ?? [])],
   };
 }
 
 function randomRps() { return RPS[Math.floor(Math.random() * RPS.length)]; }
 function other(player) { return player === 'p1' ? 'p2' : 'p1'; }
-function rpsWinner(p1, p2) {
-  if (p1 === p2) return null;
-  return { rock: 'scissors', scissors: 'paper', paper: 'rock' }[p1] === p2 ? 'p1' : 'p2';
+function encodePolicyAction(action, amount) {
+  if (action === 'check') return 'x';
+  if (action === 'fold') return 'f';
+  if (action === 'call') return 'c';
+  if (action === 'bet') return `b${amount}`;
+  return `r${amount}`;
 }

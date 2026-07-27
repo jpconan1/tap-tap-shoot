@@ -10,6 +10,12 @@ const TABLE_PRESENTATION = Object.freeze({
   flip: false,
 });
 
+const WINNER_PRESENTATION = Object.freeze({
+  kind: 'doodle',
+  name: 'rps-poker/poker-winner',
+  flip: false,
+});
+
 const DEAL_PRESENTATION = Object.freeze({
   kind: 'rps-poker-table',
   name: 'rps-poker-card-deal',
@@ -42,9 +48,13 @@ export function getRpsPokerStandoffPresentation() {
   return STANDOFF_PRESENTATION;
 }
 
-export function isRpsPokerStandoff(presentation) {
+export function getRpsPokerWinnerPresentation(winner) {
+  return { ...WINNER_PRESENTATION, flip: winner === 'p2' };
+}
+
+export function isRpsPokerCutawayPresentation(presentation) {
   return presentation?.kind === 'doodle'
-    && presentation.name === STANDOFF_PRESENTATION.name;
+    && [STANDOFF_PRESENTATION.name, WINNER_PRESENTATION.name].includes(presentation.name);
 }
 
 export async function playRpsPokerOpening({
@@ -53,6 +63,7 @@ export async function playRpsPokerOpening({
   renderPresentation,
   waitBeats,
   waitMilliseconds,
+  onDeal,
   spikeWipe,
 }) {
   if (!isActive()) return false;
@@ -69,6 +80,23 @@ export async function playRpsPokerOpening({
 
   if (!isActive()) return false;
 
+  return playRpsPokerDeal({
+    isActive,
+    renderPresentation,
+    waitMilliseconds,
+    onDeal,
+  });
+}
+
+export async function playRpsPokerDeal({
+  isActive,
+  renderPresentation,
+  waitMilliseconds,
+  onDeal = () => {},
+}) {
+  if (!isActive()) return false;
+
+  onDeal();
   renderPresentation(DEAL_PRESENTATION);
   await waitMilliseconds(RPS_POKER_DEAL_DURATION_MS);
 
@@ -429,9 +457,7 @@ export function renderRpsPokerAnteTurn(ante, actor, transition = null) {
       ${transition
         ? `<canvas
             class="rps-poker-turn-swing"
-            data-direction="${transition.to === 'center'
-              ? transition.from === 'p2' ? 'right-to-center' : 'left-to-center'
-              : transition.from === 'p2' ? 'right-to-left' : 'left-to-right'}"
+            data-direction="${getTurnSwingDirection(transition)}"
             width="400"
             height="220"
             aria-hidden="true"
@@ -466,12 +492,24 @@ export function preloadRpsPokerTurnSwings() {
   return Promise.all(Array.from({ length: 5 }, (_, index) => loadTurnBetweenImage(index + 1)));
 }
 
+function getTurnSwingDirection(transition) {
+  if (transition.from === 'center') {
+    return transition.to === 'p2' ? 'center-to-right' : 'center-to-left';
+  }
+  if (transition.to === 'center') {
+    return transition.from === 'p2' ? 'right-to-center' : 'left-to-center';
+  }
+  return transition.from === 'p2' ? 'right-to-left' : 'left-to-right';
+}
+
 async function startTurnSwing(canvas) {
   const frameNumbers = {
     'left-to-right': [1, 2, 3, 4, 5],
     'right-to-left': [5, 4, 3, 2, 1],
     'left-to-center': [1, 2, 3],
     'right-to-center': [5, 4, 3],
+    'center-to-left': [3, 2, 1],
+    'center-to-right': [3, 4, 5],
   }[canvas.dataset.direction] ?? [1, 2, 3, 4, 5];
   const frames = await Promise.all(frameNumbers.map(loadTurnBetweenImage));
   if (!canvas.isConnected) return;
@@ -491,8 +529,18 @@ async function startTurnSwing(canvas) {
       { x: 178, y: 71 },
     ];
     const position = positions[frameNumbers[index] - 1];
+    const isCenterFrame = frameNumbers[index] === 3;
+    const scale = isCenterFrame ? 0.5 : 1;
+    const width = image.width * scale;
+    const height = image.height * scale;
     context.clearRect(0, 0, canvas.width, canvas.height);
-    context.drawImage(image, position.x, position.y);
+    context.drawImage(
+      image,
+      position.x + ((image.width - width) / 2),
+      position.y + ((image.height - height) / 2),
+      width,
+      height,
+    );
     index += 1;
     if (index < frames.length) window.setTimeout(draw, 84);
   }

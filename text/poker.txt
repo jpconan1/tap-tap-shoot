@@ -1,192 +1,167 @@
-RPS POKER - CANDIDATE REPORT
+RPS POKER - CURRENT RULES
 
-Nine-stack Poker: real chips, free betting, escalating antes.
+CORE IDEA
 
-CORE
+RPS Poker combines hidden Rock Paper Scissors choices with Poker betting.
+Each player owns a stack of real chips. Chips won and lost persist throughout
+the match.
 
-NORMAL POKER HAND
 
-1. Both players secretly lock Rock, Paper, or Scissors.
-2. One random community move is revealed publicly.
-3. Each player's locked move resolves against the community move.
-4. The result becomes that player's private hand strength.
-5. Players bet without knowing the opponent's locked move.
-6. Called hands and check-check hands reach showdown.
-7. Folded locked moves remain secret.
+MATCH GOAL
+
+- Each player begins with 9 chips.
+- There are 18 chips total.
+- A player loses when their stack reaches 0.
+- A player also loses if they cannot pay the next scheduled ante.
+- The surviving player wins the match.
+
+
+HAND SETUP
+
+1. Both players pay the ante.
+2. Both players secretly lock Rock, Paper, or Scissors.
+3. One random community move is revealed publicly.
+4. Each locked move receives a strength by resolving against the community.
+5. The players bet without seeing the opponent's locked move.
+
+The community move is revealed only after both moves are locked. Revealing it
+first would let both players choose the strongest move every hand.
+
 
 SHOWDOWN RANKING
 
-- Win against community = High.
-- Tie against community = Middle.
-- Loss against community = Low.
+- A move that beats the community is High.
+- A move that ties the community is Middle.
+- A move that loses to the community is Low.
 - High beats Middle.
 - Middle beats Low.
-- Identical results tie.
+- Equal strengths tie.
 
-Example community move: Rock.
+Example with Rock as the community:
 
 Locked move    Result against Rock    Strength
 Paper          Win                    High
 Rock           Tie                    Middle
 Scissors       Loss                   Low
 
-The community move must appear after players lock. Choosing after community
-reveal would let both players select High every hand.
-
-Every move has an equal chance to become High, Middle, or Low before community
-reveal. Normal RPS habits still matter probabilistically. If an opponent always
-locks Rock, Paper outranks it on community Rock and community Paper, while Rock
-outranks Paper on community Scissors.
-
-The original two-move community pair was discarded. It created strong, weak,
-and volatile hands, but required another random reveal after betting. The
-single community move removes post-bet randomness and gives each locked move a
-known rank before betting.
+Every move has an equal chance to become High, Middle, or Low before the
+community is revealed.
 
 
-NINE-STACK POKER
+ANTES
 
-IDENTITY
+The ante increases only after both players have acted first at the current
+ante:
 
-Full commitment to actual wagering. Players own chips, put those chips at risk,
-and may lose previously accumulated progress. Unrestricted sizing allows small
-value bets, large bluffs, raises, and all-ins.
+Hand 1: ante 1
+Hand 2: ante 1
+Hand 3: ante 2
+Hand 4: ante 2
+Hand 5: ante 3
+Hand 6: ante 3
 
-MATCH GOAL
+The pattern continues 1, 1, 2, 2, 3, 3, and so on.
 
-- Each player begins with 9 chips.
-- There are 18 chips total.
-- There are no separately scored rounds.
-- A player busts at 0 chips.
-- The player possessing all 18 chips wins the match.
+- The first actor is random on Hand 1.
+- The first actor alternates every hand.
+- Each player therefore acts first once before the ante increases.
+- The ante advances after every second hand, including after tied hands.
+- A player who cannot pay the full scheduled ante loses immediately.
+- There is no standard-RPS tiebreaker or forced-RPS phase.
 
-ESCALATING ANTE
+Rare equal-stack edge:
 
-- Hand 1 ante: 1 chip each.
-- Hand 2 ante: 2 chips each.
-- Hand 3 ante: 3 chips each.
-- The scheduled ante increases by 1 every hand, including after a tied hand.
-- If both players can pay the full scheduled ante, both do so and play a normal
-  Poker hand.
-- If either player cannot pay the full scheduled ante, the shorter stack posts
-  all remaining chips and the opponent matches that amount.
+- If both players are below the scheduled ante and their stacks are unequal,
+  the shorter stack loses.
+- If both players have equal stacks below the scheduled ante, both put their
+  entire stacks into a normal RPS Poker hand.
+- This all-in hand still uses locked moves, a community move, and Poker
+  showdown ranking. It does not use standard RPS.
 
-NORMAL-HAND BETTING
 
-- One player acts first.
-- First actor is random on Hand 1, then alternates every hand.
-- Actions: check, bet, call, raise, fold.
+BETTING
+
+The available actions are check, bet, call, raise, and fold.
+
 - Bets use whole chips.
 - Minimum opening bet: 1 chip.
+- No player may wager more than the opponent can match.
+- Unmatched excess never enters the pot.
 - A normal raise must increase the wager by at least the previous betting
   increment.
-- A player may always move all-in even when the remaining amount is smaller
-  than a normal minimum raise.
-- No player can wager more than the opponent can match.
-- Unmatched excess never enters the pot.
-- Betting ends on call, fold, or all-in call.
+- A player may move all-in for less than the normal minimum raise.
+- Betting ends on a call or fold.
+- Two checks also end betting and cause a showdown.
 
-NORMAL-HAND RESOLUTION
 
-- Fold: opponent takes pot; locked moves remain secret.
-- Call or check-check: reveal locked moves and compare community results.
-- Better result takes entire pot.
-- Tied result splits pot evenly.
-- Because all contributions are matched, a split restores exact pre-hand
-  stacks.
-- Scheduled ante still increases after a tied hand.
+HAND RESOLUTION
 
-FORCED ALL-IN ANTE
+Fold:
 
-Posting an ante can consume the shorter player's entire stack. Betting then has
-no function. Do not use the community-ranking sequence in this state.
+- The opponent takes the pot.
+- Locked moves remain secret.
+- The folding player's card leaves the table.
 
-- Skip community reveal.
-- Skip betting.
-- Play standard Rock Paper Scissors directly for the pot.
-- A decisive throw awards the entire pot.
-- A tied throw keeps pot in place and repeats standard RPS with fresh moves.
-- If the short player wins, chips redistribute and the match may return to
-  normal Poker on the next hand.
-- If the large stack wins, opponent reaches 0 and match ends.
+Called wager:
 
-This direct-RPS ending was adopted after testing showed that locking moves,
-revealing community, and comparing ranks without any betting was merely RPS
-with unnecessary random steps.
+- Both locked moves are revealed.
+- The stronger result takes the entire pot.
+- Equal results split the pot evenly.
 
-PLAYTEST
+Check-check:
 
-Starting stacks: 9-9.
+- Both locked moves are revealed.
+- The stronger result takes the ante pot.
+- Equal results split the ante pot evenly.
 
-Hand 1, ante 1:
+All contributions are matched. A tied showdown therefore restores the players'
+pre-hand stacks exactly.
 
-- Pot began at 2; stacks behind were 8-8.
-- CHATMAN bet 2 and JP called.
-- Community Scissors.
-- CHATMAN Rock/High beat JP Scissors/Middle.
-- Stacks became CHATMAN 12-6 JP.
 
-Hand 2, ante 2:
+PRESENTATION FLOW
 
-- Pot began at 4; stacks behind were CHATMAN 10, JP 4.
-- JP bet all 4 chips.
-- CHATMAN folded Low.
-- Fold transferred only the ante; stacks became CHATMAN 10-8 JP.
+Every hand:
 
-Hand 3, ante 3:
+- The table deals a facedown card before players choose their locked moves.
+- The deal animation repeats at the start of every hand.
 
-- Pot began at 6; stacks behind were CHATMAN 7, JP 5.
-- CHATMAN bet 2 and JP called.
-- Both revealed Paper/Middle against community Paper.
-- Pot split; stacks restored to CHATMAN 10-8 JP.
-- Ante advanced despite tie.
+Fold:
 
-Hand 4, ante 4:
+- Pot chips disappear one at a time and enter the winner's stack.
+- The folded card and community card clear with the choppy falling animation.
 
-- Pot began at 8; stacks behind were CHATMAN 6, JP 4.
-- JP checked.
-- CHATMAN bet 2 with Low.
-- JP raised all-in to 4 total.
-- CHATMAN folded.
-- Stacks swung to JP 14-4 CHATMAN.
+Check-check winner:
 
-Terminal experiment:
+- Pot chips disappear one at a time and enter the winner's stack.
+- Revealed cards clear with the choppy falling animation.
+- The Poker winner cutaway is not used.
 
-- The next scheduled ante exceeded CHATMAN's stack.
-- A first attempt used community ranking with no betting. It immediately felt
-  like RPS with extra random steps and was rejected.
-- Direct standard RPS was substituted for forced ante all-ins.
-- JP Rock beat CHATMAN Scissors and JP finished with all 18 chips.
+Any tied showdown:
 
-NINE-STACK FINDINGS
+- Pot chips disappear one at a time.
+- Chips alternate between the two stacks.
+- Revealed cards clear with the choppy falling animation.
+- There is no spike wipe between hands.
 
-- Match lasted roughly five hands despite beginning with 18 chips.
-- Escalating antes successfully prevented a long one-chip random walk.
-- Actual owned-chip risk made folds, calls, raises, and bluffs consequential.
-- Variable sizing mattered. A 2-chip bet, 4-chip shove, and all-in raise created
-  different pressure.
-- A fold after a large bet lost only committed chips, allowing dramatic stack
-  reversals without automatically ending match.
-- Advancing ante after a tied split prevented ties from freezing match pace.
-- Forced standard RPS creates a clear all-in climax and removes poker only when
-  betting has become impossible anyway.
-- Stack totals, pot size, scheduled ante, amount behind, matched-wager limits,
-  raise minimums, and position must all be communicated.
-- Match length is pressured but not strictly bounded because direct-RPS ties
-  can repeat and a short stack can win an all-in ante.
-- Escalating ante can dominate strategy quickly. Hand 4 already began with 8
-  of 18 chips committed before either player acted.
-- The candidate is the most authentic, dramatic, and mechanically heavy form.
+Called-wager winner:
 
-NINE-STACK OPEN QUESTIONS
+- Cards reveal and hold for 3 beats.
+- The game spike-wipes to the Poker winner scene.
+- The scene flips when Player 2 wins.
+- The winner scene holds for 4 beats.
+- If the match continues, the game spike-wipes to the empty table and deals
+  the next hand.
 
-- Does ante increasing every hand feel thrilling or rushed?
-- Should the ante rise after tied normal hands?
-- Are raises worth their interface and rules cost?
-- Is the normal minimum-raise rule understandable enough for this game?
-- Does a forced standard-RPS all-in feel like a satisfying climax or like the
-  Poker game giving up?
-- Should first actor alternate through forced-RPS hands even though position
-  has no effect there?
-- Is 9 the correct starting stack for an ante schedule beginning at 1?
-- How often does a short player survive forced all-in ante and return to Poker?
+Match end:
+
+- The game spike-wipes to the shared game-won or game-lost scene.
+- Continue begins a rematch.
+- Quit returns to the menu.
+
+
+MUSIC
+
+- RPS Poker begins with the normal game loops.
+- The final/tiebreaker topper is not active at match start.
+- The topper begins only when at least one player's remaining stack is below
+  the next hand's scheduled ante.

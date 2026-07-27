@@ -15,6 +15,10 @@ import { getGameWinner as getEngineGameWinner, getResultLevel, isGameOver as isE
 import { resolveTurn } from './engine/resolveTurn.js';
 import { chooseRivalMove as chooseAiMove } from './engine/rivalAi.js';
 import {
+  getRpsPokerShowdownWinner,
+  shouldPlayRpsPokerTopper,
+} from './engine/variants/rpsPokerRules.js';
+import {
   configureAudio,
   CURTAIN_CLOSE_AUDIO,
   CURTAIN_OPEN_AUDIO,
@@ -30,6 +34,9 @@ import {
   queueMusicTrackOnce,
   READY_AUDIO,
   requestMusicTrack,
+  RPS_POKER_CHIP_AUDIO,
+  RPS_POKER_DEAL_AUDIO,
+  RPS_POKER_FLIP_AUDIO,
   resetStageAudioKey,
   restartMusicTrackOnce,
   STARBURST_WIPE_AUDIO,
@@ -52,11 +59,13 @@ import {
   getRpsPokerMoveCardDoodle,
   getRpsPokerPotCounts,
   getRpsPokerStandoffPresentation,
-  isRpsPokerStandoff,
+  getRpsPokerWinnerPresentation,
+  isRpsPokerCutawayPresentation,
   mountRpsPokerCommunityFlips,
   mountRpsPokerPlayerFlips,
   mountRpsPokerReadyOverlays,
   mountRpsPokerTurnSwings,
+  playRpsPokerDeal,
   playRpsPokerOpening,
   preloadRpsPokerCommunityFlips,
   preloadRpsPokerPlayerFlips,
@@ -1706,11 +1715,11 @@ async function wipeToLobbyFromScoreboard() {
 function renderLayoutGameScreen(legalMoves) {
   activeLayoutStateId = getLayoutStateId(legalMoves);
   const layout = getActiveGameLayout();
-  const pokerStandoff = getCurrentVariantId() === VARIANT_IDS.rpsPoker
-    && isRpsPokerStandoff(stagePresentation);
+  const pokerCutaway = getCurrentVariantId() === VARIANT_IDS.rpsPoker
+    && isRpsPokerCutawayPresentation(stagePresentation);
 
   app.innerHTML = `
-    <section class="arena layout-arena ${state.status} ${getCurrentVariantId() === VARIANT_IDS.rpsPoker ? 'rps-poker-arena' : ''} ${pokerStandoff ? 'rps-poker-standoff' : ''}">
+    <section class="arena layout-arena ${state.status} ${getCurrentVariantId() === VARIANT_IDS.rpsPoker ? 'rps-poker-arena' : ''} ${pokerCutaway ? 'rps-poker-cutaway' : ''}">
       <div
         class="layout-stage"
         style="width: ${layout.width}px; height: ${layout.height}px;"
@@ -1746,7 +1755,11 @@ function renderLayoutGameScreen(legalMoves) {
 
   installMoveButtonHandlers();
   app.querySelector('[data-poker-wager]')?.addEventListener('input', (event) => {
-    pokerWagerAmount = Number(event.currentTarget.value);
+    const nextWagerAmount = Number(event.currentTarget.value);
+    if (nextWagerAmount !== pokerWagerAmount) {
+      playOneShotAudio(RPS_POKER_CHIP_AUDIO);
+    }
+    pokerWagerAmount = nextWagerAmount;
   });
   installLayoutActionHandlers();
   mountSpriteRenderers(app.querySelectorAll('.sprite-canvas'));
@@ -1787,7 +1800,7 @@ function renderRpsPokerHud() {
   return `
     ${renderLayoutSlot('p1-poker-chips', renderRpsPokerChips('p1', displayStacks.p1), 'rps-poker-chips-slot')}
     ${renderLayoutSlot('p2-poker-chips', renderRpsPokerChips('p2', displayStacks.p2), 'rps-poker-chips-slot')}
-    ${['lock', 'forcedRps', 'betting'].includes(state.phase) || pokerChipTransfer
+    ${['lock', 'betting'].includes(state.phase) || pokerChipTransfer
       ? renderLayoutSlot(
         'poker-pot',
         renderRpsPokerPot(pokerChipTransfer ? { ...state, counts: pokerChipTransfer.counts } : state),
@@ -2213,7 +2226,6 @@ function getLayoutStateId(legalMoves) {
   }
   if (getCurrentVariantId() === VARIANT_IDS.rpsPoker) {
     if (state.phase === 'betting') return 'playing.betting';
-    if (state.phase === 'forcedRps') return 'playing.forced';
   }
 
   return DEFAULT_LAYOUT_STATE_ID;
@@ -3376,7 +3388,7 @@ function getResourceDoodlesForPreload() {
 
 function getActiveMoveIds() {
   if (getCurrentVariantId() === VARIANT_IDS.rpsPoker) {
-    if (['lock', 'forcedRps'].includes(state.phase)) return ['rock', 'paper', 'scissors'];
+    if (state.phase === 'lock') return ['rock', 'paper', 'scissors'];
     return [...new Set(getPlayerLegalMoves(state, 'p1').map((moveId) => moveId.split(':')[0]))]
       .filter((moveId) => moveId !== 'wait');
   }
@@ -3444,7 +3456,16 @@ function getTutorialLegalMoves() {
 
 function installMoveButtonHandlers() {
   app.querySelectorAll('[data-move]').forEach((button) => {
-    button.addEventListener('click', () => submitMove(button.dataset.move));
+    let submittedByPointer = false;
+    button.addEventListener('pointerdown', (event) => {
+      if (event.button !== 0) return;
+      submittedByPointer = true;
+      submitMove(button.dataset.move);
+    });
+    button.addEventListener('click', () => {
+      if (submittedByPointer) return;
+      submitMove(button.dataset.move);
+    });
   });
 }
 
@@ -3481,8 +3502,20 @@ function queueLocalPlayerMove(p1Move) {
   const choice = getOrCreateLocalTurnChoice();
   const command = localTurnController.submitMove('p1', p1Move, getCurrentLegalMoves());
   if (!choice || !['waiting', 'complete'].includes(command.status)) return;
+  if (getCurrentVariantId() === VARIANT_IDS.rpsPoker && p1Move !== 'wait') {
+    playOneShotAudio(getRpsPokerSelectionAudio(p1Move));
+  }
   p1QueuedMove = p1Move;
   handleLocalMoveQueued('p1');
+}
+
+function getRpsPokerSelectionAudio(moveId) {
+  const action = String(moveId).split(':')[0];
+  return ['bet', 'call', 'raise'].includes(action) ? RPS_POKER_CHIP_AUDIO : READY_AUDIO;
+}
+
+function playDelayedRpsPokerFlipAudio() {
+  setPausableTimeout(() => playOneShotAudio(RPS_POKER_FLIP_AUDIO), 100);
 }
 
 function maybeStartComputerTurnChoice() {
@@ -4179,6 +4212,14 @@ function getGameWinner() {
 }
 
 function getMusicTopperFile() {
+  if (getCurrentVariantId() === VARIANT_IDS.rpsPoker) {
+    return shouldUseMusicTopper()
+      && !isGameOver()
+      && shouldPlayRpsPokerTopper(state)
+      ? getMusicTopperId('tension')
+      : null;
+  }
+
   const targetRoundWins = getVariantTargetRoundWins(getCurrentVariantId());
   if (
     !shouldUseMusicTopper() ||
@@ -4848,7 +4889,9 @@ function submitRankedMove(moveId) {
     return;
   }
 
-  if (isReadyPlayer) {
+  if (getCurrentVariantId() === VARIANT_IDS.rpsPoker) {
+    playOneShotAudio(getRpsPokerSelectionAudio(moveId));
+  } else if (isReadyPlayer) {
     playOneShotAudio(READY_AUDIO);
   }
 
@@ -5037,6 +5080,7 @@ async function runOpeningCues(token) {
       preload: () => Promise.all([
         preloadDoodleSheets([
           'rps-poker/poker-standoff',
+          'rps-poker/poker-winner',
           'rps-poker/table-blank',
           'rps-poker/cardback',
           'rps-poker/cardback-side',
@@ -5062,6 +5106,7 @@ async function runOpeningCues(token) {
         stagePresentation = presentation;
         render();
       },
+      onDeal: () => playOneShotAudio(RPS_POKER_DEAL_AUDIO),
       waitBeats: (beats) => waitBeats(beats, token),
       waitMilliseconds: (duration) => waitMs(duration, token),
       spikeWipe: (onCovered) => playWipeTransition(onCovered),
@@ -5118,6 +5163,9 @@ async function resolvePlayerSelection() {
 async function resolveRpsPokerBettingSelection(token) {
   const previousActor = state.actor;
   const action = String(localTurnController.choice?.moves?.[previousActor] ?? '').split(':')[0];
+  if (previousActor === 'p2' && ['bet', 'call', 'raise'].includes(action)) {
+    playOneShotAudio(RPS_POKER_CHIP_AUDIO);
+  }
   const isShowdown = action === 'call' || (action === 'check' && state.checkedOnce);
   const previousPokerState = {
     actor: previousActor,
@@ -5125,7 +5173,14 @@ async function resolveRpsPokerBettingSelection(token) {
     locked: { ...state.locked },
     stacks: { ...state.stacks },
     counts: getRpsPokerPotCounts(state),
+    hasWager: state.committed.p1 > 0 || state.committed.p2 > 0,
   };
+  if (action === 'call') {
+    const foe = previousActor === 'p1' ? 'p2' : 'p1';
+    const callAmount = state.committed[foe] - state.committed[previousActor];
+    previousPokerState.stacks[previousActor] -= callAmount;
+    previousPokerState.counts[previousActor] += callAmount;
+  }
   if (isShowdown || action === 'fold') pokerTurnActorOverride = previousActor;
   isTransitioning = true;
   resolveQueuedTurn({ shouldRender: false });
@@ -5167,7 +5222,10 @@ async function resolveRpsPokerBettingSelection(token) {
 }
 
 async function playRpsPokerShowdown(previousPokerState, token) {
-  const winner = getRpsPokerShowdownWinner(previousPokerState);
+  const winner = getRpsPokerShowdownWinner(
+    previousPokerState.locked,
+    previousPokerState.community,
+  );
   pokerChipTransfer = {
     stacks: { ...previousPokerState.stacks },
     counts: { ...previousPokerState.counts },
@@ -5180,31 +5238,50 @@ async function playRpsPokerShowdown(previousPokerState, token) {
     revealedMoves: { ...previousPokerState.locked },
     animateReveal: true,
   };
+  playDelayedRpsPokerFlipAudio();
   render();
   await waitMs(RPS_POKER_FLIP_DURATION_MS, token);
   if (!isActiveLoop(token)) return;
 
   pokerReadyCards.animateReveal = false;
   render();
+  await waitBeats(3, token);
+  if (!isActiveLoop(token)) return;
 
-  if (winner) {
-    while (getPokerTransferPotTotal() > 0) {
-      removeOnePokerPotChip();
-      pokerChipTransfer.stacks[winner] += 1;
-      render();
-      await waitMs(110, token);
-      if (!isActiveLoop(token)) return;
-    }
-  } else {
-    while (getPokerTransferPotTotal() > 0) {
-      removeOnePokerPotChip();
-      if (getPokerTransferPotTotal() > 0) removeOnePokerPotChip();
-      pokerChipTransfer.stacks.p1 += 1;
-      pokerChipTransfer.stacks.p2 += 1;
-      render();
-      await waitMs(110, token);
-      if (!isActiveLoop(token)) return;
-    }
+  if (!winner || !previousPokerState.hasWager) {
+    await playRpsPokerChipPayout(previousPokerState, token, winner);
+    return;
+  }
+
+  await playWipeTransition(() => {
+    pokerChipTransfer = null;
+    pokerReadyCards = null;
+    stagePresentation = getRpsPokerWinnerPresentation(winner);
+    render();
+  });
+  if (!isActiveLoop(token)) return;
+
+  await waitBeats(4, token);
+  if (!isActiveLoop(token)) return;
+
+  if (state.status === 'finished') {
+    await showRpsPokerGameResult(token);
+    return;
+  }
+  await wipeToNextRpsPokerHand(token);
+}
+
+async function playRpsPokerChipPayout(previousPokerState, token, winner = null) {
+  let recipient = 'p1';
+  while (getPokerTransferPotTotal() > 0) {
+    removeOnePokerPotChip();
+    const paidPlayer = winner ?? recipient;
+    pokerChipTransfer.stacks[paidPlayer] += 1;
+    if (!winner) recipient = recipient === 'p1' ? 'p2' : 'p1';
+    playOneShotAudio(RPS_POKER_CHIP_AUDIO);
+    render();
+    await waitMs(110, token);
+    if (!isActiveLoop(token)) return;
   }
 
   stagePresentation = getRpsPokerCommunityPresentation(
@@ -5213,19 +5290,12 @@ async function playRpsPokerShowdown(previousPokerState, token) {
     { clearing: true },
   );
   pokerReadyCards.clearingRevealed = true;
+  playOneShotAudio(RPS_POKER_DEAL_AUDIO);
   render();
   await waitMs(RPS_POKER_CLEAR_DURATION_MS, token);
   if (!isActiveLoop(token)) return;
 
   await finishRpsPokerHand(previousPokerState.actor, token);
-}
-
-function getRpsPokerShowdownWinner({ locked, community }) {
-  const beats = { rock: 'scissors', scissors: 'paper', paper: 'rock' };
-  const strength = (move) => move === community ? 1 : beats[move] === community ? 2 : 0;
-  const p1Strength = strength(locked.p1);
-  const p2Strength = strength(locked.p2);
-  return p1Strength === p2Strength ? null : p1Strength > p2Strength ? 'p1' : 'p2';
 }
 
 function getPokerTransferPotTotal() {
@@ -5254,6 +5324,7 @@ async function playRpsPokerFoldResolution(folder, previousPokerState, token) {
     latePlayerId: 'p2',
     reversePlayerId: folder,
   };
+  playOneShotAudio(RPS_POKER_DEAL_AUDIO);
   render();
   await waitMs(RPS_POKER_READY_DURATION_MS, token);
 
@@ -5273,6 +5344,7 @@ async function playRpsPokerFoldResolution(folder, previousPokerState, token) {
     pokerChipTransfer.counts[source] -= 1;
     pokerChipTransfer.stacks[winner] += 1;
     transferIndex += 1;
+    playOneShotAudio(RPS_POKER_CHIP_AUDIO);
     render();
     await waitMs(110, token);
     if (!isActiveLoop(token)) return;
@@ -5284,6 +5356,7 @@ async function playRpsPokerFoldResolution(folder, previousPokerState, token) {
     { clearing: true },
   );
   pokerReadyCards.clearingPlayerId = winner;
+  playOneShotAudio(RPS_POKER_DEAL_AUDIO);
   render();
   await waitMs(RPS_POKER_CLEAR_DURATION_MS, token);
   if (!isActiveLoop(token)) return;
@@ -5292,6 +5365,10 @@ async function playRpsPokerFoldResolution(folder, previousPokerState, token) {
 }
 
 async function finishRpsPokerHand(lastActor, token) {
+  if (state.status === 'finished') {
+    await showRpsPokerGameResult(token);
+    return;
+  }
   pokerChipTransfer = null;
   pokerReadyCards = null;
   stagePresentation = getRpsPokerIdlePresentation();
@@ -5301,8 +5378,47 @@ async function finishRpsPokerHand(lastActor, token) {
   await waitMs(RPS_POKER_TURN_CENTER_DURATION_MS, token);
   if (!isActiveLoop(token)) return;
   pokerTurnTransition = null;
+  await dealNextRpsPokerHand(token);
+  if (!isActiveLoop(token)) return;
+  settleRpsPokerTurn();
+}
+
+async function wipeToNextRpsPokerHand(token) {
+  await playWipeTransition(() => {
+    pokerChipTransfer = null;
+    pokerReadyCards = null;
+    pokerTurnActorOverride = null;
+    pokerTurnTransition = null;
+    stagePresentation = getRpsPokerIdlePresentation();
+    render();
+  });
+  if (!isActiveLoop(token)) return;
+  await dealNextRpsPokerHand(token);
+  if (!isActiveLoop(token)) return;
+  settleRpsPokerTurn();
+}
+
+function dealNextRpsPokerHand(token) {
+  return playRpsPokerDeal({
+    isActive: () => isActiveLoop(token),
+    renderPresentation: (presentation) => {
+      stagePresentation = presentation;
+      render();
+    },
+    onDeal: () => playOneShotAudio(RPS_POKER_DEAL_AUDIO),
+    waitMilliseconds: (duration) => waitMs(duration, token),
+  });
+}
+
+function settleRpsPokerTurn() {
   isTransitioning = false;
   render();
+}
+
+async function showRpsPokerGameResult(token) {
+  if (!isActiveLoop(token)) return;
+  isTransitioning = false;
+  await showDirectedLocalResult(getLocalResultLevel());
 }
 
 async function resolveRpsPokerLockSelection(token) {
@@ -5321,20 +5437,31 @@ async function resolveRpsPokerLockSelection(token) {
   if (!isActiveLoop(token)) return;
 
   pokerReadyCards.animateLate = false;
+  pokerTurnActorOverride = 'center';
   resolveQueuedTurn({ shouldRender: false });
   if (!state.community) {
+    pokerTurnActorOverride = null;
     isTransitioning = false;
     render();
     return;
   }
 
   stagePresentation = getRpsPokerCommunityPresentation(state.community, true);
+  playDelayedRpsPokerFlipAudio();
   render();
   await waitMs(RPS_POKER_FLIP_DURATION_MS, token);
 
   if (!isActiveLoop(token)) return;
 
   stagePresentation = getRpsPokerCommunityPresentation(state.community, false);
+  pokerTurnTransition = { from: 'center', to: state.actor };
+  render();
+  await waitMs(RPS_POKER_TURN_CENTER_DURATION_MS, token);
+
+  if (!isActiveLoop(token)) return;
+
+  pokerTurnTransition = null;
+  pokerTurnActorOverride = null;
   isTransitioning = false;
   render();
 }
@@ -5415,6 +5542,7 @@ function resolveQueuedTurn({ shouldRender = true } = {}) {
   if (turn.ok) {
     state = turn.state;
     roundWins = resolved.roundWins;
+    if (getCurrentVariantId() === VARIANT_IDS.rpsPoker) syncMusicTopper();
     turnPhase = 'scene';
     if (screen === 'tutorial') {
       tutorialStageMode = 'scene';

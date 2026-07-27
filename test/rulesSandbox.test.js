@@ -131,7 +131,7 @@ test('Nine-stack Poker injects deterministic dealer, validates bets, and conceal
   assert.equal(state.pot, 4);
   session.submit({ playerId: 'p2', actionId: 'fold' });
   assert.equal(session.getState().hand, 2);
-  assert.deepEqual(session.getState().stacks, { p1: 8, p2: 6 });
+  assert.deepEqual(session.getState().stacks, { p1: 9, p2: 7 });
 });
 
 test('Nine-stack Poker check-check showdowns split ties and alternate first actor', () => {
@@ -142,8 +142,8 @@ test('Nine-stack Poker check-check showdowns split ties and alternate first acto
   const state = session.getState();
   assert.equal(state.hand, 2);
   assert.equal(state.firstActor, 'p2');
-  assert.deepEqual(state.stacks, { p1: 7, p2: 7 });
-  assert.equal(state.ante, 2);
+  assert.deepEqual(state.stacks, { p1: 8, p2: 8 });
+  assert.equal(state.ante, 1);
 });
 
 test('Nine-stack Poker enforces a full raise and resolves an all-in call', () => {
@@ -161,24 +161,18 @@ test('Nine-stack Poker enforces a full raise and resolves an all-in call', () =>
   assert.deepEqual(session.getState().stacks, { p1: 18, p2: 0 });
 });
 
-test('Nine-stack Poker forced ante uses repeated RPS and can recover the short stack', () => {
+test('Nine-stack Poker ends when the short stack cannot pay the ante', () => {
   const session = createRulesSandboxSession('rpsPoker', {
     random: () => 0,
     initialState: {
-      stacks: { p1: 4, p2: 14 },
+      stacks: { p1: 2, p2: 16 },
       hand: 4,
       firstActor: 'p1',
     },
   });
-  assert.equal(session.getState().phase, 'forced-rps');
-  assert.deepEqual(session.getState().stacks, { p1: 0, p2: 10 });
-  submitBoth(session, 'rock', 'rock');
-  assert.equal(session.getState().phase, 'forced-rps');
-  submitBoth(session, 'rock', 'scissors');
-  const recovered = session.getState();
-  assert.equal(recovered.hand, 6);
-  assert.equal(recovered.phase, 'lock');
-  assert.deepEqual(recovered.stacks, { p1: 2, p2: 4 });
+  assert.equal(session.getState().status, 'complete');
+  assert.equal(session.getState().winner, 'p2');
+  assert.deepEqual(session.getState().stacks, { p1: 2, p2: 16 });
 });
 
 test('sandbox markup uses three generic sheets, concealed copy, amount controls, and navigation', () => {

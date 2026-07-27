@@ -1805,7 +1805,7 @@ canvas {
   place-items: center;
 }
 
-.stage-presentation-stack > canvas {
+.stage-presentation-stack > * {
   grid-area: 1 / 1;
 }
 

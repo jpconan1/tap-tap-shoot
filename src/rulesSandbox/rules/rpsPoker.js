@@ -3,11 +3,17 @@ import {
   appendEvent,
   basePresentation,
   otherPlayer,
-  rpsWinner,
   simultaneousReducer,
   title,
 } from '../sessionCore.js';
-import { complete, continuePhase } from './shared.js';
+import {
+  distributeRpsPokerPot,
+  getRpsPokerAnte,
+  getRpsPokerAnteLoser,
+  getRpsPokerAntePayment,
+  getRpsPokerShowdownWinner,
+} from '../../engine/variants/rpsPokerRules.js';
+import { complete } from './shared.js';
 
 export const rpsPokerDefinition = {
   id: 'rpsPoker',
@@ -25,7 +31,7 @@ export const rpsPokerDefinition = {
     }, random);
   },
   getLegalActions(state, playerId) {
-    if (state.phase === 'lock' || state.phase === 'forced-rps') return ['rock', 'paper', 'scissors'];
+    if (state.phase === 'lock') return ['rock', 'paper', 'scissors'];
     if (state.phase !== 'betting' || state.actor !== playerId) return [];
     const foe = otherPlayer(playerId);
     const toCall = state.committed[foe] - state.committed[playerId];
@@ -60,20 +66,6 @@ export const rpsPokerDefinition = {
         },
       });
     }
-    if (state.phase === 'forced-rps') {
-      return simultaneousReducer({
-        state, command,
-        resolve: (clean, picks) => {
-          const winner = rpsWinner(picks.p1, picks.p2);
-          if (!winner) return continuePhase(clean, 'forced-rps', picks, 'Forced all-in ties. Choose again.');
-          clean.stacks[winner] += clean.pot;
-          clean.pot = 0;
-          return clean.stacks[otherPlayer(winner)] === 0
-            ? complete(clean, winner, `${winner} wins forced all-in.`)
-            : beginHand(clean, random);
-        },
-      });
-    }
     return reduceBetting(state, command, random);
   },
   present(state) {
@@ -94,20 +86,22 @@ function randomRps(random) {
 
 function beginHand(state, random) {
   const hand = state.hand + 1;
-  const ante = hand;
-  const paid = Math.min(ante, state.stacks.p1, state.stacks.p2);
+  const ante = getRpsPokerAnte(hand);
+  const anteLoser = getRpsPokerAnteLoser(state.stacks, ante);
+  if (anteLoser) {
+    return complete(
+      { ...state, hand, ante },
+      otherPlayer(anteLoser),
+      `${anteLoser} cannot pay ante ${ante}.`,
+    );
+  }
+  const paid = getRpsPokerAntePayment(state.stacks, ante);
   const stacks = { p1: state.stacks.p1 - paid, p2: state.stacks.p2 - paid };
   const base = {
     ...state, hand, ante, stacks, pot: paid * 2, committed: { p1: 0, p2: 0 },
     locked: {}, community: null, checkedOnce: false, minRaise: 1, actor: null, pending: {},
     firstActor: hand === 1 ? state.firstActor : otherPlayer(state.firstActor),
   };
-  if (stacks.p1 === 0 || stacks.p2 === 0) {
-    return {
-      ...base, phase: 'forced-rps', activePlayers: [...PLAYERS],
-      prompt: 'Forced all-in: choose RPS.', scene: `Both post ${paid}. Forced all-in.`,
-    };
-  }
   return {
     ...base, phase: 'lock', activePlayers: [...PLAYERS],
     prompt: 'Lock an RPS move.', scene: `Both post ante ${paid}.`,
@@ -158,22 +152,13 @@ function reduceBetting(state, command, random) {
 }
 
 function showdown(state, random) {
-  const strength = (move) => {
-    if (move === state.community) return 1;
-    return rpsWinner(move, state.community) === 'p1' ? 2 : 0;
-  };
-  const p1Strength = strength(state.locked.p1);
-  const p2Strength = strength(state.locked.p2);
-  const stacks = { ...state.stacks };
+  const showdownWinner = getRpsPokerShowdownWinner(state.locked, state.community);
+  const stacks = distributeRpsPokerPot(state.stacks, state.pot, showdownWinner);
   let scene;
-  if (p1Strength === p2Strength) {
-    stacks.p1 += state.pot / 2;
-    stacks.p2 += state.pot / 2;
+  if (!showdownWinner) {
     scene = 'Showdown ties. Pot splits.';
   } else {
-    const winner = p1Strength > p2Strength ? 'p1' : 'p2';
-    stacks[winner] += state.pot;
-    scene = `${winner} wins showdown and pot ${state.pot}.`;
+    scene = `${showdownWinner} wins showdown and pot ${state.pot}.`;
   }
   const next = { ...state, stacks, pot: 0, scene, events: appendEvent(state, scene) };
   const winner = stacks.p1 === 0 ? 'p2' : stacks.p2 === 0 ? 'p1' : null;

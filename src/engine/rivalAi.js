@@ -1,6 +1,7 @@
 import { VARIANT_IDS, getLegalMoves, normalizeVariantId } from './moves.js';
 import { getPlayerLegalMoves, getPlayerResource } from './gameState.js';
 import tapTapShootXPolicy from './tap_tap_shoot_policy.json' with { type: 'json' };
+import { chooseRpsPokerNashMove } from './rpsPokerPolicy.js';
 
 export const RIVAL_DIFFICULTIES = Object.freeze({
   easy: 'easy',
@@ -42,6 +43,10 @@ export function chooseRivalMove(state, rng = Math.random, difficulty = RIVAL_DIF
 
   if (normalizedDifficulty === RIVAL_DIFFICULTIES.easy || variantId === VARIANT_IDS.rockPaperScissors) {
     return chooseRandomMove(stateLegalMoves, rng);
+  }
+
+  if (variantId === VARIANT_IDS.rpsPoker) {
+    return chooseRpsPokerNashMove(state, 'p2', rng) ?? chooseRandomMove(stateLegalMoves, rng);
   }
 
   const hardPolicy = getHardVariantPolicy(enemyResource, ownResource, variantId);

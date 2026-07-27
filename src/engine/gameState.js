@@ -1,7 +1,11 @@
 import { DEFAULT_VARIANT_ID, getLegalMoves, getVariant, getVariantStartResource, normalizeVariantId } from './moves.js';
 import { resolveTurn } from './resolveTurn.js';
 
-export function createRoundState({ variantId = DEFAULT_VARIANT_ID, resources = null } = {}) {
+export function createRoundState({
+  variantId = DEFAULT_VARIANT_ID,
+  resources = null,
+  random = Math.random,
+} = {}) {
   const normalizedVariantId = normalizeVariantId(variantId);
 
   const variant = getVariant(normalizedVariantId);
@@ -12,7 +16,7 @@ export function createRoundState({ variantId = DEFAULT_VARIANT_ID, resources = n
     winner: null,
     phase: variant.initialPhase ?? 'choose',
     pairs: null,
-    ...(variant.createRoundData?.() ?? {}),
+    ...(variant.createRoundData?.({ random }) ?? {}),
     players: {
       p1: createPlayerState(normalizedVariantId, resources?.p1),
       p2: createPlayerState(normalizedVariantId, resources?.p2),
