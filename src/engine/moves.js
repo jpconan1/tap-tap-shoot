@@ -168,6 +168,18 @@ export const VARIANT_ORDER = Object.freeze([
   VARIANT_IDS.tapTapShootX,
 ]);
 
+export const ONLINE_VARIANT_ORDER = Object.freeze([
+  VARIANT_IDS.rockPaperScissors,
+  VARIANT_IDS.rpsDragonSpear,
+  VARIANT_IDS.rpsMinusOne,
+  VARIANT_IDS.gunKnifeFist,
+  VARIANT_IDS.kitchenSink,
+  VARIANT_IDS.fireballWar,
+  VARIANT_IDS.rpsRpg,
+  VARIANT_IDS.rpsPoker,
+  VARIANT_IDS.tapTapShootX,
+]);
+
 const HEALTH_START = 3;
 
 export const VARIANTS = Object.freeze({

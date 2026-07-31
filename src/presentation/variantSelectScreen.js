@@ -4,12 +4,10 @@ const FRAME_WIDTH = 960;
 const FRAME_HEIGHT = 540;
 const TITLE_BUTTON_FRAME_WIDTH = 256;
 const TITLE_BUTTON_FRAME_HEIGHT = 128;
-const VARIANT_BUTTON_FRAME_WIDTH = 325;
-const VARIANT_BUTTON_FRAME_HEIGHT = 128;
 const VARIANT_DIFFICULTY_TOGGLE_FRAME_WIDTH = 110;
 const VARIANT_DIFFICULTY_TOGGLE_FRAME_HEIGHT = 140;
-const PICK_VARIANT_FRAME_WIDTH = 388;
-const PICK_VARIANT_FRAME_HEIGHT = 233;
+const PICK_VARIANT_FRAME_WIDTH = 1258;
+const PICK_VARIANT_FRAME_HEIGHT = 225;
 
 export function createVariantSelectScreen({
   app,
@@ -26,6 +24,9 @@ export function createVariantSelectScreen({
   onBack,
   onCloseDetail,
   detailRoot = app,
+  mountReadyWaitingOverlays = () => {},
+  mountBanAnimations = () => {},
+  onBanAnimationComplete = () => {},
 }) {
   function getPageCount() {
     return Math.max(1, Math.ceil(variants.length / pageSize));
@@ -62,18 +63,20 @@ export function createVariantSelectScreen({
     className = '',
     dataAttribute = 'data-variant',
     disabled = false,
-    content = null,
+    content = '',
+    showDifficulty = true,
   } = {}) {
-    const difficultyToggle = content ?? (variant.id === VARIANT_IDS.rockPaperScissors ? '' : `
+    const difficultyToggle = !showDifficulty || variant.id === VARIANT_IDS.rockPaperScissors ? '' : `
       <span class="variant-difficulty-toggle" data-action="variant-difficulty-toggle">
         <canvas class="sprite-canvas variant-difficulty-toggle-art" data-doodle="${getDifficultyDoodle()}" data-frame-width="${VARIANT_DIFFICULTY_TOGGLE_FRAME_WIDTH}" data-frame-height="${VARIANT_DIFFICULTY_TOGGLE_FRAME_HEIGHT}" width="${VARIANT_DIFFICULTY_TOGGLE_FRAME_WIDTH}" height="${VARIANT_DIFFICULTY_TOGGLE_FRAME_HEIGHT}" aria-hidden="true"></canvas>
       </span>
-    `);
+    `;
+    const art = variant.buttonArt;
 
     return `
       <button class="variant-button variant-slot-${slot} ${className}" ${dataAttribute}="${variant.id}" data-variant-slot="${slot}" aria-label="${escapeHtml(variant.name)}" ${disabled ? 'disabled' : ''}>
-        <canvas class="sprite-canvas variant-button-art" data-doodle="${variant.buttonDoodle}" data-frame-width="${VARIANT_BUTTON_FRAME_WIDTH}" data-frame-height="${VARIANT_BUTTON_FRAME_HEIGHT}" width="${VARIANT_BUTTON_FRAME_WIDTH}" height="${VARIANT_BUTTON_FRAME_HEIGHT}" aria-hidden="true"></canvas>
-        ${variant.buttonDoodle.startsWith('button_bg_generic') ? `<span class="variant-button-label">${escapeHtml(variant.name)}</span>` : ''}
+        <canvas class="sprite-canvas variant-button-art" data-doodle-file="${art.file}" data-frame-width="${art.width}" data-frame-height="${art.height}" width="${art.width}" height="${art.height}" style="--variant-art-width:${art.width / 2}px;--variant-art-height:${art.height / 2}px" aria-hidden="true"></canvas>
+        ${content}
         ${difficultyToggle}
       </button>
     `;
@@ -104,31 +107,75 @@ export function createVariantSelectScreen({
     mountSpriteRenderers(app.querySelectorAll('.sprite-canvas'));
   }
 
-  function render() {
+  function getOfflineViewModel() {
+    return {
+      mode: 'offline',
+      header: {
+        file: 'variant_screen/pick_variant_header_sheet.webp',
+        width: PICK_VARIANT_FRAME_WIDTH,
+        height: PICK_VARIANT_FRAME_HEIGHT,
+        label: 'Pick variant',
+      },
+      variants: getPageVariants().map((variant) => ({ ...variant, state: { available: true } })),
+      exitAction: { label: 'Back', callback: onBack },
+      onSelect: onSelectVariant,
+    };
+  }
+
+  function render(viewModel = getOfflineViewModel()) {
     requestMusicTrack('title');
+    const isOnline = viewModel.mode === 'online';
+    const header = viewModel.header;
     app.innerHTML = `
-      <section class="title-screen opponent-select-screen computer-variant-select" aria-label="Choose variant">
+      <section class="title-screen opponent-select-screen variant-select-screen ${isOnline ? 'variant-ban-screen' : 'computer-variant-select'} ${viewModel.className ?? ''}" aria-label="${escapeHtml(header.label)}">
         ${renderOpenCurtainBorder()}
-        <canvas class="sprite-canvas pick-variant-header" data-doodle-file="pick_variant_sheet.webp" data-frame-width="${PICK_VARIANT_FRAME_WIDTH}" data-frame-height="${PICK_VARIANT_FRAME_HEIGHT}" width="${PICK_VARIANT_FRAME_WIDTH}" height="${PICK_VARIANT_FRAME_HEIGHT}" aria-label="Pick variant"></canvas>
-        <div class="variant-actions">${getPageVariants().map((variant, index) => renderVariantButton(variant, index + 1)).join('')}${renderBackButton()}</div>
-        ${renderPageControls()}
+        <canvas class="sprite-canvas pick-variant-header" data-doodle-file="${header.file}" data-frame-width="${header.width}" data-frame-height="${header.height}" width="${header.width}" height="${header.height}" style="--variant-header-width:${header.width / 3}px;--variant-header-height:${header.height / 3}px" aria-label="${escapeHtml(header.label)}"></canvas>
+        <div class="variant-actions">${viewModel.variants.map((variant, index) => {
+          const state = variant.state ?? {};
+          return renderVariantButton(variant, index + 1, {
+            className: [
+              isOnline ? 'ranked-variant-pick' : '',
+              state.picked ? 'picked' : '',
+              state.banned ? 'banned' : '',
+              state.tiebreakerBan ? 'tiebreaker-ban' : '',
+            ].filter(Boolean).join(' '),
+            dataAttribute: isOnline ? 'data-pick-variant' : 'data-variant',
+            disabled: Boolean(state.disabled),
+            showDifficulty: !isOnline,
+            content: state.showBanMark
+              ? state.banMark
+              : state.showBanAnimation
+                ? `<canvas class="ranked-ban-animation" data-variant-id="${variant.id}" width="300" height="256" aria-hidden="true"></canvas>`
+                : state.showReady ? '<canvas class="ranked-variant-ready" width="300" height="256" aria-hidden="true"></canvas>' : '',
+          });
+        }).join('')}${renderBackButton()}</div>
+        ${isOnline ? '' : renderPageControls()}
+        ${viewModel.waitingMessage ? `<div class="tiebreaker-ban-waiting">${escapeHtml(viewModel.waitingMessage)}</div>` : ''}
       </section>
     `;
 
-    app.querySelectorAll('[data-variant]').forEach((button) => {
+    app.querySelectorAll(isOnline ? '[data-pick-variant]' : '[data-variant]').forEach((button) => {
       button.addEventListener('pointerdown', (event) => {
-        if (event.button <= 0) onSelectVariant(button.dataset.variant, button);
+        if (event.button <= 0 && !isOnline) viewModel.onSelect(button.dataset.variant, button);
       });
-      button.addEventListener('click', () => onSelectVariant(button.dataset.variant, button));
+      button.addEventListener('click', () => viewModel.onSelect(
+        isOnline ? button.dataset.pickVariant : button.dataset.variant,
+        button,
+      ));
     });
     app.querySelectorAll('[data-action="variant-difficulty-toggle"]').forEach((button) => {
       button.addEventListener('pointerdown', (event) => event.stopPropagation());
       button.addEventListener('click', toggleDifficulty);
     });
-    app.querySelector('[data-action="back-title"]').addEventListener('click', onBack);
+    app.querySelector('[data-action="back-title"]').addEventListener('click', viewModel.exitAction.callback);
     app.querySelector('[data-action="variant-page-prev"]')?.addEventListener('click', () => changePage(-1));
     app.querySelector('[data-action="variant-page-next"]')?.addEventListener('click', () => changePage(1));
     mountSpriteRenderers(app.querySelectorAll('.sprite-canvas'));
+    mountReadyWaitingOverlays(app.querySelectorAll('.ranked-variant-ready'));
+    app.querySelectorAll('.ranked-ban-animation').forEach((canvas) => {
+      canvas.addEventListener('ban-animation-complete', () => onBanAnimationComplete(canvas.dataset.variantId), { once: true });
+    });
+    mountBanAnimations(app.querySelectorAll('.ranked-ban-animation'));
   }
 
   function promoteButton(button) {

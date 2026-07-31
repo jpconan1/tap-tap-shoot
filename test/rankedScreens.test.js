@@ -49,10 +49,3 @@ test('scoreboard action reflects next variant, tiebreaker, and game over', () =>
   assert.match(screens.renderAction({ pendingNextVariant: true }, true), /scoreboard-ready/);
   assert.equal(screens.renderAction({}, false), '');
 });
-
-test('ranked variants fall back to local presentation metadata', () => {
-  const screens = createScreens();
-  assert.deepEqual(screens.getRankedVariants({ variants: [{ id: 'rps', label: 'Server label' }] }), [
-    { id: 'rps', name: 'RPS', buttonDoodle: 'rps-button' },
-  ]);
-});

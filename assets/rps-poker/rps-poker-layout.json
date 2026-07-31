@@ -31,7 +31,8 @@
         { "key": "paper-button", "kind": "slot", "x": 416, "y": 332, "width": 128, "height": 175 },
         { "key": "scissors-button", "kind": "slot", "x": 534, "y": 344, "width": 128, "height": 175 },
         { "key": "rules-button", "kind": "slot", "x": 8, "y": 474, "width": 112, "height": 56 },
-        { "key": "p1-poker-reminder", "kind": "slot", "x": 128, "y": 432, "width": 64, "height": 88 }
+        { "key": "p1-poker-reminder", "kind": "slot", "x": 128, "y": 432, "width": 64, "height": 88 },
+        { "key": "cpu-odds", "kind": "slot", "x": 810, "y": 382, "width": 138, "height": 132 }
       ],
       "portraitElements": [
         { "key": "p1-info", "kind": "slot", "x": 14, "y": 12, "width": 190, "height": 72 },
@@ -46,7 +47,8 @@
         { "key": "actions", "kind": "slot", "x": 0, "y": 0, "width": 1, "height": 1 },
         { "key": "rock-button", "kind": "slot", "x": 160, "y": 570, "width": 220, "height": 110 },
         { "key": "paper-button", "kind": "slot", "x": 35, "y": 720, "width": 220, "height": 110 },
-        { "key": "scissors-button", "kind": "slot", "x": 285, "y": 720, "width": 220, "height": 110 }
+        { "key": "scissors-button", "kind": "slot", "x": 285, "y": 720, "width": 220, "height": 110 },
+        { "key": "cpu-odds", "kind": "slot", "x": 388, "y": 430, "width": 138, "height": 132 }
       ]
     },
     "playing.betting": {
@@ -62,7 +64,8 @@
         { "key": "call-button", "kind": "slot", "x": 395, "y": 382, "width": 170, "height": 85 },
         { "key": "raise-button", "kind": "slot", "x": 555, "y": 382, "width": 170, "height": 85 },
         { "key": "poker-turn-message", "kind": "slot", "x": 330, "y": 382, "width": 300, "height": 85 },
-        { "key": "poker-amount", "kind": "slot", "x": 390, "y": 470, "width": 180, "height": 58 }
+        { "key": "poker-amount", "kind": "slot", "x": 390, "y": 470, "width": 180, "height": 58 },
+        { "key": "cpu-odds", "kind": "slot", "x": 810, "y": 382, "width": 138, "height": 132 }
       ],
       "portraitElements": [
         { "key": "rock-button", "hidden": true },
@@ -73,14 +76,19 @@
         { "key": "fold-button", "kind": "slot", "x": 20, "y": 670, "width": 160, "height": 80 },
         { "key": "call-button", "kind": "slot", "x": 190, "y": 670, "width": 160, "height": 80 },
         { "key": "raise-button", "kind": "slot", "x": 360, "y": 670, "width": 160, "height": 80 },
-        { "key": "poker-amount", "kind": "slot", "x": 180, "y": 775, "width": 180, "height": 70 }
+        { "key": "poker-amount", "kind": "slot", "x": 180, "y": 775, "width": 180, "height": 70 },
+        { "key": "cpu-odds", "kind": "slot", "x": 388, "y": 430, "width": 138, "height": 132 }
       ]
     },
     "playing.forced": {
       "name": "All in",
       "extends": "playing.default",
-      "elements": [],
-      "portraitElements": []
+      "elements": [
+        { "key": "cpu-odds", "kind": "slot", "x": 810, "y": 382, "width": 138, "height": 132 }
+      ],
+      "portraitElements": [
+        { "key": "cpu-odds", "kind": "slot", "x": 388, "y": 430, "width": 138, "height": 132 }
+      ]
     },
     "round.game-over": {
       "name": "Game over",

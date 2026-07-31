@@ -2,10 +2,6 @@ const TITLE_BUTTON_FRAME_WIDTH = 256;
 const TITLE_BUTTON_FRAME_HEIGHT = 128;
 const VARIANT_BUTTON_FRAME_WIDTH = 325;
 const VARIANT_BUTTON_FRAME_HEIGHT = 128;
-const ONLINE_HEADER_FRAME_WIDTH = 1518;
-const ONLINE_HEADER_FRAME_HEIGHT = 512;
-const BAN_HEADER_FRAME_WIDTH = 910;
-const BAN_HEADER_FRAME_HEIGHT = 512;
 
 export function getScoreboardVariantScore(snapshot, variantId) {
   const result = snapshot?.gameResults?.find((gameResult) => gameResult.variantId === variantId);
@@ -17,98 +13,19 @@ export function getScoreboardVariantScore(snapshot, variantId) {
 
 export function createRankedScreens({
   app,
-  variants,
   getSnapshot,
   getDisplayName,
-  isBanAnimationComplete,
-  markBanAnimationComplete,
   escapeHtml,
   getVariant,
-  renderVariantButton,
   renderOpenCurtainBorder,
   renderStaticDoodle,
   getWinCounterDoodle,
   renderSheetButton,
   mountSpriteRenderers,
   mountReadyWaitingOverlays,
-  mountBanAnimations,
-  onLeave,
-  onPickVariant,
-  onShowVariantDetail,
   onContinue,
   onMainMenu,
 }) {
-  function getRankedVariants(snapshot) {
-    return (snapshot?.variants ?? []).map((rankedVariant) => (
-      variants.find((variant) => variant.id === rankedVariant.id) ?? {
-        id: rankedVariant.id,
-        name: rankedVariant.label,
-        buttonDoodle: getVariant(rankedVariant.id).buttonDoodle,
-      }
-    )).filter(Boolean);
-  }
-
-  function renderQuitButton() {
-    return `<button class="opponent-button back-button" data-action="quit" aria-label="Back"><canvas class="sprite-canvas opponent-button-art" data-doodle="back_button_w" data-frame-width="${TITLE_BUTTON_FRAME_WIDTH}" data-frame-height="${TITLE_BUTTON_FRAME_HEIGHT}" width="${TITLE_BUTTON_FRAME_WIDTH}" height="${TITLE_BUTTON_FRAME_HEIGHT}" aria-hidden="true"></canvas></button>`;
-  }
-
-  function renderVariantPickButton({ variant, slot, disabled, picked, banned, firstPicked, isTiebreakerBan }) {
-    const showSettledBan = isTiebreakerBan && (banned || isBanAnimationComplete(variant.id));
-    const showBanAnimation = isTiebreakerBan && picked && !showSettledBan;
-    return renderVariantButton(variant, slot, {
-      className: `ranked-variant-pick ${picked ? 'picked' : ''} ${banned ? 'banned' : ''} ${isTiebreakerBan ? 'tiebreaker-ban' : ''}`,
-      dataAttribute: 'data-pick-variant',
-      disabled,
-      content: showSettledBan
-        ? renderStaticDoodle('ban-animation/x', 300, 256, 'ranked-ban-mark')
-        : showBanAnimation
-          ? `<canvas class="ranked-ban-animation" data-variant-id="${variant.id}" width="300" height="256" aria-hidden="true"></canvas>`
-          : firstPicked ? '<canvas class="ranked-variant-ready" width="300" height="256" aria-hidden="true"></canvas>' : '',
-    });
-  }
-
-  function renderVariantSelection() {
-    const snapshot = getSnapshot();
-    const picks = snapshot.variantPicks ?? snapshot.bans ?? {};
-    const pickedVariants = new Set(Object.values(picks));
-    const bannedVariants = new Set(snapshot.bannedVariants ?? []);
-    const playerPick = picks[snapshot.playerKey];
-    const isTiebreakerBan = snapshot.variantSelectionRound === 2;
-    const firstPickedVariant = picks[snapshot.variantPickOrder?.[0]];
-    const headerDoodle = isTiebreakerBan ? 'header-ban-variant_sheet.webp'
-      : firstPickedVariant ? 'header-second-variant_sheet.webp' : 'header-first-variant_sheet.webp';
-    const headerWidth = isTiebreakerBan ? BAN_HEADER_FRAME_WIDTH : ONLINE_HEADER_FRAME_WIDTH;
-    const headerHeight = isTiebreakerBan ? BAN_HEADER_FRAME_HEIGHT : ONLINE_HEADER_FRAME_HEIGHT;
-
-    app.innerHTML = `
-      <section class="title-screen opponent-select-screen variant-ban-screen ${isTiebreakerBan ? 'tiebreaker-ban-stage' : ''}" aria-label="${isTiebreakerBan ? 'Ban variant' : 'Pick variant'}">
-        ${renderOpenCurtainBorder()}
-        <canvas class="sprite-canvas pick-variant-header online-stage-header" data-doodle-file="${headerDoodle}" data-frame-width="${headerWidth}" data-frame-height="${headerHeight}" width="${headerWidth}" height="${headerHeight}" aria-label="${isTiebreakerBan ? 'Ban variant' : 'Pick variant'}"></canvas>
-        <div class="variant-actions">
-          ${getRankedVariants(snapshot).map((variant, index) => renderVariantPickButton({
-            variant,
-            slot: index + 1,
-            disabled: Boolean(playerPick) || pickedVariants.has(variant.id) || bannedVariants.has(variant.id),
-            picked: pickedVariants.has(variant.id),
-            banned: bannedVariants.has(variant.id),
-            firstPicked: firstPickedVariant === variant.id,
-            isTiebreakerBan,
-          })).join('')}${renderQuitButton()}
-        </div>
-        ${isTiebreakerBan && snapshot.variantPickOrder?.[0] === snapshot.playerKey ? '<div class="tiebreaker-ban-waiting">Waiting for your opponent</div>' : ''}
-      </section>
-    `;
-    app.querySelector('[data-action="quit"]')?.addEventListener('click', onLeave);
-    app.querySelectorAll('[data-pick-variant]').forEach((button) => button.addEventListener('click', () => {
-      if (isTiebreakerBan) onPickVariant(button.dataset.pickVariant);
-      else onShowVariantDetail(button.dataset.pickVariant, button);
-    }));
-    mountSpriteRenderers(app.querySelectorAll('.sprite-canvas'));
-    mountReadyWaitingOverlays(app.querySelectorAll('.ranked-variant-ready'));
-    app.querySelectorAll('.ranked-ban-animation').forEach((canvas) => canvas.addEventListener('ban-animation-complete', () => markBanAnimationComplete(canvas.dataset.variantId), { once: true }));
-    mountBanAnimations(app.querySelectorAll('.ranked-ban-animation'));
-  }
-
   function renderWinCounter(variantId, wins) {
     return renderStaticDoodle(getWinCounterDoodle(variantId, wins), 64, 64, 'scoreboard-win-counter');
   }
@@ -167,5 +84,5 @@ export function createRankedScreens({
     mountReadyWaitingOverlays(app.querySelectorAll('.scoreboard-ready'));
   }
 
-  return { getRankedVariants, renderAction, renderScoreboard, renderVariantSelection, renderVariantPickButton };
+  return { renderAction, renderScoreboard };
 }

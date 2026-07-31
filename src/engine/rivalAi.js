@@ -1,7 +1,8 @@
 import { VARIANT_IDS, getLegalMoves, normalizeVariantId } from './moves.js';
 import { getPlayerLegalMoves, getPlayerResource } from './gameState.js';
 import tapTapShootXPolicy from './tap_tap_shoot_policy.json' with { type: 'json' };
-import { chooseRpsPokerNashMove } from './rpsPokerPolicy.js';
+import kitchenSinkPolicy from './kitchen_sink_policy.json' with { type: 'json' };
+import { getRpsPokerNashDistribution } from './rpsPokerPolicy.js';
 
 export const RIVAL_DIFFICULTIES = Object.freeze({
   easy: 'easy',
@@ -35,6 +36,27 @@ const HARD_VARIANT_POLICIES = Object.freeze({
 });
 
 export function chooseRivalMove(state, rng = Math.random, difficulty = RIVAL_DIFFICULTIES.hard) {
+  const distribution = getRivalMoveDistribution(state, difficulty);
+  return pickWeightedMove(
+    distribution.map(({ moveId, probability }) => ({ moveId, weight: probability })),
+    rng,
+  );
+}
+
+export function getRivalMatchEquity(state, difficulty = RIVAL_DIFFICULTIES.hard) {
+  if (
+    normalizeDifficulty(difficulty) !== RIVAL_DIFFICULTIES.hard
+    || normalizeVariantId(state.variantId) !== VARIANT_IDS.kitchenSink
+  ) {
+    return null;
+  }
+
+  const value = kitchenSinkPolicy.states[getKitchenSinkPolicyKey(state)]?.value;
+  if (!Number.isFinite(value)) return null;
+  return Object.freeze({ p1: value, p2: 1 - value });
+}
+
+export function getRivalMoveDistribution(state, difficulty = RIVAL_DIFFICULTIES.hard) {
   const ownResource = getPlayerResource(state.players.p2);
   const enemyResource = getPlayerResource(state.players.p1);
   const variantId = normalizeVariantId(state.variantId);
@@ -42,19 +64,57 @@ export function chooseRivalMove(state, rng = Math.random, difficulty = RIVAL_DIF
   const stateLegalMoves = getPlayerLegalMoves(state, 'p2', variantId);
 
   if (normalizedDifficulty === RIVAL_DIFFICULTIES.easy || variantId === VARIANT_IDS.rockPaperScissors) {
-    return chooseRandomMove(stateLegalMoves, rng);
+    return normalizeDistribution(stateLegalMoves.map((moveId) => ({ moveId, weight: 1 })));
   }
 
   if (variantId === VARIANT_IDS.rpsPoker) {
-    return chooseRpsPokerNashMove(state, 'p2', rng) ?? chooseRandomMove(stateLegalMoves, rng);
+    const legalMoves = new Set(stateLegalMoves);
+    const policy = getRpsPokerNashDistribution(state, 'p2');
+    const weightedMoves = policy
+      ? Object.entries(policy)
+        .filter(([moveId, weight]) => legalMoves.has(moveId) && weight > 0)
+        .map(([moveId, weight]) => ({ moveId, weight }))
+      : [];
+    return normalizeDistribution(
+      weightedMoves.length ? weightedMoves : stateLegalMoves.map((moveId) => ({ moveId, weight: 1 })),
+    );
+  }
+
+  if (variantId === VARIANT_IDS.kitchenSink) {
+    const legalMoves = new Set(stateLegalMoves);
+    const policy = kitchenSinkPolicy.states[getKitchenSinkPolicyKey(state)]?.p2;
+    const weightedMoves = policy
+      ? Object.entries(policy)
+        .filter(([moveId, weight]) => legalMoves.has(moveId) && weight > 0)
+        .map(([moveId, weight]) => ({ moveId, weight }))
+      : [];
+    return normalizeDistribution(
+      weightedMoves.length ? weightedMoves : stateLegalMoves.map((moveId) => ({ moveId, weight: 1 })),
+    );
   }
 
   const hardPolicy = getHardVariantPolicy(enemyResource, ownResource, variantId);
   if (hardPolicy) {
-    return chooseWeightedLegalMove(ownResource, enemyResource, hardPolicy, rng, variantId);
+    const legalMoves = new Set(getLegalMoves(ownResource, enemyResource, variantId));
+    const weightedMoves = Object.entries(hardPolicy)
+      .filter(([moveId, weight]) => legalMoves.has(moveId) && weight > 0)
+      .map(([moveId, weight]) => ({ moveId, weight }));
+    if (weightedMoves.length) return normalizeDistribution(weightedMoves);
   }
 
-  return chooseRandomMove(stateLegalMoves, rng);
+  return normalizeDistribution(stateLegalMoves.map((moveId) => ({ moveId, weight: 1 })));
+}
+
+function getKitchenSinkPolicyKey(state) {
+  const rounds = state.roundWins ?? { p1: 0, p2: 0 };
+  const phase = state.phase === 'freeMove' ? `${state.freeMoveActor}-free` : 'choose';
+  return [
+    `${rounds.p1 ?? 0},${rounds.p2 ?? 0}`,
+    `${state.hp?.p1 ?? 3},${state.hp?.p2 ?? 3}`,
+    `${getPlayerResource(state.players.p1)},${getPlayerResource(state.players.p2)}`,
+    state.position ?? 'neutral',
+    phase,
+  ].join('|');
 }
 
 function normalizeDifficulty(difficulty) {
@@ -65,29 +125,17 @@ function getHardVariantPolicy(enemyResource, ownResource, variantId) {
   return HARD_VARIANT_POLICIES[variantId]?.[`${enemyResource}-${ownResource}`] ?? null;
 }
 
-function chooseWeightedLegalMove(ownBullets, enemyBullets, policy, rng, variantId) {
-  const legalMoves = getLegalMoves(ownBullets, enemyBullets, variantId);
-  const weightedMoves = Object.entries(policy)
-    .filter(([moveId, weight]) => legalMoves.includes(moveId) && weight > 0)
-    .map(([moveId, weight]) => ({ moveId, weight }));
-
-  if (!weightedMoves.length) {
-    return legalMoves.includes('reload') ? 'reload' : legalMoves[0];
-  }
-
-  return pickWeightedMove(weightedMoves, rng);
-}
-
-function chooseRandomLegalMove(ownBullets, enemyBullets, rng, variantId) {
-  const legalMoves = getLegalMoves(ownBullets, enemyBullets, variantId);
-  return chooseRandomMove(legalMoves, rng);
-}
-
-function chooseRandomMove(legalMoves, rng) {
-  return legalMoves[Math.min(Math.floor(rng() * legalMoves.length), legalMoves.length - 1)];
+function normalizeDistribution(weightedMoves) {
+  const totalWeight = weightedMoves.reduce((sum, move) => sum + move.weight, 0);
+  if (totalWeight <= 0) return [];
+  return weightedMoves.map(({ moveId, weight }) => Object.freeze({
+    moveId,
+    probability: weight / totalWeight,
+  }));
 }
 
 function pickWeightedMove(weightedMoves, rng) {
+  if (!weightedMoves.length) return undefined;
   const totalWeight = weightedMoves.reduce((sum, move) => sum + move.weight, 0);
   let roll = rng() * totalWeight;
 

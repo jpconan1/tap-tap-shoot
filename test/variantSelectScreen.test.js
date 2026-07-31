@@ -1,12 +1,14 @@
 import assert from 'node:assert/strict';
+import { existsSync } from 'node:fs';
 import test from 'node:test';
 
 import { createVariantSelectScreen } from '../src/presentation/variantSelectScreen.js';
+import { VARIANT_SELECT_VARIANTS } from '../src/variantSelectConfig.js';
 
 const variants = [
-  { id: 'rockPaperScissors', name: 'Rock & Paper', buttonDoodle: 'rps', copy: ['First sentence. More words.', 'Second line.'] },
-  { id: 'fireballWar', name: 'Fireball War', buttonDoodle: 'fireball', copy: [] },
-  { id: 'gunKnifeFist', name: 'Gun Knife Fist', buttonDoodle: 'gkf', copy: [] },
+  { id: 'rockPaperScissors', name: 'Rock & Paper', buttonDoodle: 'rps', buttonArt: { file: 'variant_screen/rps.webp', width: 320, height: 192 }, copy: ['First sentence. More words.', 'Second line.'] },
+  { id: 'fireballWar', name: 'Fireball War', buttonDoodle: 'fireball', buttonArt: { file: 'variant_screen/fireball.webp', width: 326, height: 80 }, copy: [] },
+  { id: 'gunKnifeFist', name: 'Gun Knife Fist', buttonDoodle: 'gkf', buttonArt: { file: 'variant_screen/gkf.webp', width: 196, height: 292 }, copy: [] },
 ];
 
 function createScreen(overrides = {}) {
@@ -31,6 +33,17 @@ function createScreen(overrides = {}) {
   return { screen, getPage: () => page };
 }
 
+test('canonical selection metadata contains nine native three-frame sheets', () => {
+  assert.equal(VARIANT_SELECT_VARIANTS.length, 9);
+  assert.equal(VARIANT_SELECT_VARIANTS.some(({ id }) => id === 'tapTapShootY'), false);
+  for (const variant of VARIANT_SELECT_VARIANTS) {
+    assert.match(variant.buttonArt.file, /^variant_screen\/.+_button_sheet\.webp$/);
+    assert.equal(existsSync(new URL(`../assets/${variant.buttonArt.file}`, import.meta.url)), true);
+    assert.equal(Number.isInteger(variant.buttonArt.width), true);
+    assert.equal(Number.isInteger(variant.buttonArt.height), true);
+  }
+});
+
 test('variant selection calculates stable slots and fallback variants', () => {
   const { screen } = createScreen();
 
@@ -48,15 +61,20 @@ test('variant buttons omit difficulty for classic RPS', () => {
   assert.match(screen.renderVariantButton(variants[0], 1), /aria-label="Rock &amp; Paper"/);
 });
 
-test('generic variant buttons render escaped text over the placeholder art', () => {
+test('variant buttons use native canvas resolution and half-size CSS art', () => {
   const { screen } = createScreen();
   const markup = screen.renderVariantButton({
     id: 'prototype',
     name: 'Kitchen & Sink!',
     buttonDoodle: 'button_bg_generic2',
+    buttonArt: { file: 'variant_screen/kitchen.webp', width: 328, height: 264 },
   }, 1);
 
-  assert.match(markup, /class="variant-button-label">Kitchen &amp; Sink!<\/span>/);
+  assert.match(markup, /data-doodle-file="variant_screen\/kitchen\.webp"/);
+  assert.match(markup, /width="328" height="264"/);
+  assert.match(markup, /--variant-art-width:164px;--variant-art-height:132px/);
+  assert.match(markup, /aria-label="Kitchen &amp; Sink!"/);
+  assert.doesNotMatch(markup, /variant-button-label/);
 });
 
 test('variant detail copy emphasizes only the first sentence', () => {

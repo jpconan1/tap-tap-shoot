@@ -89,6 +89,7 @@ window.LAYOUT_VARIANTS = [
 
 window.LAYOUT_PARENT_ELEMENTS = [
   { key: "scene", name: "Scene placement", asset: "assets/tap-tap-shoot-y/standoff-ssd_sheet.webp", frame: "last", scene: true },
+  { key: "cpu-odds", name: "CPU move odds", kind: "text", text: "CPU ODDS\nMOVE 00%", width: 140, height: 92 },
   { key: "p1-info", name: "P1 name & info", kind: "text", text: "P1\nINFO", width: 220, height: 72 },
   { key: "p2-info", name: "P2 name & info", kind: "text", text: "P2\nINFO", width: 220, height: 72 },
   { key: "p1-win-label", name: "P1 win label", asset: "assets/wins_label_sheet.webp" },

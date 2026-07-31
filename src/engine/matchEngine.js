@@ -41,6 +41,10 @@ export function createVariantGame({ variantId, roundWins = { p1: 0, p2: 0 } }) {
   };
 }
 
+export function startNewGame({ variantId, roundWins = { p1: 0, p2: 0 } }) {
+  return createVariantGame({ variantId, roundWins });
+}
+
 export function startNextRound(game) {
   const variant = getVariant(game.variantId);
   const resources = variant.persistResourceBetweenRounds

@@ -6,7 +6,7 @@ import { MemoryPlayerStore } from '../server/playerStore.js';
 import { RankedDuelService } from '../server/rankedDuel.js';
 import { getAllowDebugWinGame } from '../server/index.js';
 import { createRoundState } from '../src/engine/gameState.js';
-import { DEFAULT_VARIANT_ID, VARIANT_IDS } from '../src/engine/moves.js';
+import { DEFAULT_VARIANT_ID, ONLINE_VARIANT_ORDER, VARIANTS, VARIANT_IDS } from '../src/engine/moves.js';
 import { MemoryAnalyticsStore } from '../server/analyticsStore.js';
 
 test('matchmaking pairs similarly rated players into a ranked room', async () => {
@@ -22,6 +22,124 @@ test('matchmaking pairs similarly rated players into a ranked room', async () =>
   assert.equal(lastMessage(p1).type, 'matchState');
   assert.equal(lastMessage(p1).phase, 'countdown');
   assert.equal(lastMessage(p2).phase, 'countdown');
+  assert.deepEqual(lastMessage(p1).variants.map(({ id }) => id), ONLINE_VARIANT_ORDER);
+  assert.equal(lastMessage(p1).variants.length, 9);
+});
+
+test('all nine online variants are ranked and serialize legal opening moves', async () => {
+  const { service } = await createMatchedService();
+  const room = onlyRoom(service);
+
+  for (const variantId of ONLINE_VARIANT_ORDER) {
+    room.variantId = variantId;
+    room.phase = 'choosing';
+    room.roundState = createRoundState({ variantId });
+    const snapshot = service.getPublicRoomState(room, 'p1');
+    assert.equal(VARIANTS[variantId].isRanked, true, variantId);
+    assert.ok(snapshot.players.p1.legalMoves.length > 0, variantId);
+    assert.ok(snapshot.players.p2.legalMoves.length > 0, variantId);
+    assert.equal(snapshot.variantState.phase, room.roundState.phase, variantId);
+  }
+});
+
+test('online Poker snapshots include the state required by its HUD and decisions', async () => {
+  const { service } = await createMatchedService();
+  const room = onlyRoom(service);
+  room.variantId = VARIANT_IDS.rpsPoker;
+  room.phase = 'choosing';
+  room.roundState = createRoundState({ variantId: VARIANT_IDS.rpsPoker, random: () => 0 });
+
+  const snapshot = service.getPublicRoomState(room, 'p1');
+  assert.deepEqual(snapshot.variantState.stacks, { p1: 8, p2: 8 });
+  assert.equal(snapshot.variantState.pot, 2);
+  assert.equal(snapshot.variantState.phase, 'lock');
+  assert.equal(snapshot.variantState.firstActor, 'p1');
+});
+
+test('online Poker conceals the opposing lock and resolves actor-only betting', async () => {
+  const { service, p1, p2 } = await createMatchedService();
+  const room = onlyRoom(service);
+  room.variantId = VARIANT_IDS.rpsPoker;
+  room.roundState = createRoundState({ variantId: VARIANT_IDS.rpsPoker, random: () => 0 });
+  service.beginChoosing(room);
+
+  service.receive(p1.session, {
+    type: 'submitPokerCommand',
+    command: { type: 'LOCK_CARD', card: 'rock' },
+  });
+  service.receive(p2.session, {
+    type: 'submitPokerCommand',
+    command: { type: 'LOCK_CARD', card: 'paper' },
+  });
+
+  const p1Reveal = service.getPublicRoomState(room, 'p1');
+  const p2Reveal = service.getPublicRoomState(room, 'p2');
+  assert.deepEqual(p1Reveal.variantState.locked, { p1: 'rock' });
+  assert.deepEqual(p2Reveal.variantState.locked, { p2: 'paper' });
+  assert.equal(p1Reveal.pokerTransition.kind, 'lock-complete');
+  assert.equal(p1Reveal.pokerTransition.firstLocker, 'p1');
+  assert.equal(p1Reveal.pokerTransition.revealedLocks, null);
+  assert.deepEqual(p1Reveal.pokerEvents.map((event) => event.type), [
+    'CARD_LOCKED',
+    'OPPONENT_CARD_LOCKED',
+    'BOTH_CARDS_LOCKED',
+    'COMMUNITY_REVEALED',
+    'BETTING_STARTED',
+  ]);
+
+  service.beginChoosing(room);
+  service.receive(p2.session, { type: 'submitMove', moveId: 'wait' });
+  assert.equal(lastMessage(p2).message, 'not your turn');
+
+  service.receive(p1.session, { type: 'submitMove', moveId: 'check' });
+  assert.equal(room.phase, 'revealed');
+  assert.equal(room.pokerTransition.kind, 'check');
+  assert.equal(room.roundState.actor, 'p2');
+});
+
+test('online Poker rejects stale commands and reveals locks only at showdown', async () => {
+  const { service, p1, p2 } = await createMatchedService();
+  const room = onlyRoom(service);
+  room.variantId = VARIANT_IDS.rpsPoker;
+  room.roundState = createRoundState({ variantId: VARIANT_IDS.rpsPoker, random: () => 0 });
+  service.beginChoosing(room);
+
+  service.receive(p1.session, {
+    type: 'submitMove',
+    moveId: 'rock',
+    revision: room.revision - 1,
+  });
+  assert.equal(lastMessage(p1).message, 'stale move');
+
+  service.receive(p1.session, { type: 'submitMove', moveId: 'rock' });
+  service.receive(p2.session, { type: 'submitMove', moveId: 'paper' });
+  service.beginChoosing(room);
+  service.receive(p1.session, { type: 'submitMove', moveId: 'check' });
+  service.beginChoosing(room);
+  service.receive(p2.session, { type: 'submitMove', moveId: 'check' });
+
+  const snapshot = service.getPublicRoomState(room, 'p1');
+  assert.equal(snapshot.pokerTransition.kind, 'showdown');
+  assert.deepEqual(snapshot.pokerTransition.revealedLocks, { p1: 'rock', p2: 'paper' });
+  assert.deepEqual(snapshot.variantState.locked, {});
+});
+
+test('online Poker reconnects into authoritative current state without replay data', async () => {
+  const { service, p1 } = await createMatchedService({ reconnectGraceMs: 50 });
+  const room = onlyRoom(service);
+  room.variantId = VARIANT_IDS.rpsPoker;
+  room.roundState = createRoundState({ variantId: VARIANT_IDS.rpsPoker, random: () => 0 });
+  service.beginChoosing(room);
+
+  service.disconnect(p1.session);
+  assert.equal(room.disconnectedPlayerKey, 'p1');
+
+  const reconnected = await connectTestPlayer(service, 'p1');
+  const snapshot = reconnected.messages.findLast((message) => message.type === 'matchState');
+  assert.equal(room.disconnectedPlayerKey, null);
+  assert.equal(snapshot.phase, 'choosing');
+  assert.deepEqual(snapshot.variantState.stacks, { p1: 8, p2: 8 });
+  assert.equal(snapshot.pokerTransition, null);
 });
 
 test('matchmaking uses one pool across requested variants', async () => {
@@ -72,7 +190,7 @@ test('analytics records anonymous match facts, variant picks, turns, games, and 
   const room = onlyRoom(service);
 
   service.beginBanning(room);
-  service.receive(p1.session, { type: 'submitVariantPick', variantId: VARIANT_IDS.tapTapShootY });
+  service.receive(p1.session, { type: 'submitVariantPick', variantId: VARIANT_IDS.tapTapShootX });
   service.receive(p2.session, { type: 'submitVariantPick', variantId: VARIANT_IDS.fireballWar });
   room.roundWins.p1 = 2;
   service.receive(p1.session, { type: 'submitMove', moveId: 'shoot' });
@@ -92,7 +210,7 @@ test('analytics records anonymous match facts, variant picks, turns, games, and 
     p2Id: 'p2',
   });
   assert.deepEqual(analyticsStore.variantPicks.map(({ variantId, pickOrder }) => ({ variantId, pickOrder })), [
-    { variantId: VARIANT_IDS.tapTapShootY, pickOrder: 1 },
+    { variantId: VARIANT_IDS.tapTapShootX, pickOrder: 1 },
     { variantId: VARIANT_IDS.fireballWar, pickOrder: 2 },
   ]);
   assert.equal(analyticsStore.turns.length, 1);
@@ -532,9 +650,9 @@ test('best of three variant games advances variants and updates Elo once', async
   const room = onlyRoom(service);
 
   service.beginBanning(room);
-  service.receive(p1.session, { type: 'submitVariantPick', variantId: VARIANT_IDS.tapTapShootY });
+  service.receive(p1.session, { type: 'submitVariantPick', variantId: VARIANT_IDS.tapTapShootX });
   service.receive(p2.session, { type: 'submitVariantPick', variantId: VARIANT_IDS.gunKnifeFist });
-  assert.equal(room.variantId, VARIANT_IDS.tapTapShootY);
+  assert.equal(room.variantId, VARIANT_IDS.tapTapShootX);
 
   room.roundWins.p1 = 2;
   service.receive(p1.session, { type: 'submitMove', moveId: 'shoot' });
@@ -563,7 +681,7 @@ test('best of three variant games advances variants and updates Elo once', async
   assert.equal((await store.getPlayer('p2')).losses, 1);
 });
 
-test('split variant games trigger tiebreaker selection with previous variants banned', async () => {
+test('split variant games let each player live-ban three and use the sole survivor', async () => {
   const { service, p1, p2 } = await createMatchedService({ revealMs: 1 });
   const room = onlyRoom(service);
 
@@ -594,12 +712,55 @@ test('split variant games trigger tiebreaker selection with previous variants ba
   assert.equal(room.phase, 'variantSelection');
   assert.equal(room.pendingTiebreaker, false);
 
-  service.receive(p1.session, { type: 'submitVariantPick', variantId: VARIANT_IDS.tapTapShootY });
-  service.receive(p2.session, { type: 'submitVariantPick', variantId: VARIANT_IDS.gunKnifeFist });
+  const tiebreakerVariant = VARIANT_IDS.rpsPoker;
+  const banPool = ONLINE_VARIANT_ORDER.filter((variantId) => (
+    !room.bannedVariants.includes(variantId) && variantId !== tiebreakerVariant
+  ));
+  service.receive(p1.session, { type: 'submitVariantPick', variantId: banPool[0] });
+  service.receive(p1.session, { type: 'submitVariantPick', variantId: banPool[1] });
+  service.receive(p1.session, { type: 'submitVariantPick', variantId: banPool[2] });
+  assert.equal(room.phase, 'variantSelection');
+  assert.deepEqual(lastMessage(p2).variantBanCounts, { p1: 3, p2: 0 });
+
+  service.receive(p2.session, { type: 'submitVariantPick', variantId: banPool[3] });
+  service.receive(p2.session, { type: 'submitVariantPick', variantId: banPool[4] });
+  service.receive(p2.session, { type: 'submitVariantPick', variantId: banPool[5] });
 
   assert.equal(room.phase, 'choosing');
-  assert.equal(room.variantId, VARIANT_IDS.tapTapShootX);
-  assert.deepEqual(room.remainingVariants, [VARIANT_IDS.tapTapShootX]);
+  assert.deepEqual(room.variantBans, {
+    p1: banPool.slice(0, 3),
+    p2: banPool.slice(3, 6),
+  });
+  assert.deepEqual(room.remainingVariants, [tiebreakerVariant]);
+  assert.equal(room.variantId, tiebreakerVariant);
+  assert.equal(lastMessage(p1).tiebreakerVariantId, tiebreakerVariant);
+});
+
+test('tiebreaker bans reject played, duplicate, unknown, and over-quota choices', async () => {
+  const { service, p1, p2 } = await createMatchedService();
+  const room = onlyRoom(service);
+  const played = [VARIANT_IDS.rockPaperScissors, VARIANT_IDS.fireballWar];
+  room.phase = 'variantSelection';
+  room.variantSelectionRound = 2;
+  room.bannedVariants = [...played];
+  room.variantBans = { p1: [], p2: [] };
+  room.variantBanOrder = [];
+
+  service.receive(p1.session, { type: 'submitVariantPick', variantId: played[0] });
+  assert.equal(lastMessage(p1).message, 'illegal variant ban');
+  service.receive(p1.session, { type: 'submitVariantPick', variantId: 'not-a-variant' });
+  assert.equal(lastMessage(p1).message, 'illegal variant ban');
+
+  const pool = ONLINE_VARIANT_ORDER.filter((variantId) => !played.includes(variantId));
+  service.receive(p1.session, { type: 'submitVariantPick', variantId: pool[0] });
+  service.receive(p2.session, { type: 'submitVariantPick', variantId: pool[0] });
+  assert.equal(lastMessage(p2).message, 'illegal variant ban');
+  service.receive(p1.session, { type: 'submitVariantPick', variantId: pool[1] });
+  service.receive(p1.session, { type: 'submitVariantPick', variantId: pool[2] });
+  service.receive(p1.session, { type: 'submitVariantPick', variantId: pool[3] });
+  assert.equal(lastMessage(p1).message, 'illegal variant ban');
+  assert.deepEqual(room.variantBans.p1, pool.slice(0, 3));
+  assert.equal(room.variantBanOrder.length, 3);
 });
 
 test('disconnect forfeits active match', async () => {
@@ -841,6 +1002,7 @@ function createTestService({
   allowDebugWinGame = false,
   analyticsStore,
   challengeMs,
+  reconnectGraceMs = 0,
 } = {}) {
   return new RankedDuelService({
     playerStore: store,
@@ -853,6 +1015,7 @@ function createTestService({
     allowDebugWinGame,
     analyticsStore,
     challengeMs,
+    reconnectGraceMs,
     now,
     createId: createIncrementingId(),
   });

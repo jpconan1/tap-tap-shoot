@@ -10,7 +10,7 @@ export function createRpsMinusOneVariant({ id, moves }) {
   const variant = {
     id,
     label: 'RPS Minus One',
-    isRanked: false,
+    isRanked: true,
     targetRoundWins: 6,
     moveIds: Object.freeze([...Object.keys(PAIRS), 'rock', 'paper', 'scissors']),
     moves,

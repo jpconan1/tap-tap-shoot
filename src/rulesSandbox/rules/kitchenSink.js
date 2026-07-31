@@ -88,7 +88,7 @@ export function resolveNeutralKitchen(state, picks) {
     if (move === 'charge' && !['strike', 'fireball', 'super'].includes(foeMove)) {
       state.bars[player] = Math.min(3, state.bars[player] + 1);
     }
-    if (move === 'strike' && foeMove === 'advance') state.hp[foe]--;
+    if (move === 'strike' && ['advance', 'charge'].includes(foeMove)) state.hp[foe]--;
     if (move === 'fireball' && ['strike', 'advance', 'charge'].includes(foeMove)) state.hp[foe]--;
     if (move === 'super') state.hp[foe] -= foeMove === 'bait' ? 1 : 3;
   }
@@ -119,7 +119,7 @@ export function resolvePositionKitchen(state, picks, center) {
     advance: {
       strike: () => damage(center, 1),
       advance: () => {},
-      bait: reset,
+      bait: () => damage(corner, 1),
       charge: () => damage(corner, 1),
       reversal: () => { damage(center, 1); reset(); },
       super: () => damage(center, 3),

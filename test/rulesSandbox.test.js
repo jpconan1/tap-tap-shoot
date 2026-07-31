@@ -92,6 +92,14 @@ test('Kitchen Sink exposes all 36 positional matchups and representative effects
       assert.doesNotThrow(() => __test.resolvePositionKitchen(state, { p1: centerMove, p2: cornerMove }, 'p1'));
     }
   }
+  const advanceBait = {
+    hp: { p1: 3, p2: 3 }, bars: { p1: 0, p2: 0 },
+    position: 'p1-center', punished: null,
+  };
+  __test.resolvePositionKitchen(advanceBait, { p1: 'advance', p2: 'bait' }, 'p1');
+  assert.equal(advanceBait.hp.p2, 2);
+  assert.equal(advanceBait.position, 'p1-center');
+
   const session = createRulesSandboxSession('kitchenSink');
   submitBoth(session, 'bait', 'charge');
   assert.equal(session.getState().position, 'p1-center');
@@ -103,17 +111,18 @@ test('Kitchen Sink exposes all 36 positional matchups and representative effects
   assert.equal(session.getState().hp.p2, 2);
 });
 
-test('Kitchen Sink soft-interrupts neutral Charge and charges costs for specials', () => {
+test('Kitchen Sink Strike hurts neutral Charge and denies its bar gain', () => {
   const session = createRulesSandboxSession('kitchenSink');
   submitBoth(session, 'strike', 'charge');
   assert.deepEqual(session.getState().bars, { p1: 0, p2: 0 });
+  assert.equal(session.getState().hp.p2, 2);
   submitBoth(session, 'bait', 'charge');
   submitBoth(session, 'charge', 'bait');
   assert.equal(session.getState().bars.p1, 1);
   assert.equal(session.getState().position, 'p1-center');
   submitBoth(session, 'powered-strike', 'bait');
   assert.equal(session.getState().bars.p1, 0);
-  assert.equal(session.getState().hp.p2, 3);
+  assert.equal(session.getState().hp.p2, 2);
 });
 
 test('Nine-stack Poker injects deterministic dealer, validates bets, and conceals locks', () => {
@@ -197,7 +206,7 @@ test('sandbox markup uses three generic sheets, concealed copy, amount controls,
 
 test('new version-3 layouts normalize with required landscape and portrait slots', async () => {
   const folders = ['rps-minus-one', 'rps-rpg', 'rps-poker', 'kitchen-sink', 'rps-dragon-spear'];
-  const required = ['scene', 'p1-state', 'p2-state', 'score', 'phase-prompt', 'actions'];
+  const required = ['scene', 'p1-state', 'p2-state', 'score', 'phase-prompt', 'actions', 'cpu-odds'];
   for (const folder of folders) {
     const payload = JSON.parse(await readFile(new URL(`../assets/${folder}/${folder}-layout.json`, import.meta.url)));
     const layout = normalizeGameLayout(payload);

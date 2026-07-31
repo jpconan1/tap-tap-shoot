@@ -64,6 +64,58 @@ test('client surfaces server availability errors', () => {
   assert.deepEqual(errors, ['ranked service temporarily unavailable']);
 });
 
+test('client sends structured commands for RPS Poker', () => {
+  const sent = [];
+  const client = new RankedClient({ onSnapshot() {}, onClose() {} });
+  client.socket = {
+    readyState: 1,
+    send(value) { sent.push(JSON.parse(value)); },
+  };
+  globalThis.WebSocket = { OPEN: 1 };
+  const snapshot = {
+    phase: 'choosing',
+    matchId: 'poker-match',
+    revision: 8,
+    variantId: 'rpsPoker',
+    currentVariantId: 'rpsPoker',
+    playerKey: 'p1',
+    players: { p1: { legalMoves: ['raise:4'] } },
+  };
+
+  assert.equal(client.submitMove(snapshot, 'raise:4'), true);
+  assert.deepEqual(sent, [{
+    type: 'submitPokerCommand',
+    matchId: 'poker-match',
+    revision: 8,
+    command: { type: 'RAISE', amount: 4 },
+  }]);
+});
+
+test('client permits three live tiebreaker bans and blocks used or fourth choices', () => {
+  const sent = [];
+  const client = new RankedClient({ onSnapshot() {}, onClose() {} });
+  client.socket = {
+    readyState: 1,
+    send(value) { sent.push(JSON.parse(value)); },
+  };
+  globalThis.WebSocket = { OPEN: 1 };
+  const snapshot = {
+    phase: 'variantSelection',
+    matchId: 'match',
+    playerKey: 'p1',
+    variantSelectionRound: 2,
+    variantPicks: {},
+    bannedVariants: ['played'],
+    variantBans: { p1: ['a', 'b'], p2: ['c'] },
+    variantBanQuota: 3,
+  };
+
+  assert.equal(client.submitVariantPick(snapshot, 'd'), true);
+  assert.equal(client.submitVariantPick(snapshot, 'c'), false);
+  assert.equal(client.submitVariantPick({ ...snapshot, variantBans: { ...snapshot.variantBans, p1: ['a', 'b', 'd'] } }, 'e'), false);
+  assert.deepEqual(sent, [{ type: 'submitVariantPick', matchId: 'match', variantId: 'd' }]);
+});
+
 test('client routes lobby, roster, chat, whiteboard, and challenge events', () => {
   const events = [];
   const client = new RankedClient({

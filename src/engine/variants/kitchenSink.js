@@ -5,7 +5,7 @@ export function createKitchenSinkVariant({ id, moves }) {
   const variant = {
     id,
     label: 'Kitchen Sink!',
-    isRanked: false,
+    isRanked: true,
     targetRoundWins: 2,
     moveIds: Object.freeze([
       'strike', 'advance', 'bait', 'charge', 'super',
@@ -122,7 +122,7 @@ function resolveNeutral(state, picks) {
     const move = picks[player];
     const foeMove = picks[foe];
     if (move === 'charge' && !['strike', 'fireball', 'super'].includes(foeMove)) gain(state, player);
-    if (move === 'strike' && foeMove === 'advance') damage(state, foe, 1);
+    if (move === 'strike' && ['advance', 'charge'].includes(foeMove)) damage(state, foe, 1);
     if (move === 'fireball' && ['strike', 'advance', 'charge'].includes(foeMove)) damage(state, foe, 1);
     if (move === 'super') damage(state, foe, foeMove === 'bait' ? 1 : 3);
   }
@@ -143,7 +143,8 @@ function resolvePosition(state, picks, center) {
       super: () => damage(state, center, 3),
     },
     advance: {
-      strike: () => damage(state, center, 1), advance: () => {}, bait: reset,
+      strike: () => damage(state, center, 1), advance: () => {},
+      bait: () => damage(state, corner, 1),
       charge: () => damage(state, corner, 1),
       reversal: () => { damage(state, center, 1); reset(); },
       super: () => damage(state, center, 3),

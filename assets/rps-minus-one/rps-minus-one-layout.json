@@ -27,7 +27,8 @@
         { "key": "rockPaper-button", "kind": "slot", "x": 385, "y": 318, "width": 190, "height": 95 },
         { "key": "paperScissors-button", "kind": "slot", "x": 278, "y": 420, "width": 190, "height": 95 },
         { "key": "scissorsRock-button", "kind": "slot", "x": 492, "y": 420, "width": 190, "height": 95 },
-        { "key": "rules-button", "kind": "slot", "x": 12, "y": 472, "width": 120, "height": 60 }
+        { "key": "rules-button", "kind": "slot", "x": 12, "y": 472, "width": 120, "height": 60 },
+        { "key": "cpu-odds", "kind": "slot", "x": 810, "y": 382, "width": 138, "height": 132 }
       ],
       "portraitElements": [
         { "key": "p1-info", "kind": "slot", "x": 14, "y": 16, "width": 190, "height": 72 },
@@ -46,7 +47,8 @@
         { "key": "rockPaper-button", "kind": "slot", "x": 160, "y": 470, "width": 220, "height": 110 },
         { "key": "paperScissors-button", "kind": "slot", "x": 35, "y": 610, "width": 220, "height": 110 },
         { "key": "scissorsRock-button", "kind": "slot", "x": 285, "y": 610, "width": 220, "height": 110 },
-        { "key": "rules-button", "kind": "slot", "x": 214, "y": 830, "width": 112, "height": 56 }
+        { "key": "rules-button", "kind": "slot", "x": 214, "y": 830, "width": 112, "height": 56 },
+        { "key": "cpu-odds", "kind": "slot", "x": 388, "y": 430, "width": 138, "height": 132 }
       ]
     },
     "playing.keep": {
@@ -62,9 +64,12 @@
         { "key": "p2-previous-move-icon", "kind": "slot", "x": 686, "y": 285, "width": 128, "height": 64 },
         { "key": "rock-button", "kind": "slot", "x": 170, "y": 405, "width": 190, "height": 95 },
         { "key": "paper-button", "kind": "slot", "x": 385, "y": 405, "width": 190, "height": 95 },
-        { "key": "scissors-button", "kind": "slot", "x": 600, "y": 405, "width": 190, "height": 95 }
+        { "key": "scissors-button", "kind": "slot", "x": 600, "y": 405, "width": 190, "height": 95 },
+        { "key": "cpu-odds", "kind": "slot", "x": 810, "y": 382, "width": 138, "height": 132 }
       ],
-      "portraitElements": []
+      "portraitElements": [
+        { "key": "cpu-odds", "kind": "slot", "x": 388, "y": 430, "width": 138, "height": 132 }
+      ]
     },
     "round.between": {
       "name": "Between rounds",

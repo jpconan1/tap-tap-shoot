@@ -3,7 +3,12 @@ import test from 'node:test';
 
 import { createRoundState, getPlayerLegalMoves, playTurn } from '../src/engine/gameState.js';
 import { MAX_BULLETS, VARIANT_IDS, getLegalMoves, getVariantMoveIds } from '../src/engine/moves.js';
-import { RIVAL_DIFFICULTIES, chooseRivalMove } from '../src/engine/rivalAi.js';
+import {
+  RIVAL_DIFFICULTIES,
+  chooseRivalMove,
+  getRivalMatchEquity,
+  getRivalMoveDistribution,
+} from '../src/engine/rivalAi.js';
 import { resolveTurn } from '../src/engine/resolveTurn.js';
 import { getVariantStagePresentation } from '../src/renderer.js';
 
@@ -376,6 +381,11 @@ test('rival AI always reloads from 0-0', () => {
 test('easy rival AI picks uniformly across legal moves', () => {
   const state = createStateWithBullets(1, 1, VARIANT_IDS.fireballWar);
 
+  assert.deepEqual(getRivalMoveDistribution(state, RIVAL_DIFFICULTIES.easy), [
+    { moveId: 'charge', probability: 1 / 3 },
+    { moveId: 'block', probability: 1 / 3 },
+    { moveId: 'fireball', probability: 1 / 3 },
+  ]);
   assert.equal(chooseRivalMove(state, fixedRoll(0), RIVAL_DIFFICULTIES.easy), 'charge');
   assert.equal(chooseRivalMove(state, fixedRoll(0.34), RIVAL_DIFFICULTIES.easy), 'block');
   assert.equal(chooseRivalMove(state, fixedRoll(0.67), RIVAL_DIFFICULTIES.easy), 'fireball');
@@ -384,9 +394,40 @@ test('easy rival AI picks uniformly across legal moves', () => {
 test('hard rival AI uses Fireball War Nash weights', () => {
   const state = createStateWithBullets(1, 1, VARIANT_IDS.fireballWar);
 
+  assert.deepEqual(getRivalMoveDistribution(state, RIVAL_DIFFICULTIES.hard), [
+    { moveId: 'charge', probability: 0.31 },
+    { moveId: 'block', probability: 0.47 },
+    { moveId: 'fireball', probability: 0.22 },
+  ]);
   assert.equal(chooseRivalMove(state, fixedRoll(0), RIVAL_DIFFICULTIES.hard), 'charge');
   assert.equal(chooseRivalMove(state, fixedRoll(0.4), RIVAL_DIFFICULTIES.hard), 'block');
   assert.equal(chooseRivalMove(state, fixedRoll(0.9), RIVAL_DIFFICULTIES.hard), 'fireball');
+});
+
+test('hard Kitchen Sink rival uses the full-state lookup policy', () => {
+  const state = createRoundState({ variantId: VARIANT_IDS.kitchenSink });
+  state.roundWins = { p1: 0, p2: 0 };
+
+  assert.deepEqual(getRivalMatchEquity(state, RIVAL_DIFFICULTIES.hard), { p1: 0.5, p2: 0.5 });
+  assert.equal(getRivalMatchEquity(state, RIVAL_DIFFICULTIES.easy), null);
+  assert.deepEqual(getRivalMoveDistribution(state, RIVAL_DIFFICULTIES.hard), [
+    { moveId: 'strike', probability: 0.3809983902971355 },
+    { moveId: 'advance', probability: 0.3809983902971355 },
+    { moveId: 'bait', probability: 0.2380032194057291 },
+  ]);
+  assert.equal(chooseRivalMove(state, fixedRoll(0), RIVAL_DIFFICULTIES.hard), 'strike');
+  assert.equal(chooseRivalMove(state, fixedRoll(0.5), RIVAL_DIFFICULTIES.hard), 'advance');
+});
+
+test('easy Kitchen Sink rival remains uniform across legal moves', () => {
+  const state = createRoundState({ variantId: VARIANT_IDS.kitchenSink });
+
+  assert.deepEqual(getRivalMoveDistribution(state, RIVAL_DIFFICULTIES.easy), [
+    { moveId: 'strike', probability: 0.25 },
+    { moveId: 'advance', probability: 0.25 },
+    { moveId: 'bait', probability: 0.25 },
+    { moveId: 'charge', probability: 0.25 },
+  ]);
 });
 
 test('hard Fireball War policy indexes player charge before bot charge', () => {
@@ -470,6 +511,20 @@ test('rival AI chooses legal Fireball War moves', () => {
           `picked illegal ${move} at ${rivalBullets}-${playerBullets}`,
         );
       }
+    }
+  }
+});
+
+test('rival distribution contains only legal positive moves and totals one', () => {
+  for (let rivalBullets = 0; rivalBullets <= MAX_BULLETS; rivalBullets += 1) {
+    for (let playerBullets = 0; playerBullets <= MAX_BULLETS; playerBullets += 1) {
+      const state = createStateWithBullets(rivalBullets, playerBullets);
+      const legalMoves = getPlayerLegalMoves(state, 'p2');
+      const distribution = getRivalMoveDistribution(state);
+      assert.ok(distribution.every(({ moveId, probability }) => (
+        legalMoves.includes(moveId) && probability > 0
+      )));
+      assert.ok(Math.abs(distribution.reduce((sum, entry) => sum + entry.probability, 0) - 1) < 1e-12);
     }
   }
 });

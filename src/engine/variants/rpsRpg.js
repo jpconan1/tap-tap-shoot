@@ -4,7 +4,7 @@ export function createRpsRpgVariant({ id, moves }) {
   const variant = {
     id,
     label: 'RPS RPG',
-    isRanked: false,
+    isRanked: true,
     targetRoundWins: 4,
     moveIds: Object.freeze(['str', 'int', 'dex', 'sword', 'staff', 'bow']),
     moves,

@@ -99,8 +99,8 @@ Strike vs Bait
 - No damage.
 
 Strike vs Charge
-- Charge is interrupted and gives no bar.
-- No damage.
+- The Charge player loses 1 HP.
+- The Charge player gains no bar.
 - Position remains Neutral.
 
 Strike vs Fireball
@@ -238,8 +238,8 @@ C Advance vs K Advance
 - Position holds.
 
 C Advance vs K Bait
-- No damage.
-- Position resets to Neutral.
+- K loses 1 HP.
+- Position holds.
 
 C Advance vs K Charge
 - K loses 1 HP.

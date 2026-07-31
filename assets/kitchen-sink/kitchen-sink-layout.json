@@ -31,15 +31,16 @@
         { "key": "p2-they-picked", "kind": "slot", "x": 804, "y": 245, "width": 150, "height": 64 },
         { "key": "p2-previous-move-icon", "kind": "slot", "x": 688, "y": 245, "width": 128, "height": 64 },
         { "key": "actions", "kind": "slot", "x": 0, "y": 0, "width": 1, "height": 1 },
-        { "key": "strike-button", "kind": "slot", "x": 100, "y": 345, "width": 170, "height": 85 },
-        { "key": "advance-button", "kind": "slot", "x": 297, "y": 345, "width": 170, "height": 85 },
-        { "key": "bait-button", "kind": "slot", "x": 494, "y": 345, "width": 170, "height": 85 },
-        { "key": "charge-button", "kind": "slot", "x": 691, "y": 345, "width": 170, "height": 85 },
-        { "key": "fireball-button", "kind": "slot", "x": 100, "y": 440, "width": 170, "height": 85 },
-        { "key": "poweredStrike-button", "kind": "slot", "x": 297, "y": 440, "width": 170, "height": 85 },
-        { "key": "reversal-button", "kind": "slot", "x": 494, "y": 440, "width": 170, "height": 85 },
-        { "key": "super-button", "kind": "slot", "x": 691, "y": 440, "width": 170, "height": 85 },
-        { "key": "rules-button", "kind": "slot", "x": 8, "y": 474, "width": 112, "height": 56 }
+        { "key": "charge-button", "kind": "slot", "x": 220, "y": 345, "width": 170, "height": 85 },
+        { "key": "special-button", "kind": "slot", "x": 220, "y": 440, "width": 170, "height": 85 },
+        { "key": "strike-button", "kind": "slot", "x": 560, "y": 350, "width": 140, "height": 70 },
+        { "key": "bait-button", "kind": "slot", "x": 470, "y": 450, "width": 140, "height": 70 },
+        { "key": "advance-button", "kind": "slot", "x": 650, "y": 450, "width": 140, "height": 70 },
+        { "key": "down-right-red-arrow", "kind": "image", "asset": "assets/down-right_red_sheet.webp", "x": 651, "y": 397, "width": 56, "height": 56 },
+        { "key": "left-blue-arrow", "kind": "image", "asset": "assets/left_blue_sheet.webp", "x": 603, "y": 457, "width": 56, "height": 56 },
+        { "key": "up-right-blue-arrow", "kind": "image", "asset": "assets/up-right_blue_sheet.webp", "x": 523, "y": 397, "width": 56, "height": 56 },
+        { "key": "rules-button", "kind": "slot", "x": 8, "y": 474, "width": 112, "height": 56 },
+        { "key": "cpu-odds", "kind": "slot", "x": 810, "y": 382, "width": 138, "height": 132 }
       ],
       "portraitElements": [
         { "key": "p1-info", "kind": "slot", "x": 14, "y": 12, "width": 190, "height": 72 },
@@ -58,14 +59,15 @@
         { "key": "position-state", "kind": "slot", "x": 160, "y": 300, "width": 220, "height": 70 },
         { "key": "scene", "kind": "text", "text": "KITCHEN SINK!", "scene": true, "x": 14, "y": 380, "width": 512, "height": 180 },
         { "key": "actions", "kind": "slot", "x": 0, "y": 0, "width": 1, "height": 1 },
-        { "key": "strike-button", "kind": "slot", "x": 25, "y": 585, "width": 220, "height": 100 },
-        { "key": "advance-button", "kind": "slot", "x": 295, "y": 585, "width": 220, "height": 100 },
-        { "key": "bait-button", "kind": "slot", "x": 25, "y": 690, "width": 220, "height": 100 },
-        { "key": "charge-button", "kind": "slot", "x": 295, "y": 690, "width": 220, "height": 100 },
-        { "key": "fireball-button", "kind": "slot", "x": 25, "y": 795, "width": 220, "height": 100 },
-        { "key": "poweredStrike-button", "kind": "slot", "x": 295, "y": 795, "width": 220, "height": 100 },
-        { "key": "reversal-button", "kind": "slot", "x": 25, "y": 900, "width": 220, "height": 58 },
-        { "key": "super-button", "kind": "slot", "x": 295, "y": 900, "width": 220, "height": 58 }
+        { "key": "charge-button", "kind": "slot", "x": 40, "y": 620, "width": 160, "height": 80 },
+        { "key": "special-button", "kind": "slot", "x": 40, "y": 720, "width": 160, "height": 80 },
+        { "key": "strike-button", "kind": "slot", "x": 270, "y": 610, "width": 140, "height": 70 },
+        { "key": "bait-button", "kind": "slot", "x": 200, "y": 750, "width": 140, "height": 70 },
+        { "key": "advance-button", "kind": "slot", "x": 340, "y": 750, "width": 140, "height": 70 },
+        { "key": "down-right-red-arrow", "kind": "image", "asset": "assets/down-right_red_sheet.webp", "x": 367, "y": 685, "width": 52, "height": 52 },
+        { "key": "left-blue-arrow", "kind": "image", "asset": "assets/left_blue_sheet.webp", "x": 328, "y": 759, "width": 52, "height": 52 },
+        { "key": "up-right-blue-arrow", "kind": "image", "asset": "assets/up-right_blue_sheet.webp", "x": 244, "y": 685, "width": 52, "height": 52 },
+        { "key": "cpu-odds", "kind": "slot", "x": 388, "y": 430, "width": 138, "height": 132 }
       ]
     },
     "round.between": {
@@ -76,10 +78,7 @@
         { "key": "advance-button", "hidden": true },
         { "key": "bait-button", "hidden": true },
         { "key": "charge-button", "hidden": true },
-        { "key": "fireball-button", "hidden": true },
-        { "key": "poweredStrike-button", "hidden": true },
-        { "key": "reversal-button", "hidden": true },
-        { "key": "super-button", "hidden": true },
+        { "key": "special-button", "hidden": true },
         { "key": "continue-button", "kind": "slot", "x": 384, "y": 410, "width": 192, "height": 96 }
       ],
       "portraitElements": []

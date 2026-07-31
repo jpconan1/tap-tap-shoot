@@ -11,9 +11,13 @@ import {
 } from './engine/moves.js';
 import { createRoundState, getPlayerLegalMoves, getPlayerResource } from './engine/gameState.js';
 import { resolveLocalTurn } from './engine/localMatch.js';
-import { getGameWinner as getEngineGameWinner, getResultLevel, isGameOver as isEngineGameOver, resolveRoundTimeout, startNextRound } from './engine/matchEngine.js';
+import { getGameWinner as getEngineGameWinner, getResultLevel, isGameOver as isEngineGameOver, resolveRoundTimeout, startNewGame, startNextRound } from './engine/matchEngine.js';
 import { resolveTurn } from './engine/resolveTurn.js';
-import { chooseRivalMove as chooseAiMove } from './engine/rivalAi.js';
+import {
+  chooseRivalMove as chooseAiMove,
+  getRivalMatchEquity,
+  getRivalMoveDistribution,
+} from './engine/rivalAi.js';
 import {
   getRpsPokerShowdownWinner,
   shouldPlayRpsPokerTopper,
@@ -55,6 +59,12 @@ import { OnlineFlowDirector } from './presentation/onlineFlowDirector.js';
 import { PresentationFlowDirector } from './presentation/presentationFlowDirector.js';
 import { LOCAL_FLOW_SEQUENCE } from './presentation/localFlowSequences.js';
 import { interpretOnlineSnapshot } from './presentation/onlineFlowSequences.js';
+import {
+  getOnlinePokerAnimationKind,
+  isCompleteOnlinePokerState,
+  localizeOnlinePokerEvents,
+  localizeOnlinePokerTransition,
+} from './onlinePokerState.js';
 import { GameFlowDirector } from './presentation/gameFlowDirector.js';
 import {
   getRpsPokerCommunityPresentation,
@@ -92,11 +102,19 @@ import { createVariantSelectScreen } from './presentation/variantSelectScreen.js
 import { createLobbyScreen } from './presentation/lobbyScreen.js';
 import { createPresentationLayers } from './presentation/presentationLayers.js';
 import { createRankedScreens } from './presentation/rankedScreens.js';
-import { TUTORIAL_INTRO_ALERTS, TUTORIAL_VARIANT_ID } from './tutorial.js';
+import {
+  getWholePercentageDistribution,
+  shouldShowCpuOdds,
+} from './presentation/cpuOddsPresentation.js';
+import {
+  getLocalStartingRoundWins,
+  getTutorialForcedOpponentMove,
+  TUTORIAL_INTRO_ALERTS,
+  TUTORIAL_VARIANT_ID,
+} from './tutorial.js';
 import { getResourcePresentation, shouldShowPickHistoryForVariant } from './variantPresentation.js';
 import { resolveReadyScene, resolveScene, swapScenePerspective } from './sceneResolver.js';
 import {
-  RANKED_VARIANT_SELECT_VARIANTS,
   VARIANT_SELECT_PAGE_SIZE,
   VARIANT_SELECT_VARIANTS,
 } from './variantSelectConfig.js';
@@ -306,19 +324,45 @@ const alertSystem = createAlertSystem({
 });
 
 function renderAlertGraphic(graphicId) {
-  if (graphicId !== 'gun-knife-fist-triangle') return null;
+  if (graphicId !== 'gun-knife-fist-triangle' && graphicId !== 'rps-gkf-comparison') return null;
+  const triangleMarkup = (moves) => `
+    <div class="gkf-triangle-graphic">
+      <canvas class="sprite-canvas gkf-triangle-arrow is-up-right" data-doodle="up-right_red" data-frame-width="128" data-frame-height="128" width="128" height="128" aria-hidden="true"></canvas>
+      <canvas class="sprite-canvas gkf-triangle-arrow is-down-right" data-doodle="down-right_red" data-frame-width="128" data-frame-height="128" width="128" height="128" aria-hidden="true"></canvas>
+      <canvas class="sprite-canvas gkf-triangle-arrow is-left" data-doodle="left_red" data-frame-width="128" data-frame-height="128" width="128" height="128" aria-hidden="true"></canvas>
+      <canvas class="sprite-canvas gkf-triangle-move is-fist" data-doodle="${moves.top}" data-frame-width="256" data-frame-height="128" width="256" height="128" aria-hidden="true"></canvas>
+      <canvas class="sprite-canvas gkf-triangle-move is-knife" data-doodle="${moves.left}" data-frame-width="256" data-frame-height="128" width="256" height="128" aria-hidden="true"></canvas>
+      <canvas class="sprite-canvas gkf-triangle-move is-gun" data-doodle="${moves.right}" data-frame-width="256" data-frame-height="128" width="256" height="128" aria-hidden="true"></canvas>
+    </div>
+  `;
   const graphic = document.createElement('div');
+  if (graphicId === 'rps-gkf-comparison') {
+    graphic.className = 'alert-box-graphic tutorial-triangle-comparison';
+    graphic.setAttribute('role', 'img');
+    graphic.setAttribute('aria-label', 'Gun Knife Fist is like Rock Paper Scissors');
+    graphic.innerHTML = `
+      <div class="tutorial-comparison-triangle">${triangleMarkup({
+        top: 'gun-knife-fist/fist_button',
+        left: 'gun-knife-fist/knife_button',
+        right: 'gun-knife-fist/gun_button',
+      })}</div>
+      <span class="tutorial-comparison-copy">is like...</span>
+      <div class="tutorial-comparison-triangle">${triangleMarkup({
+        top: 'rock-paper-scissors/rock_button',
+        left: 'rock-paper-scissors/paper_button',
+        right: 'rock-paper-scissors/scissors_button',
+      })}</div>
+    `;
+    return graphic;
+  }
   graphic.className = 'alert-box-graphic gkf-triangle-graphic';
   graphic.setAttribute('role', 'img');
   graphic.setAttribute('aria-label', 'Fist beats Gun, Gun beats Knife, and Knife beats Fist');
-  graphic.innerHTML = `
-    <canvas class="sprite-canvas gkf-triangle-arrow is-up-right" data-doodle="up-right_red" data-frame-width="128" data-frame-height="128" width="128" height="128" aria-hidden="true"></canvas>
-    <canvas class="sprite-canvas gkf-triangle-arrow is-down-right" data-doodle="down-right_red" data-frame-width="128" data-frame-height="128" width="128" height="128" aria-hidden="true"></canvas>
-    <canvas class="sprite-canvas gkf-triangle-arrow is-left" data-doodle="left_red" data-frame-width="128" data-frame-height="128" width="128" height="128" aria-hidden="true"></canvas>
-    <canvas class="sprite-canvas gkf-triangle-move is-fist" data-doodle="gun-knife-fist/fist_button" data-frame-width="256" data-frame-height="128" width="256" height="128" aria-hidden="true"></canvas>
-    <canvas class="sprite-canvas gkf-triangle-move is-knife" data-doodle="gun-knife-fist/knife_button" data-frame-width="256" data-frame-height="128" width="256" height="128" aria-hidden="true"></canvas>
-    <canvas class="sprite-canvas gkf-triangle-move is-gun" data-doodle="gun-knife-fist/gun_button" data-frame-width="256" data-frame-height="128" width="256" height="128" aria-hidden="true"></canvas>
-  `;
+  graphic.innerHTML = triangleMarkup({
+    top: 'gun-knife-fist/fist_button',
+    left: 'gun-knife-fist/knife_button',
+    right: 'gun-knife-fist/gun_button',
+  }).replace(/^\s*<div class="gkf-triangle-graphic">|<\/div>\s*$/g, '');
   return graphic;
 }
 
@@ -462,6 +506,9 @@ const variantSelectScreen = createVariantSelectScreen({
   onBack: returnToLobbyFromOpponentSelect,
   onCloseDetail: closeVariantDetail,
   detailRoot: modalRoot,
+  mountReadyWaitingOverlays,
+  mountBanAnimations,
+  onBanAnimationComplete: (variantId) => completedBanAnimationVariants.add(variantId),
 });
 const lobbyScreen = createLobbyScreen({
   app: screenRoot,
@@ -500,24 +547,16 @@ const lobbyScreen = createLobbyScreen({
 });
 const rankedScreens = createRankedScreens({
   app: screenRoot,
-  variants: RANKED_VARIANT_SELECT_VARIANTS,
   getSnapshot: () => rankedSnapshot,
   getDisplayName: () => rankedDisplayName,
-  isBanAnimationComplete: (variantId) => completedBanAnimationVariants.has(variantId),
-  markBanAnimationComplete: (variantId) => completedBanAnimationVariants.add(variantId),
   escapeHtml,
   getVariant: variantSelectScreen.getVariant,
-  renderVariantButton: variantSelectScreen.renderVariantButton,
   renderOpenCurtainBorder: variantSelectScreen.renderOpenCurtainBorder,
   renderStaticDoodle,
   getWinCounterDoodle,
   renderSheetButton,
   mountSpriteRenderers,
   mountReadyWaitingOverlays,
-  mountBanAnimations,
-  onLeave: leaveRanked,
-  onPickVariant: submitRankedVariantPick,
-  onShowVariantDetail: showRankedVariantDetail,
   onContinue: submitRankedContinue,
   onMainMenu: wipeToLobbyFromScoreboard,
 });
@@ -571,7 +610,7 @@ const localFlowDirector = new PresentationFlowDirector({
       clearLocalTurnChoice();
       requestMusicTrack('game');
       unlockSceneAudio();
-      resetRoundWins();
+      resetRoundWins(getLocalStartingRoundWins(localSessionKind));
       rankedClient.setPresence('playing_computer');
     },
     curtainSwap: (step) => playCurtainMenuTransition(() => {
@@ -927,6 +966,9 @@ function getGamePreloadDoodles() {
     'tutorial/continue_tutorial_button',
     'tutorial/next_slide_button',
     'tutorial/Prev_slide_button',
+    'tutorial/hp1',
+    'tutorial/hp2',
+    'tutorial/hp3',
     'quit_button',
     'leave_button',
     'stop_button',
@@ -971,7 +1013,6 @@ function getGamePreloadDoodles() {
     'variant_play_button',
     'select_button',
     ...COMPUTER_VARIANTS.map((variant) => variant.buttonDoodle),
-    ...RANKED_VARIANT_SELECT_VARIANTS.map((variant) => variant.buttonDoodle),
     ...getMoveButtonDoodlesForPreload(),
     ...Object.values(MOVE_ICON_DOODLES),
     ...getResourceDoodlesForPreload(),
@@ -1569,7 +1610,7 @@ function render() {
   const legalMoves = new Set(getCurrentLegalMoves());
 
   if (playMode === 'online' && rankedSnapshot?.phase === 'variantSelection') {
-    rankedScreens.renderVariantSelection();
+    renderOnlineVariantSelection();
     return;
   }
 
@@ -1596,7 +1637,6 @@ function render() {
 
     <section class="controls">
       ${renderSkipGameButton()}
-      ${renderResetButton()}
     </section>
     ${renderRankedDisconnectNotice()}
   `;
@@ -1607,7 +1647,6 @@ function render() {
   app.querySelector('[data-action="rematch"]')?.addEventListener('click', restartGame);
   app.querySelector('[data-action="quit"]')?.addEventListener('click', quitLocalGame);
   app.querySelector('[data-action="skip-game"]')?.addEventListener('click', skipRankedGame);
-  app.querySelector('[data-action="reset"]')?.addEventListener('click', restartGame);
   app.querySelectorAll('[data-test-opponent-move]').forEach((button) => {
     button.addEventListener('click', () => submitTestOpponentMove(button.dataset.testOpponentMove));
   });
@@ -1676,12 +1715,12 @@ function renderLayoutGameScreen(legalMoves) {
         ${renderLayoutPickHistorySlots('p1')}
         ${renderLayoutPickHistorySlots('p2')}
         ${renderLayoutMoveControls(legalMoves)}
+        ${renderCpuOdds()}
         ${renderLayoutSlot('rules-button', renderGameplayRulesButton(), 'gameplay-rules-button-slot')}
         ${renderTestOpponentControls()}
         ${renderReadyWaitingOverlay()}
         <section class="controls layout-controls">
           ${renderSkipGameButton()}
-          ${renderResetButton()}
         </section>
       </div>
     </section>
@@ -1726,6 +1765,7 @@ function renderRpsRpgHud() {
 
 function renderRpsPokerHud() {
   if (getCurrentVariantId() !== VARIANT_IDS.rpsPoker) return '';
+  if (playMode === 'online' && !isCompleteOnlinePokerState(state)) return '';
   const legal = getPlayerLegalMoves(state, 'p1');
   const wagers = legal.filter((move) => /^(bet|raise):\d+$/.test(move)).map((move) => Number(move.split(':')[1]));
   const min = wagers.length ? Math.min(...wagers) : 1;
@@ -1779,10 +1819,15 @@ function renderKitchenSinkHud() {
 function renderKitchenPlayerState(playerId) {
   const hp = Math.max(0, state.hp?.[playerId] ?? 3);
   const bars = Math.max(0, getPlayerResource(state.players[playerId]));
+  const positionLabel = state.position === 'neutral'
+    ? 'NEUTRAL'
+    : state.position === `${playerId}-center`
+      ? 'HAS CENTER'
+      : 'CORNERED';
   const glyphs = (filled, mark) => Array.from({ length: 3 }, (_, index) => index < filled ? mark : '.').join('  ');
   return `
     <div class="kitchen-player-state">
-      <strong>${playerId.toUpperCase()}</strong>
+      <strong>${playerId.toUpperCase()} · ${positionLabel}</strong>
       <span>HP&nbsp;&nbsp;${glyphs(hp, '=')}</span>
       <span>BAR&nbsp;${glyphs(bars, 'X')}</span>
       ${bars === 3 ? '<em>SUPER AVAILABLE</em>' : ''}
@@ -1798,16 +1843,11 @@ function installLayoutActionHandlers() {
   app.querySelector('[data-action="rematch"]')?.addEventListener('click', restartGame);
   app.querySelector('[data-action="quit"]')?.addEventListener('click', quitLocalGame);
   app.querySelector('[data-action="skip-game"]')?.addEventListener('click', skipRankedGame);
-  app.querySelector('[data-action="reset"]')?.addEventListener('click', restartGame);
   app.querySelector('[data-action="show-rules"]')?.addEventListener('click', openGameplayRules);
   app.querySelector('[data-action="dismiss-rules"]')?.addEventListener('click', closeGameplayRules);
   app.querySelectorAll('[data-test-opponent-move]').forEach((button) => {
     button.addEventListener('click', () => submitTestOpponentMove(button.dataset.testOpponentMove));
   });
-}
-
-function renderResetButton() {
-  return playMode === 'online' ? '' : '<button class="ghost" data-action="reset">Reset</button>';
 }
 
 function renderGameplayRulesButton() {
@@ -2021,6 +2061,35 @@ function renderLayoutMoveControls(legalMoves) {
   `;
 }
 
+function renderCpuOdds() {
+  if (!shouldShowCpuOdds({ playMode, turnPhase, status: state.status })) {
+    return '';
+  }
+
+  const policyState = { ...state, roundWins };
+  const odds = getWholePercentageDistribution(
+    getRivalMoveDistribution(policyState, variantDifficultyToggleState),
+  );
+  if (!odds.length) return '';
+  const equity = getRivalMatchEquity(policyState, variantDifficultyToggleState);
+
+  const markup = `
+    <aside class="cpu-odds" aria-label="Computer move odds">
+      <strong>CPU ODDS</strong>
+      ${odds.map(({ moveId, percentage }) => `
+        <span><span>${escapeHtml(getMoveLabel(moveId))}</span><b>${percentage}%</b></span>
+      `).join('')}
+      ${equity ? `
+        <span class="cpu-match-equity">
+          <span>MATCH EQUITY</span>
+          <b>YOU ${Math.round(equity.p1 * 100)}% · CPU ${Math.round(equity.p2 * 100)}%</b>
+        </span>
+      ` : ''}
+    </aside>
+  `;
+  return renderLayoutSlot('cpu-odds', markup, 'cpu-odds-slot');
+}
+
 function renderLayoutMoveArrows() {
   if (turnPhase === 'round-over') {
     return '';
@@ -2037,6 +2106,7 @@ function renderLayoutMoveArrows() {
     ${renderLayoutSlot('up-blue-arrow-2', renderStaticDoodle('up_blue', 128, 128, 'move-arrow'), 'move-arrow-slot')}
     ${renderLayoutSlot('down-right-blue-arrow', renderStaticDoodle('down-right_blue', 128, 128, 'move-arrow'), 'move-arrow-slot')}
     ${renderLayoutSlot('left-blue-arrow', renderStaticDoodle('left_blue', 128, 128, 'move-arrow'), 'move-arrow-slot')}
+    ${renderLayoutSlot('up-right-blue-arrow', renderStaticDoodle('up-right_blue', 128, 128, 'move-arrow'), 'move-arrow-slot')}
     ${renderLayoutSlot('stab-to-duck-arrow', renderStaticDoodle('stab-to-duck_arrow', 128, 128, 'move-arrow'), 'move-arrow-slot')}
     ${renderLayoutSlot('reload-to-stab-arrow', renderStaticDoodle('reload-to-stab_arrow', 128, 128, 'move-arrow'), 'move-arrow-slot')}
     ${renderLayoutSlot('duck-to-shoot-arrow', renderStaticDoodle('duck-to-shoot_arrow', 128, 128, 'move-arrow'), 'move-arrow-slot')}
@@ -2061,24 +2131,41 @@ function renderLayoutActionButtons(legalMoves) {
     );
   }
 
-  const slottedButtons = getActiveMoveIds()
+  const activeMoveIds = getActiveMoveIds();
+  const kitchenSinkSpecials = new Set(['fireball', 'poweredStrike', 'reversal']);
+  const displayedMoveIds = getCurrentVariantId() === VARIANT_IDS.kitchenSink
+    ? activeMoveIds.filter((moveId) => (
+      (!kitchenSinkSpecials.has(moveId) && !['charge', 'super'].includes(moveId))
+      || legalMoves.has(moveId)
+    ))
+    : activeMoveIds;
+  const slottedButtons = displayedMoveIds
     .map((moveId) => {
       const pokerCard = getCurrentVariantId() === VARIANT_IDS.rpsPoker
         && Boolean(getRpsPokerMoveCardDoodle(moveId));
       const slotClass = pokerCard
         ? `move-button-slot rps-poker-card-slot rps-poker-card-${moveId}`
         : 'move-button-slot';
+      const slotId = getCurrentVariantId() === VARIANT_IDS.kitchenSink
+        ? kitchenSinkButtonSlot(moveId)
+        : `${moveId}-button`;
       return renderLayoutSlot(
-        `${moveId}-button`,
+        slotId,
         renderMoveButton(MOVES[moveId], isDisplayedMoveLegal(moveId, legalMoves)),
         slotClass,
       );
     })
     .join('');
 
-  return slottedButtons || getActiveMoveIds()
+  return slottedButtons || displayedMoveIds
     .map((moveId) => renderMoveButton(MOVES[moveId], isDisplayedMoveLegal(moveId, legalMoves)))
     .join('');
+}
+
+function kitchenSinkButtonSlot(moveId) {
+  if (['fireball', 'poweredStrike', 'reversal'].includes(moveId)) return 'special-button';
+  if (moveId === 'super') return 'charge-button';
+  return `${moveId}-button`;
 }
 
 function isDisplayedMoveLegal(moveId, legalMoves) {
@@ -2790,6 +2877,58 @@ function playAudioToggleSound() {
   unlockSceneAudio();
 }
 
+function renderOnlineVariantSelection() {
+  const snapshot = rankedSnapshot;
+  const picks = snapshot?.variantPicks ?? snapshot?.bans ?? {};
+  const pickedVariants = new Set(Object.values(picks));
+  const bannedVariants = new Set(snapshot?.bannedVariants ?? []);
+  const playerPick = picks[snapshot?.playerKey];
+  const isTiebreakerBan = snapshot?.variantSelectionRound === 2;
+  const playerBans = snapshot?.variantBans?.[snapshot?.playerKey] ?? [];
+  const banQuota = snapshot?.variantBanQuota ?? 3;
+  const acceptedBans = new Set(Object.values(snapshot?.variantBans ?? {}).flat());
+  const playedVariants = new Set((snapshot?.gameResults ?? []).map((result) => result.variantId));
+  const firstPickedVariant = picks[snapshot?.variantPickOrder?.[0]];
+  const header = isTiebreakerBan
+    ? { file: 'variant_screen/ban_variant_header_sheet.webp', width: 1200, height: 225, label: 'Ban variant' }
+    : { file: 'variant_screen/pick_variant_header_sheet.webp', width: 1258, height: 225, label: 'Pick variant' };
+
+  variantSelectScreen.render({
+    mode: 'online',
+    header,
+    className: isTiebreakerBan ? 'tiebreaker-ban-stage' : '',
+    variants: COMPUTER_VARIANTS.map((variant) => {
+      const picked = isTiebreakerBan ? acceptedBans.has(variant.id) : pickedVariants.has(variant.id);
+      const banned = bannedVariants.has(variant.id);
+      const showBanMark = isTiebreakerBan && (
+        playedVariants.has(variant.id)
+        || completedBanAnimationVariants.has(variant.id)
+      );
+      return {
+        ...variant,
+        state: {
+          available: !picked && !banned,
+          picked,
+          banned,
+          disabled: isTiebreakerBan
+            ? playerBans.length >= banQuota || picked || banned
+            : Boolean(playerPick) || picked || banned,
+          tiebreakerBan: isTiebreakerBan,
+          showBanMark,
+          banMark: showBanMark ? renderStaticDoodle('ban-animation/x', 300, 256, 'ranked-ban-mark') : '',
+          showBanAnimation: isTiebreakerBan && picked && !showBanMark,
+          showReady: !isTiebreakerBan && firstPickedVariant === variant.id,
+        },
+      };
+    }),
+    exitAction: { label: 'Quit', callback: leaveRanked },
+    waitingMessage: isTiebreakerBan && playerBans.length >= banQuota
+      ? 'Waiting for your opponent'
+      : '',
+    onSelect: isTiebreakerBan ? submitRankedVariantPick : showRankedVariantDetail,
+  });
+}
+
  async function showVariantDetail(variantId, sourceButton) {
   if (isTransitioning || variantDetailMenu) {
     return;
@@ -3299,7 +3438,7 @@ function getLocalTurnChoiceKey() {
 
 function queueLocalComputerMove() {
   const choice = getOrCreateLocalTurnChoice();
-  const moveId = chooseAiMove(state, Math.random, variantDifficultyToggleState);
+  const moveId = chooseAiMove({ ...state, roundWins }, Math.random, variantDifficultyToggleState);
   const command = localTurnController.submitMove('p2', moveId, getPlayerLegalMoves(state, 'p2'));
   if (!choice || !['waiting', 'complete'].includes(command.status)) return;
   handleLocalMoveQueued('p2');
@@ -3480,7 +3619,7 @@ async function loseLocalRoundOnTimeout(playerId) {
   }
 }
 
- async function restartGame() {
+async function restartGame() {
   if (playMode === 'online') {
     leaveRanked();
     return;
@@ -3494,10 +3633,10 @@ async function loseLocalRoundOnTimeout(playerId) {
     restartMusicTrackOnce('title', 'game');
   }
   unlockSceneAudio();
-  resetRoundWins();
+  resetRoundWins(getLocalStartingRoundWins(localSessionKind));
   loopToken += 1;
   isTransitioning = true;
-  await playWipeTransition(setNewRound);
+  await playWipeTransition(setNewGame);
   isTransitioning = false;
   render();
   beginOpeningCues();
@@ -3575,7 +3714,7 @@ async function closeVariantDetail() {
   if (menu.mode === 'online' && rankedSnapshot?.phase === 'variantSelection') {
     variantSelectScreen.restoreButton(menu.selectedButton);
     onlineFlowDirector.consumeAnimations();
-    rankedScreens.renderVariantSelection();
+    renderOnlineVariantSelection();
     await onlineFlowDirector.reveal();
   } else {
     await openCurtainWipe(menu.curtain, playCurtainOpenAudio);
@@ -3714,11 +3853,8 @@ async function quitLocalGame() {
   render();
 }
 
-function resetRoundWins() {
-  roundWins = {
-    p1: 0,
-    p2: 0,
-  };
+function resetRoundWins(initialRoundWins = { p1: 0, p2: 0 }) {
+  roundWins = { ...initialRoundWins };
   syncMusicTopper();
 }
 
@@ -3792,6 +3928,12 @@ function setNewRound() {
     ? getRpsPokerStandoffPresentation()
     : getIdleStagePresentation();
   render();
+}
+
+function setNewGame() {
+  const game = startNewGame({ variantId: selectedVariantId, roundWins });
+  state = game.roundState;
+  setNewRound();
 }
 
 function setNewRoundAtReloadScene() {
@@ -4014,6 +4156,7 @@ function interruptLocalPlayForRankedMatch() {
   isTransitioning = false;
   pendingSuperAnimation = null;
   p1QueuedMove = null;
+  clearRpsPokerPresentationState();
 }
 
 async function drainRankedSnapshots() {
@@ -4065,6 +4208,15 @@ async function processRankedSnapshot(snapshot, transition = null) {
     return;
   }
 
+  if (
+    transition?.transitionId === 'turn-revealed'
+    && (snapshot.currentVariantId ?? snapshot.variantId) === VARIANT_IDS.rpsPoker
+    && snapshot.pokerTransition
+  ) {
+    await playOnlineRpsPokerTransition(snapshot, previousPhase);
+    return;
+  }
+
   if (transition) {
     await wipeToRankedSnapshot(snapshot, previousPhase);
     return;
@@ -4108,7 +4260,129 @@ async function wipeToRankedSnapshot(snapshot, previousPhase) {
   }
 }
 
+async function playOnlineRpsPokerTransition(snapshot, previousPhase) {
+  const transition = localizeOnlinePokerTransition(snapshot.pokerTransition, snapshot.playerKey);
+  if (!transition) {
+    commitRankedSnapshot(snapshot, previousPhase);
+    render();
+    return;
+  }
+
+  const pokerEvents = localizeOnlinePokerEvents(snapshot.pokerEvents, snapshot.playerKey);
+  const animationKind = getOnlinePokerAnimationKind(pokerEvents, transition.kind);
+  isTransitioning = true;
+  commitRankedSnapshot(snapshot, previousPhase);
+  const previous = transition.previous;
+  const next = transition.next;
+  if (!previous || !next) {
+    clearRpsPokerPresentationState();
+    isTransitioning = false;
+    render();
+    return;
+  }
+
+  if (animationKind === 'lock-complete') {
+    const earlyPlayerId = transition.firstLocker === 'p2' ? 'p2' : 'p1';
+    pokerReadyCards = {
+      earlyPlayerId,
+      latePlayerId: earlyPlayerId === 'p1' ? 'p2' : 'p1',
+      animateLate: true,
+    };
+    pokerTurnActorOverride = 'center';
+    render();
+    await waitMsWithoutToken(RPS_POKER_READY_DURATION_MS);
+    pokerReadyCards.animateLate = false;
+    stagePresentation = getRpsPokerCommunityPresentation(transition.community, true);
+    playDelayedRpsPokerFlipAudio();
+    render();
+    await waitMsWithoutToken(RPS_POKER_FLIP_DURATION_MS);
+    stagePresentation = getRpsPokerCommunityPresentation(transition.community, false);
+    pokerTurnTransition = { from: 'center', to: next.actor };
+    render();
+    await waitMsWithoutToken(RPS_POKER_TURN_CENTER_DURATION_MS);
+  } else if (['bet', 'raise', 'check'].includes(animationKind)) {
+    if (animationKind === 'check') playOneShotAudio(RPS_POKER_CHECK_AUDIO);
+    else playOneShotAudio(RPS_POKER_CHIP_AUDIO);
+    stagePresentation = getRpsPokerCommunityPresentation(transition.community, false);
+    pokerTurnTransition = { from: previous.actor, to: next.actor };
+    render();
+    await waitMsWithoutToken(RPS_POKER_TURN_SWING_DURATION_MS);
+  } else if (animationKind === 'fold' || animationKind === 'showdown') {
+    const counts = getRpsPokerPotCounts(previous);
+    pokerChipTransfer = {
+      stacks: { ...previous.stacks },
+      counts,
+      locked: { ...(transition.revealedLocks ?? {}) },
+    };
+    stagePresentation = getRpsPokerCommunityPresentation(transition.community, false);
+    pokerReadyCards = animationKind === 'showdown'
+      ? {
+        earlyPlayerId: 'p1',
+        latePlayerId: 'p2',
+        revealedMoves: { ...transition.revealedLocks },
+        animateReveal: true,
+      }
+      : {
+        earlyPlayerId: 'p1',
+        latePlayerId: 'p2',
+        hiddenPlayerId: transition.actor,
+      };
+    if (animationKind === 'showdown') playDelayedRpsPokerFlipAudio();
+    render();
+    await waitMsWithoutToken(RPS_POKER_FLIP_DURATION_MS);
+    if (pokerReadyCards) pokerReadyCards.animateReveal = false;
+    await animateOnlinePokerPayout(transition.payoutWinner);
+
+    if (transition.winner) {
+      pokerChipTransfer = null;
+      pokerReadyCards = null;
+      stagePresentation = getRpsPokerWinnerPresentation(transition.winner);
+      render();
+      await waitMsWithoutToken(2 * BEAT_MS);
+    } else if (next.phase === 'lock') {
+      pokerChipTransfer = null;
+      pokerReadyCards = null;
+      await playRpsPokerDeal({
+        isActive: () => playMode === 'online' && screen === 'playing',
+        renderPresentation: (presentation) => {
+          stagePresentation = presentation;
+          render();
+        },
+        onDeal: () => playOneShotAudio(RPS_POKER_DEAL_AUDIO),
+        waitMilliseconds: waitMsWithoutToken,
+      });
+      stagePresentation = getRpsPokerIdlePresentation();
+    }
+  }
+
+  pokerTurnTransition = null;
+  pokerTurnActorOverride = null;
+  isTransitioning = false;
+  render();
+}
+
+async function animateOnlinePokerPayout(winner = null) {
+  if (!pokerChipTransfer) return;
+  let remaining = pokerChipTransfer.counts.p1 + pokerChipTransfer.counts.p2;
+  let recipient = 'p1';
+  while (remaining > 0) {
+    removeOnePokerPotChip();
+    const paidPlayer = winner ?? recipient;
+    pokerChipTransfer.stacks[paidPlayer] += 1;
+    recipient = recipient === 'p1' ? 'p2' : 'p1';
+    remaining -= 1;
+    playOneShotAudio(RPS_POKER_CHIP_AUDIO);
+    render();
+    await waitMsWithoutToken(110);
+  }
+}
+
 function commitRankedSnapshot(snapshot, previousPhase = rankedSnapshot?.phase) {
+  const previousVariantId = rankedSnapshot?.currentVariantId ?? rankedSnapshot?.variantId;
+  const nextVariantId = snapshot.currentVariantId ?? snapshot.variantId;
+  if (previousVariantId && previousVariantId !== nextVariantId) {
+    clearRpsPokerPresentationState();
+  }
   rankedSnapshot = snapshot;
   rankedReadyWaiting = getRankedReadyWaitingFromSnapshot(snapshot);
   screen = screen === 'scoreboard'
@@ -4261,12 +4535,16 @@ function getRankedChoosingPresentation(snapshot) {
 function getLocalStateFromRankedSnapshot(snapshot) {
   const opponentKey = snapshot.opponentKey;
   const playerKey = snapshot.playerKey;
+  const variantState = localizeRankedVariantState(snapshot.variantState ?? {}, playerKey);
 
   return {
+    ...variantState,
     variantId: snapshot.currentVariantId ?? snapshot.variantId ?? DEFAULT_VARIANT_ID,
     turn: snapshot.round?.turn ?? 0,
-    status: snapshot.phase === 'gameOver' ? 'finished' : 'playing',
-    winner: snapshot.winner === playerKey ? 'p1' : snapshot.winner === opponentKey ? 'p2' : null,
+    status: snapshot.round?.status ?? (snapshot.phase === 'gameOver' ? 'finished' : 'playing'),
+    winner: snapshot.round?.winner === playerKey || snapshot.winner === playerKey
+      ? 'p1'
+      : snapshot.round?.winner === opponentKey || snapshot.winner === opponentKey ? 'p2' : null,
     players: {
       p1: {
         resource: snapshot.players[playerKey]?.resource ?? snapshot.players[playerKey]?.bullets ?? 0,
@@ -4283,6 +4561,29 @@ function getLocalStateFromRankedSnapshot(snapshot) {
     },
     history: snapshot.round?.lastTurn ? [snapshot.round.lastTurn] : [],
   };
+}
+
+function localizeRankedVariantState(value, playerKey) {
+  if (Array.isArray(value)) {
+    return value.map((item) => localizeRankedVariantState(item, playerKey));
+  }
+  if (!value || typeof value !== 'object') {
+    if (playerKey !== 'p2') return value;
+    if (value === 'p1') return 'p2';
+    if (value === 'p2') return 'p1';
+    if (typeof value === 'string' && value.startsWith('p1-')) return `p2-${value.slice(3)}`;
+    if (typeof value === 'string' && value.startsWith('p2-')) return `p1-${value.slice(3)}`;
+    return value;
+  }
+
+  const localized = {};
+  for (const [key, item] of Object.entries(value)) {
+    const localKey = playerKey === 'p2'
+      ? key === 'p1' ? 'p2' : key === 'p2' ? 'p1' : key
+      : key;
+    localized[localKey] = localizeRankedVariantState(item, playerKey);
+  }
+  return localized;
 }
 
 function getLocalRoundWinsFromRankedSnapshot(snapshot) {
@@ -4402,6 +4703,10 @@ function getLocalTurnResultFromRankedSnapshot(snapshot) {
 }
 
 function submitRankedMove(moveId) {
+  if (getCurrentVariantId() === VARIANT_IDS.rpsPoker && ['bet', 'raise'].includes(moveId)) {
+    const wagers = getCurrentLegalMoves().filter((legalMove) => legalMove.startsWith(`${moveId}:`));
+    moveId = wagers.find((legalMove) => Number(legalMove.split(':')[1]) === pokerWagerAmount) ?? wagers[0];
+  }
   const isReadyPlayer = rankedSnapshot?.phase === 'choosing'
     && !rankedSnapshot.readyPlayerKey
     && !rankedSnapshot.waitingPlayerKey;
@@ -4488,6 +4793,14 @@ function resetRankedSession() {
   matchmakingStatus = 'idle';
   turnPhase = 'idle';
   p1QueuedMove = null;
+  clearRpsPokerPresentationState();
+}
+
+function clearRpsPokerPresentationState() {
+  pokerReadyCards = null;
+  pokerTurnTransition = null;
+  pokerTurnActorOverride = null;
+  pokerChipTransfer = null;
 }
 
 function renderRankedDisconnectNotice() {
@@ -5026,7 +5339,17 @@ function resolveQueuedTurn({ shouldRender = true } = {}) {
     state,
     queuedPlayerMove: requestedPlayerMove,
     queuedOpponentMove: localTurnController.choice?.moves.p2,
-    chooseOpponentMove: (currentState) => chooseAiMove(currentState, Math.random, variantDifficultyToggleState),
+    getForcedOpponentMove: (playerMove) => getTutorialForcedOpponentMove({
+      sessionKind: localSessionKind,
+      variantId: getCurrentVariantId(),
+      roundWins,
+      playerMove,
+    }),
+    chooseOpponentMove: (currentState) => chooseAiMove(
+      { ...currentState, roundWins },
+      Math.random,
+      variantDifficultyToggleState,
+    ),
     roundWins,
   });
   const { p1: p1Move, p2: p2Move } = resolved.moves;

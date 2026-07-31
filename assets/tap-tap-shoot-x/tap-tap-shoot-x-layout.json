@@ -510,9 +510,12 @@
           "y": 405,
           "width": 64,
           "height": 64
-        }
+        },
+        { "key": "cpu-odds", "kind": "slot", "x": 810, "y": 382, "width": 138, "height": 132 }
       ],
-      "portraitElements": []
+      "portraitElements": [
+        { "key": "cpu-odds", "kind": "slot", "x": 388, "y": 430, "width": 138, "height": 132 }
+      ]
     },
     "playing.disadvantaged": {
       "name": "Disadvantaged",
@@ -925,9 +928,12 @@
           "y": 338,
           "width": 96,
           "height": 96
-        }
+        },
+        { "key": "cpu-odds", "kind": "slot", "x": 810, "y": 382, "width": 138, "height": 132 }
       ],
-      "portraitElements": []
+      "portraitElements": [
+        { "key": "cpu-odds", "kind": "slot", "x": 388, "y": 430, "width": 138, "height": 132 }
+      ]
     },
     "round.between": {
       "name": "Between rounds",

@@ -1,4 +1,5 @@
 import { getServerSocketUrl } from './serverUrl.js';
+import { pokerCommandFromMove } from './engine/variants/rpsPokerDomain.js';
 
 const GUEST_SESSION_TOKEN_KEY = 'tapTapShootX.guestSessionToken';
 
@@ -87,22 +88,37 @@ export class RankedClient {
       return false;
     }
 
-    this.send({
-      type: 'submitMove',
-      matchId: snapshot.matchId,
-      moveId,
-    });
+    if ((snapshot.currentVariantId ?? snapshot.variantId) === 'rpsPoker') {
+      this.send({
+        type: 'submitPokerCommand',
+        matchId: snapshot.matchId,
+        revision: snapshot.revision,
+        command: pokerCommandFromMove(moveId),
+      });
+    } else {
+      this.send({
+        type: 'submitMove',
+        matchId: snapshot.matchId,
+        revision: snapshot.revision,
+        moveId,
+      });
+    }
     return true;
   }
 
   submitVariantPick(snapshot, variantId) {
+    const isTiebreakerBan = snapshot?.variantSelectionRound === 2;
+    const localBans = snapshot?.variantBans?.[snapshot?.playerKey] ?? [];
+    const banQuota = snapshot?.variantBanQuota ?? 3;
     if (
       !this.socket ||
       this.socket.readyState !== WebSocket.OPEN ||
       !snapshot ||
       snapshot.phase !== 'variantSelection' ||
-      snapshot.variantPicks?.[snapshot.playerKey] ||
+      (!isTiebreakerBan && snapshot.variantPicks?.[snapshot.playerKey]) ||
+      (isTiebreakerBan && localBans.length >= banQuota) ||
       Object.values(snapshot.variantPicks ?? snapshot.bans ?? {}).includes(variantId) ||
+      Object.values(snapshot.variantBans ?? {}).flat().includes(variantId) ||
       (snapshot.bannedVariants ?? []).includes(variantId)
     ) {
       return false;

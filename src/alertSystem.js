@@ -5,9 +5,10 @@ const VIEWPORTS = Object.freeze({
 const BOX_MIN_SIZE = 96;
 const BUTTON_FRAME_WIDTH = 256;
 const BUTTON_FRAME_HEIGHT = 128;
-const BODY_STYLES = new Set(['body', 'bullet', 'lead', 'emphasis', 'header', 'subheader']);
+const BODY_STYLES = new Set(['body', 'body-left', 'bullet', 'lead', 'emphasis', 'header', 'subheader', 'subheader-spaced']);
 const INTERACTION_MODES = new Set(['modal', 'guided']);
 const ESCAPE_ACTIONS = new Set(['none', 'cancel', 'next']);
+const OUTSIDE_ACTIONS = new Set(['none', 'next']);
 
 function assertObject(value, path) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
@@ -63,6 +64,54 @@ function normalizeBody(body, path) {
       return Object.freeze({ text: entry, style: 'body' });
     }
     assertObject(entry, entryPath);
+    if (typeof entry.text === 'string' && entry.text.trim() && Array.isArray(entry.aside) && entry.aside.length) {
+      const aside = entry.aside.map((part, partIndex) => {
+        const partPath = `${entryPath}.aside[${partIndex}]`;
+        assertObject(part, partPath);
+        if (typeof part.text === 'string' && part.text.trim()) {
+          const tone = part.tone ?? 'default';
+          if (!['default', 'red'].includes(tone)) {
+            throw new RangeError(`${partPath}.tone must be default or red.`);
+          }
+          return Object.freeze({ text: part.text, tone });
+        }
+        if (typeof part.doodle !== 'string' || !part.doodle.trim()) {
+          throw new TypeError(`${partPath} must contain non-empty text or doodle.`);
+        }
+        return Object.freeze({
+          doodle: part.doodle,
+          width: positiveNumber(part.width, `${partPath}.width`),
+          height: positiveNumber(part.height, `${partPath}.height`),
+        });
+      });
+      return Object.freeze({
+        text: entry.text,
+        style: 'bullet',
+        aside: Object.freeze(aside),
+      });
+    }
+    if (Array.isArray(entry.parts) && entry.parts.length) {
+      const parts = entry.parts.map((part, partIndex) => {
+        const partPath = `${entryPath}.parts[${partIndex}]`;
+        assertObject(part, partPath);
+        if (typeof part.text === 'string' && part.text.trim()) {
+          const tone = part.tone ?? 'default';
+          if (!['default', 'red'].includes(tone)) {
+            throw new RangeError(`${partPath}.tone must be default or red.`);
+          }
+          return Object.freeze({ text: part.text, tone });
+        }
+        if (typeof part.doodle !== 'string' || !part.doodle.trim()) {
+          throw new TypeError(`${partPath} must contain non-empty text or doodle.`);
+        }
+        return Object.freeze({
+          doodle: part.doodle,
+          width: positiveNumber(part.width, `${partPath}.width`),
+          height: positiveNumber(part.height, `${partPath}.height`),
+        });
+      });
+      return Object.freeze({ parts: Object.freeze(parts), label: entry.label ?? '' });
+    }
     if (typeof entry.graphic === 'string' && entry.graphic.trim()) {
       return Object.freeze({ graphic: entry.graphic });
     }
@@ -71,7 +120,7 @@ function normalizeBody(body, path) {
     }
     const style = entry.style ?? 'body';
     if (!BODY_STYLES.has(style)) {
-      throw new RangeError(`${entryPath}.style must be body, bullet, lead, emphasis, header, or subheader.`);
+      throw new RangeError(`${entryPath}.style must be body, body-left, bullet, lead, emphasis, header, subheader, or subheader-spaced.`);
     }
     return Object.freeze({ text: entry.text, style });
   }));
@@ -84,10 +133,15 @@ function normalizeNavigation(navigation, path) {
   if (!ESCAPE_ACTIONS.has(escape)) {
     throw new RangeError(`${path}.escape must be none, cancel, or next.`);
   }
+  const outside = value.outside ?? 'none';
+  if (!OUTSIDE_ACTIONS.has(outside)) {
+    throw new RangeError(`${path}.outside must be none or next.`);
+  }
   return Object.freeze({
     back: value.back !== false,
     next: value.next !== false,
     escape,
+    outside,
   });
 }
 
@@ -168,7 +222,77 @@ export function resolveHighlightGeometry(highlight, viewportMode = 'landscape') 
 }
 
 function renderBody(body, renderGraphic) {
+  const hasAsideRules = body.some((line) => line.aside);
+  const asideRuleCount = body.filter((line) => line.aside).length;
+  let asideRuleIndex = 0;
+  let trailingBulletIndex = 0;
   return body.map((line) => {
+    if (line.aside) {
+      asideRuleIndex += 1;
+      const row = document.createElement('div');
+      row.className = 'alert-box-body-row alert-box-body-row-with-aside';
+      const bullet = document.createElement('canvas');
+      bullet.className = 'sprite-canvas alert-box-body-bullet';
+      bullet.dataset.doodle = 'arrow-bullet-point';
+      bullet.dataset.frameWidth = '64';
+      bullet.dataset.frameHeight = '64';
+      bullet.width = 64;
+      bullet.height = 64;
+      bullet.setAttribute('aria-hidden', 'true');
+      const paragraph = document.createElement('p');
+      paragraph.className = 'alert-box-line alert-box-line-bullet';
+      paragraph.textContent = line.text;
+      const copy = document.createElement('div');
+      copy.className = 'alert-box-rule-copy';
+      copy.style.gridRow = String(asideRuleIndex + 2);
+      copy.append(bullet, paragraph);
+      const aside = document.createElement('div');
+      aside.className = 'alert-box-rule-art';
+      aside.style.gridRow = String(asideRuleIndex + 1);
+      aside.setAttribute('aria-hidden', 'true');
+      line.aside.forEach((part) => {
+        if (part.text) {
+          const text = document.createElement('span');
+          text.textContent = part.text;
+          aside.append(text);
+          return;
+        }
+        const doodle = document.createElement('canvas');
+        doodle.className = 'sprite-canvas alert-box-inline-art';
+        doodle.dataset.doodle = part.doodle;
+        doodle.dataset.frameWidth = String(part.width);
+        doodle.dataset.frameHeight = String(part.height);
+        doodle.width = part.width;
+        doodle.height = part.height;
+        aside.append(doodle);
+      });
+      row.append(copy, aside);
+      return row;
+    }
+    if (line.parts) {
+      const row = document.createElement('div');
+      row.className = 'alert-box-rich-line';
+      if (line.label) row.setAttribute('aria-label', line.label);
+      line.parts.forEach((part) => {
+        if (part.text) {
+          const text = document.createElement('span');
+          text.textContent = part.text;
+          if (part.tone === 'red') text.className = 'alert-box-inline-red';
+          row.append(text);
+          return;
+        }
+        const doodle = document.createElement('canvas');
+        doodle.className = 'sprite-canvas alert-box-inline-art';
+        doodle.dataset.doodle = part.doodle;
+        doodle.dataset.frameWidth = String(part.width);
+        doodle.dataset.frameHeight = String(part.height);
+        doodle.width = part.width;
+        doodle.height = part.height;
+        doodle.setAttribute('aria-hidden', 'true');
+        row.append(doodle);
+      });
+      return row;
+    }
     if (line.graphic) {
       const graphic = renderGraphic?.(line.graphic);
       if (graphic) return graphic;
@@ -192,6 +316,11 @@ function renderBody(body, renderGraphic) {
       bullet.height = 64;
       bullet.setAttribute('aria-hidden', 'true');
       row.append(bullet, paragraph);
+      if (hasAsideRules) {
+        row.classList.add('alert-box-trailing-rule');
+        row.style.gridRow = String(asideRuleCount + 3 + trailingBulletIndex);
+        trailingBulletIndex += 1;
+      }
       return row;
     }
     return paragraph;
@@ -251,6 +380,7 @@ export function createAlertSystem({
     const sequence = active;
     active = null;
     root.removeEventListener('keydown', handleKeydown, true);
+    root.removeEventListener('pointerdown', handlePointerdown, true);
     sequence.overlay?.remove();
     sequence.resolve(Object.freeze({ status, ...detail }));
   }
@@ -267,8 +397,14 @@ export function createAlertSystem({
     if (startIndex < 0) throw new RangeError(`Unknown alert startId "${options.startId}".`);
     if (active) finish('replaced');
     return new Promise((resolve) => {
-      active = { steps, index: startIndex, overlay: null, resolve };
+      active = {
+        steps,
+        index: startIndex,
+        overlay: null,
+        resolve,
+      };
       root.addEventListener('keydown', handleKeydown, true);
+      root.addEventListener('pointerdown', handlePointerdown, true);
       renderCurrent();
     });
   }
@@ -298,6 +434,17 @@ export function createAlertSystem({
     else cancel('escape');
   }
 
+  function handlePointerdown(event) {
+    if (!active) return;
+    const step = active.steps[active.index];
+    if (step.navigation.outside !== 'next') return;
+    const panel = active.overlay?.querySelector('.alert-system-box');
+    if (panel?.contains(event.target)) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    goNext();
+  }
+
   function renderCurrent() {
     if (!active) return;
     active.overlay?.remove();
@@ -306,6 +453,9 @@ export function createAlertSystem({
     const box = resolveAlertGeometry(step.box, viewportMode);
     const overlay = document.createElement('div');
     overlay.className = `alert-system-overlay is-${step.mode}`;
+    if (step.navigation.outside === 'next') {
+      overlay.classList.add('is-outside-dismissable');
+    }
     overlay.dataset.alertId = step.id;
     overlay.append(makeShade(step, viewportMode));
 

@@ -50,6 +50,11 @@ class FakeElement {
     this.focused = true;
   }
 
+  contains(target) {
+    if (this === target) return true;
+    return this.children.some((child) => child.contains(target));
+  }
+
   querySelector(selector) {
     return this.querySelectorAll(selector)[0] ?? null;
   }
@@ -93,7 +98,12 @@ test('alert definitions normalize JSON-friendly copy and defaults', () => {
     { text: 'Important line', style: 'emphasis' },
   ]);
   assert.equal(step.mode, 'modal');
-  assert.deepEqual(step.navigation, { back: true, next: true, escape: 'none' });
+  assert.deepEqual(step.navigation, {
+    back: true,
+    next: true,
+    escape: 'none',
+    outside: 'none',
+  });
 });
 
 test('alert body supports reusable text styles and keyed graphics', () => {
@@ -233,4 +243,31 @@ test('guided shade cuts holes while modal shade covers the viewport', async (con
   assert.deepEqual(await modal, { status: 'replaced' });
   system.cancel();
   await guided;
+});
+
+test('outside press advances when the current step opts in', async (context) => {
+  const previousDocument = globalThis.document;
+  globalThis.document = {
+    createElement: (tagName) => new FakeElement(tagName),
+    createElementNS: (_namespace, tagName) => new FakeElement(tagName),
+  };
+  context.after(() => { globalThis.document = previousDocument; });
+  const root = new FakeElement('main');
+  const system = createAlertSystem({ root, mountSprites() {} });
+  const result = system.show([validStep({
+    navigation: { outside: 'next' },
+  })]);
+  const event = {
+    target: root,
+    preventDefaultCalled: false,
+    stopImmediatePropagationCalled: false,
+    preventDefault() { this.preventDefaultCalled = true; },
+    stopImmediatePropagation() { this.stopImmediatePropagationCalled = true; },
+  };
+
+  root.listeners.get('pointerdown')(event);
+
+  assert.equal(event.preventDefaultCalled, true);
+  assert.equal(event.stopImmediatePropagationCalled, true);
+  assert.deepEqual(await result, { status: 'completed' });
 });

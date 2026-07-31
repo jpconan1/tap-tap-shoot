@@ -1,6 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { chooseRivalMove, RIVAL_DIFFICULTIES } from '../src/engine/rivalAi.js';
+import {
+  chooseRivalMove,
+  getRivalMoveDistribution,
+  RIVAL_DIFFICULTIES,
+} from '../src/engine/rivalAi.js';
 import {
   chooseRpsPokerNashMove,
   getRpsPokerNashDistribution,
@@ -35,6 +39,10 @@ test('RPS Poker policy finds the current information set and translates actions'
 
 test('hard RPS Poker bot samples its JSON Nash distribution', () => {
   const state = pokerState();
+  const distribution = getRivalMoveDistribution(state, RIVAL_DIFFICULTIES.hard);
+  assert.ok(distribution.some(({ moveId }) => moveId === 'bet:1'));
+  assert.ok(distribution.some(({ moveId }) => moveId === 'check'));
+  assert.ok(Math.abs(distribution.reduce((sum, entry) => sum + entry.probability, 0) - 1) < 1e-12);
   assert.equal(chooseRivalMove(state, () => 0, RIVAL_DIFFICULTIES.hard), 'bet:1');
   assert.equal(chooseRivalMove(state, () => 0.99, RIVAL_DIFFICULTIES.hard), 'check');
 });

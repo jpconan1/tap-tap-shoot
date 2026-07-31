@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { createRoundState, getPlayerLegalMoves } from '../src/engine/gameState.js';
-import { resolveMatchTurn, startNextRound } from '../src/engine/matchEngine.js';
+import { resolveMatchTurn, startNewGame, startNextRound } from '../src/engine/matchEngine.js';
 import { getVariantTargetRoundWins, VARIANT_IDS } from '../src/engine/moves.js';
 
 const variantId = VARIANT_IDS.kitchenSink;
@@ -25,6 +25,21 @@ test('Kitchen Sink tracks HP, bars, and center position', () => {
 
   resolved = turn(state, 'charge', 'bait');
   assert.equal(resolved.turn.state.players.p1.resource, 1);
+});
+
+test('Kitchen Sink neutral Strike damages Charge and denies its bar gain', () => {
+  const state = turn(createRoundState({ variantId }), 'strike', 'charge').turn.state;
+  assert.equal(state.hp.p2, 2);
+  assert.equal(state.players.p2.resource, 0);
+  assert.equal(state.position, 'neutral');
+});
+
+test('Kitchen Sink Center Advance damages Corner Bait and holds position', () => {
+  const state = createRoundState({ variantId });
+  state.position = 'p2-center';
+  const resolved = turn(state, 'bait', 'advance').turn.state;
+  assert.equal(resolved.hp.p1, 2);
+  assert.equal(resolved.position, 'p2-center');
 });
 
 test('Kitchen Sink punish grants one-sided free move', () => {
@@ -73,6 +88,17 @@ test('entering Kitchen Sink from another variant starts at zero bars', () => {
   });
   assert.equal(kitchen.roundState.players.p1.resource, 0);
   assert.equal(kitchen.roundState.players.p2.resource, 0);
+});
+
+test('starting a new Kitchen Sink game resets carried bars', () => {
+  const finished = createRoundState({ variantId });
+  finished.players.p1.resource = 3;
+  finished.players.p2.resource = 2;
+
+  const next = startNewGame({ variantId });
+
+  assert.equal(next.roundState.players.p1.resource, 0);
+  assert.equal(next.roundState.players.p2.resource, 0);
 });
 
 function turn(state, p1Move, p2Move) {

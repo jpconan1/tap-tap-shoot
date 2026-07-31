@@ -37,7 +37,8 @@
         { "key": "down-left-red-arrow", "kind": "slot", "x": 353, "y": 380, "width": 64, "height": 64 },
         { "key": "right-red-arrow", "kind": "slot", "x": 448, "y": 448, "width": 64, "height": 64 },
         { "key": "rpg-dex-str-arrow", "kind": "slot", "x": 543, "y": 380, "width": 64, "height": 64 },
-        { "key": "rules-button", "kind": "slot", "x": 8, "y": 474, "width": 112, "height": 56 }
+        { "key": "rules-button", "kind": "slot", "x": 8, "y": 474, "width": 112, "height": 56 },
+        { "key": "cpu-odds", "kind": "slot", "x": 810, "y": 382, "width": 138, "height": 132 }
       ],
       "portraitElements": [
         { "key": "p1-info", "kind": "slot", "x": 14, "y": 12, "width": 190, "height": 72 },
@@ -61,7 +62,8 @@
         { "key": "dex-button", "kind": "slot", "x": 285, "y": 750, "width": 220, "height": 110 },
         { "key": "down-left-red-arrow", "kind": "slot", "x": 130, "y": 690, "width": 64, "height": 64 },
         { "key": "right-red-arrow", "kind": "slot", "x": 238, "y": 785, "width": 64, "height": 64 },
-        { "key": "rpg-dex-str-arrow", "kind": "slot", "x": 346, "y": 690, "width": 64, "height": 64 }
+        { "key": "rpg-dex-str-arrow", "kind": "slot", "x": 346, "y": 690, "width": 64, "height": 64 },
+        { "key": "cpu-odds", "kind": "slot", "x": 388, "y": 430, "width": 138, "height": 132 }
       ]
     },
     "playing.move": {
@@ -73,9 +75,12 @@
         { "key": "dex-button", "hidden": true },
         { "key": "sword-button", "kind": "slot", "x": 385, "y": 326, "width": 190, "height": 95 },
         { "key": "staff-button", "kind": "slot", "x": 278, "y": 426, "width": 190, "height": 95 },
-        { "key": "bow-button", "kind": "slot", "x": 492, "y": 426, "width": 190, "height": 95 }
+        { "key": "bow-button", "kind": "slot", "x": 492, "y": 426, "width": 190, "height": 95 },
+        { "key": "cpu-odds", "kind": "slot", "x": 810, "y": 382, "width": 138, "height": 132 }
       ],
-      "portraitElements": []
+      "portraitElements": [
+        { "key": "cpu-odds", "kind": "slot", "x": 388, "y": 430, "width": 138, "height": 132 }
+      ]
     },
     "round.game-over": {
       "name": "Game over",

@@ -4,7 +4,7 @@ export function createRpsDragonSpearVariant({ id, moves }) {
   const variant = {
     id,
     label: 'RPS Dragon Spear',
-    isRanked: false,
+    isRanked: true,
     targetRoundWins: 5,
     moveIds: Object.freeze(['dragon', 'rock', 'paper', 'scissors', 'spear']),
     moves,
