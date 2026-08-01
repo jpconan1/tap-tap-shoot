@@ -13,7 +13,10 @@ import {
 } from '../src/engine/moves.js';
 import { shouldAutoAdvanceRound } from '../src/engine/matchRules.js';
 import {
+  decideRpsPokerCommand,
+  getRpsPokerLegalCommands,
   normalizeRpsPokerCommand,
+  pokerCommandFromMove,
   pokerMoveFromCommand,
 } from '../src/engine/variants/rpsPokerDomain.js';
 import { getRpsPokerShowdownWinner } from '../src/engine/variants/rpsPokerRules.js';
@@ -847,6 +850,8 @@ export class RankedDuelService {
     room.pendingMoves = createPendingMoves();
     room.pendingContinues = createPendingContinues();
     room.pendingNextVariant = false;
+    room.pokerEvents = [];
+    room.pokerTransition = null;
     room.readyPlayerKey = null;
     room.waitingPlayerKey = null;
     room.noContestWaitingAt = this.now() + this.noSelectionGraceMs;
@@ -866,6 +871,10 @@ export class RankedDuelService {
     const room = this.rooms.get(session.roomId);
 
     if (!room || room.phase !== 'choosing') {
+      return;
+    }
+    if (room.variantId === 'rpsPoker') {
+      this.submitPokerCommand(session, pokerCommandFromMove(moveId), revision);
       return;
     }
     if (revision !== null && revision < (room.decisionRevision ?? room.revision)) {
@@ -912,17 +921,103 @@ export class RankedDuelService {
 
   submitPokerCommand(session, command, revision = null) {
     const room = this.rooms.get(session.roomId);
-    if (!room || room.variantId !== 'rpsPoker') {
+    if (!room || room.variantId !== 'rpsPoker' || room.phase !== 'choosing') {
       this.send(session, 'error', { message: 'not an RPS Poker match' });
       return;
     }
+    if (revision !== null && revision < (room.decisionRevision ?? room.revision)) {
+      this.send(session, 'error', { message: 'stale poker command' });
+      return;
+    }
     const normalized = normalizeRpsPokerCommand(command);
-    const moveId = pokerMoveFromCommand(normalized);
-    if (!moveId) {
+    if (!normalized) {
       this.send(session, 'error', { message: 'invalid poker command' });
       return;
     }
-    this.submitMove(session, moveId, revision);
+    const playerKey = this.getPlayerKey(room, session);
+    const previousState = structuredClone(room.roundState);
+    const resolved = decideRpsPokerCommand(room.roundState, playerKey, normalized);
+    if (!resolved.ok) {
+      this.send(session, 'error', { message: resolved.error });
+      return;
+    }
+
+    room.roundState = {
+      ...resolved.state,
+      status: resolved.state.winner ? 'finished' : 'playing',
+      winner: resolved.state.winner ?? null,
+    };
+    room.pokerEvents = structuredClone(resolved.events);
+    this.send(session, 'pokerCommandAccepted', { command: normalized });
+
+    if (previousState.phase === 'lock' && room.roundState.phase === 'lock') {
+      this.clearRoomTimer(room);
+      room.readyPlayerKey = playerKey;
+      room.waitingPlayerKey = playerKey === 'p1' ? 'p2' : 'p1';
+      room.noContestWaitingAt = null;
+      room.noContestCountdownAt = null;
+      room.deadlineAt = this.now() + RPS_POKER_TURN_MS;
+      this.broadcastRoom(room);
+      this.setRoomTimer(room, () => this.handleChoosingDeadline(room), RPS_POKER_TURN_MS);
+      return;
+    }
+
+    this.finishPokerCommand(room, previousState, normalized);
+  }
+
+  finishPokerCommand(room, previousState, command) {
+    this.clearRoomTimer(room);
+    const actingPlayer = previousState.phase === 'betting'
+      ? previousState.actor
+      : Object.keys(room.roundState.locked).find((key) => !previousState.locked[key]);
+    const firstLocker = previousState.phase === 'lock'
+      ? Object.keys(previousState.locked)[0] ?? null
+      : null;
+    room.readyPlayerKey = null;
+    room.waitingPlayerKey = null;
+    room.noContestWaitingAt = null;
+    room.noContestCountdownAt = null;
+    room.pokerTransition = createPokerTransitionFromEvents(
+      previousState,
+      room.roundState,
+      room.pokerEvents,
+      command,
+      firstLocker,
+    );
+    room.phase = 'revealed';
+    room.analyticsTurnCount += 1;
+    room.analyticsRoundTurnNumber += 1;
+
+    const moveId = pokerMoveFromCommand(command);
+    this.track('recordTurn', {
+      matchId: room.id,
+      variantGameNumber: room.analyticsGameNumber,
+      roundNumber: room.analyticsRoundNumber,
+      turnNumber: room.analyticsRoundTurnNumber,
+      variantId: room.variantId,
+      p1Move: actingPlayer === 'p1' ? moveId : null,
+      p2Move: actingPlayer === 'p2' ? moveId : null,
+      roundWinnerSlot: room.roundState.winner ?? null,
+      recordedAt: new Date(this.now()).toISOString(),
+    });
+
+    if (room.roundState.winner) {
+      room.roundWins = {
+        ...room.roundWins,
+        [room.roundState.winner]: room.roundWins[room.roundState.winner] + 1,
+      };
+    }
+
+    this.broadcastRoom(room, {}, 'turn-revealed');
+    const revealDelay = getPokerPresentationDelay(room.pokerTransition);
+    this.setRoomTimer(room, () => {
+      const gameWinnerKey = getGameWinner(room.roundWins, room.variantId);
+      if (gameWinnerKey) {
+        this.finishVariantGame(room, gameWinnerKey);
+        return;
+      }
+      this.beginChoosing(room);
+    }, revealDelay);
   }
 
   beginReadyWaiting(room, readyPlayerKey) {
@@ -945,6 +1040,10 @@ export class RankedDuelService {
     }
     if (room.variantId === 'rpsPoker' && room.roundState.phase === 'betting') {
       this.finishRoundByTimeout(room, room.roundState.actor);
+      return;
+    }
+    if (room.variantId === 'rpsPoker' && room.roundState.phase === 'lock' && room.waitingPlayerKey) {
+      this.finishRoundByTimeout(room, room.waitingPlayerKey);
       return;
     }
 
@@ -1446,7 +1545,7 @@ export class RankedDuelService {
       pokerTransition: room.phase === 'revealed' && room.pokerTransition
         ? structuredClone(room.pokerTransition)
         : null,
-      pokerEvents: room.phase === 'revealed' && room.variantId === 'rpsPoker'
+      pokerEvents: room.variantId === 'rpsPoker'
         ? getPublicPokerEvents(room.pokerEvents, playerKey)
         : [],
       winner: room.winner,
@@ -1458,7 +1557,7 @@ export class RankedDuelService {
           displayName: room.players.p1.displayName,
           resource: getPlayerResource(room.roundState.players.p1),
           bullets: getPlayerResource(room.roundState.players.p1),
-          legalMoves: room.phase === 'choosing' ? getPlayerLegalMoves(room.roundState, 'p1') : [],
+          legalMoves: getPublicLegalMoves(room, 'p1'),
           canContinue: room.phase === 'roundOver' && !room.pendingContinues.p1,
           rating: isRanked ? room.players.p1.player.rating : null,
         },
@@ -1466,7 +1565,7 @@ export class RankedDuelService {
           displayName: room.players.p2.displayName,
           resource: getPlayerResource(room.roundState.players.p2),
           bullets: getPlayerResource(room.roundState.players.p2),
-          legalMoves: room.phase === 'choosing' ? getPlayerLegalMoves(room.roundState, 'p2') : [],
+          legalMoves: getPublicLegalMoves(room, 'p2'),
           canContinue: room.phase === 'roundOver' && !room.pendingContinues.p2,
           rating: isRanked ? room.players.p2.player.rating : null,
         },
@@ -1552,6 +1651,12 @@ function getPublicVariantState(roundState, playerKey, revealPokerLocks = false) 
   return publicState;
 }
 
+function getPublicLegalMoves(room, playerKey) {
+  if (room.phase !== 'choosing') return [];
+  if (room.variantId !== 'rpsPoker') return getPlayerLegalMoves(room.roundState, playerKey);
+  return getRpsPokerLegalCommands(room.roundState, playerKey).map(pokerMoveFromCommand);
+}
+
 function createPokerTransition(previous, next, moves, readyPlayerKey = null) {
   const actor = previous.phase === 'betting' ? previous.actor : null;
   const encodedAction = actor ? moves[actor] : null;
@@ -1576,6 +1681,35 @@ function createPokerTransition(previous, next, moves, readyPlayerKey = null) {
     payoutWinner: action === 'fold'
       ? (actor === 'p1' ? 'p2' : 'p1')
       : isShowdown ? getRpsPokerShowdownWinner(previous.locked, previous.community) : null,
+    community: previous.community ?? next.community ?? null,
+    winner: next.winner ?? null,
+  };
+}
+
+function createPokerTransitionFromEvents(previous, next, events, command, firstLocker = null) {
+  const types = new Set(events.map((event) => event.type));
+  const kind = types.has('COMMUNITY_REVEALED')
+    ? 'lock-complete'
+    : types.has('PLAYER_FOLDED')
+      ? 'fold'
+      : types.has('CARDS_REVEALED')
+        ? 'showdown'
+        : types.has('BET_RAISED')
+          ? 'raise'
+          : types.has('BET_PLACED')
+            ? 'bet'
+            : 'check';
+  const payout = events.find((event) => event.type === 'POT_AWARDED');
+  const revealed = events.find((event) => event.type === 'CARDS_REVEALED');
+  return {
+    kind,
+    actor: previous.phase === 'betting' ? previous.actor : null,
+    firstLocker,
+    action: pokerMoveFromCommand(command),
+    previous: publicPokerTransitionState(previous),
+    next: publicPokerTransitionState(next),
+    revealedLocks: revealed?.cards ? structuredClone(revealed.cards) : null,
+    payoutWinner: payout?.player ?? null,
     community: previous.community ?? next.community ?? null,
     winner: next.winner ?? null,
   };

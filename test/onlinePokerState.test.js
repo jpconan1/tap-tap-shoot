@@ -3,6 +3,7 @@ import test from 'node:test';
 
 import {
   getOnlinePokerAnimationKind,
+  getOnlinePokerPlayerId,
   isCompleteOnlinePokerState,
   localizeOnlinePokerEvents,
   localizeOnlinePokerTransition,
@@ -68,4 +69,7 @@ test('online Poker events select animations and localize player identities', () 
   ]);
   assert.equal(getOnlinePokerAnimationKind(events), 'bet');
   assert.equal(getOnlinePokerAnimationKind([{ type: 'CARDS_REVEALED' }]), 'showdown');
+  assert.equal(getOnlinePokerPlayerId('p1', 'p1'), 'p1');
+  assert.equal(getOnlinePokerPlayerId('p1', 'p2'), 'p2');
+  assert.equal(getOnlinePokerPlayerId('p2', 'p2'), 'p1');
 });

@@ -67,6 +67,16 @@ test('online Poker conceals the opposing lock and resolves actor-only betting', 
     type: 'submitPokerCommand',
     command: { type: 'LOCK_CARD', card: 'rock' },
   });
+  assert.deepEqual(room.roundState.locked, { p1: 'rock' });
+  assert.equal(room.readyPlayerKey, 'p1');
+  assert.deepEqual(service.getPublicRoomState(room, 'p1').variantState.locked, { p1: 'rock' });
+  assert.deepEqual(service.getPublicRoomState(room, 'p2').variantState.locked, {});
+  assert.deepEqual(service.getPublicRoomState(room, 'p1').players.p1.legalMoves, []);
+  assert.deepEqual(service.getPublicRoomState(room, 'p2').players.p2.legalMoves.sort(), [
+    'paper',
+    'rock',
+    'scissors',
+  ]);
   service.receive(p2.session, {
     type: 'submitPokerCommand',
     command: { type: 'LOCK_CARD', card: 'paper' },
@@ -80,7 +90,6 @@ test('online Poker conceals the opposing lock and resolves actor-only betting', 
   assert.equal(p1Reveal.pokerTransition.firstLocker, 'p1');
   assert.equal(p1Reveal.pokerTransition.revealedLocks, null);
   assert.deepEqual(p1Reveal.pokerEvents.map((event) => event.type), [
-    'CARD_LOCKED',
     'OPPONENT_CARD_LOCKED',
     'BOTH_CARDS_LOCKED',
     'COMMUNITY_REVEALED',
@@ -89,7 +98,7 @@ test('online Poker conceals the opposing lock and resolves actor-only betting', 
 
   service.beginChoosing(room);
   service.receive(p2.session, { type: 'submitMove', moveId: 'wait' });
-  assert.equal(lastMessage(p2).message, 'not your turn');
+  assert.equal(lastMessage(p2).message, 'invalid poker command');
 
   service.receive(p1.session, { type: 'submitMove', moveId: 'check' });
   assert.equal(room.phase, 'revealed');
@@ -109,7 +118,7 @@ test('online Poker rejects stale commands and reveals locks only at showdown', a
     moveId: 'rock',
     revision: room.revision - 1,
   });
-  assert.equal(lastMessage(p1).message, 'stale move');
+  assert.equal(lastMessage(p1).message, 'stale poker command');
 
   service.receive(p1.session, { type: 'submitMove', moveId: 'rock' });
   service.receive(p2.session, { type: 'submitMove', moveId: 'paper' });

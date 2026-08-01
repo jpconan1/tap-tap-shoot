@@ -35,6 +35,13 @@ export function getOnlinePokerAnimationKind(events, fallbackKind = null) {
   return fallbackKind;
 }
 
+export function getOnlinePokerPlayerId(playerKey, perspectiveKey) {
+  if (!PLAYER_KEYS.includes(playerKey)) return null;
+  return perspectiveKey === 'p2'
+    ? playerKey === 'p1' ? 'p2' : 'p1'
+    : playerKey;
+}
+
 function isPlayerNumberMap(value) {
   return value
     && typeof value === 'object'

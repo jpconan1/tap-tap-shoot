@@ -61,11 +61,13 @@ import { LOCAL_FLOW_SEQUENCE } from './presentation/localFlowSequences.js';
 import { interpretOnlineSnapshot } from './presentation/onlineFlowSequences.js';
 import {
   getOnlinePokerAnimationKind,
+  getOnlinePokerPlayerId,
   isCompleteOnlinePokerState,
   localizeOnlinePokerEvents,
   localizeOnlinePokerTransition,
 } from './onlinePokerState.js';
-import { GameFlowDirector } from './presentation/gameFlowDirector.js';
+import { GameplayAnimationDirector, waitForAnimation } from './presentation/gameplayAnimationDirector.js';
+import { buildGameplayTimeline, normalizeOnlinePokerAnimation } from './presentation/gameplayTimelines.js';
 import {
   getRpsPokerCommunityPresentation,
   getRpsPokerIdlePresentation,
@@ -408,6 +410,7 @@ let ignoredRankedMatchId = null;
 let matchmakingStatus = 'idle';
 const rankedUpdateQueue = new RankedUpdateQueue();
 let pendingSuperAnimation = null;
+let gameplayAnimationRevision = 0;
 let isApplyingRankedSnapshot = false;
 let rankedReadyWaiting = null;
 let rankedReadyWaitingTimer = null;
@@ -640,11 +643,25 @@ const localFlowDirector = new PresentationFlowDirector({
     openingCues: () => beginOpeningCues(),
   },
 });
-const gameFlowDirector = new GameFlowDirector({
-  playSuper: (animation) => playSuperAnimation(animation, loopToken),
-  waitBeats: (beats) => waitBeats(beats, loopToken),
-  showResult: showDirectedLocalResult,
-  advanceRound: advanceLocalRoundPreservingReveal,
+const gameFlowDirector = new GameplayAnimationDirector({
+  buildTimeline: buildGameplayTimeline,
+  effects: {
+    playSuper: (beat) => playSuperAnimation(beat.animation, loopToken),
+    wait: (beat, _transition, signal) => waitForAnimation(beat.beats * BEAT_MS, signal),
+    showResult: (beat) => showDirectedLocalResult(beat.level),
+    advanceRound: (beat) => advanceLocalRoundPreservingReveal({ preserveReveal: beat.preserveReveal }),
+    pokerCommunity: (_beat, animation, signal) => playOnlineRpsPokerTransition(animation.after.snapshot, animation.after.previousPhase, signal),
+    pokerBet: (_beat, animation, signal) => animation.after.mode === 'local'
+      ? playLocalRpsPokerBettingSelection(animation.after.token)
+      : playOnlineRpsPokerTransition(animation.after.snapshot, animation.after.previousPhase, signal),
+    pokerFold: (_beat, animation, signal) => playOnlineRpsPokerTransition(animation.after.snapshot, animation.after.previousPhase, signal),
+    pokerShowdown: (_beat, animation, signal) => playOnlineRpsPokerTransition(animation.after.snapshot, animation.after.previousPhase, signal),
+    pokerLocked: (_beat, animation, signal) => animation.after.mode === 'local'
+      ? playLocalRpsPokerLockSelection(animation.after.token)
+      : playOnlineRpsPokerTransition(animation.after.snapshot, animation.after.previousPhase, signal),
+    pokerPayout: (_beat, animation, signal) => playOnlineRpsPokerTransition(animation.after.snapshot, animation.after.previousPhase, signal),
+    pokerDeal: (_beat, animation, signal) => playOnlineRpsPokerTransition(animation.after.snapshot, animation.after.previousPhase, signal),
+  },
 });
 
 const isRulesSandbox = new URLSearchParams(window.location.search).get('rules-sandbox') === '1';
@@ -4213,7 +4230,17 @@ async function processRankedSnapshot(snapshot, transition = null) {
     && (snapshot.currentVariantId ?? snapshot.variantId) === VARIANT_IDS.rpsPoker
     && snapshot.pokerTransition
   ) {
-    await playOnlineRpsPokerTransition(snapshot, previousPhase);
+    const localizedTransition = localizeOnlinePokerTransition(snapshot.pokerTransition, snapshot.playerKey);
+    const localizedEvents = localizeOnlinePokerEvents(snapshot.pokerEvents, snapshot.playerKey);
+    await gameFlowDirector.enqueue(normalizeOnlinePokerAnimation({
+      id: `ranked:${snapshot.revision}:${transition.transitionId}`,
+      revision: snapshot.revision,
+      transition: localizedTransition,
+      events: localizedEvents,
+      before: localizedTransition?.previous ?? null,
+      after: { snapshot, previousPhase, state: localizedTransition?.next ?? null },
+      perspective: snapshot.playerKey,
+    }));
     return;
   }
 
@@ -4260,7 +4287,8 @@ async function wipeToRankedSnapshot(snapshot, previousPhase) {
   }
 }
 
-async function playOnlineRpsPokerTransition(snapshot, previousPhase) {
+async function playOnlineRpsPokerTransition(snapshot, previousPhase, signal = null) {
+  const previousRankedSnapshot = rankedSnapshot;
   const transition = localizeOnlinePokerTransition(snapshot.pokerTransition, snapshot.playerKey);
   if (!transition) {
     commitRankedSnapshot(snapshot, previousPhase);
@@ -4273,8 +4301,8 @@ async function playOnlineRpsPokerTransition(snapshot, previousPhase) {
   isTransitioning = true;
   commitRankedSnapshot(snapshot, previousPhase);
   const previous = transition.previous;
-  const next = transition.next;
-  if (!previous || !next) {
+  const nextState = transition.next ?? state;
+  if (!previous || !nextState) {
     clearRpsPokerPresentationState();
     isTransitioning = false;
     render();
@@ -4282,7 +4310,12 @@ async function playOnlineRpsPokerTransition(snapshot, previousPhase) {
   }
 
   if (animationKind === 'lock-complete') {
-    const earlyPlayerId = transition.firstLocker === 'p2' ? 'p2' : 'p1';
+    const earlyPlayerId = previousRankedSnapshot?.readyPlayerKey
+      ? getOnlinePokerPlayerId(
+        previousRankedSnapshot.readyPlayerKey,
+        previousRankedSnapshot.playerKey,
+      )
+      : transition.firstLocker === 'p2' ? 'p2' : 'p1';
     pokerReadyCards = {
       earlyPlayerId,
       latePlayerId: earlyPlayerId === 'p1' ? 'p2' : 'p1',
@@ -4290,23 +4323,23 @@ async function playOnlineRpsPokerTransition(snapshot, previousPhase) {
     };
     pokerTurnActorOverride = 'center';
     render();
-    await waitMsWithoutToken(RPS_POKER_READY_DURATION_MS);
+    if (!await waitForAnimation(RPS_POKER_READY_DURATION_MS, signal)) return;
     pokerReadyCards.animateLate = false;
     stagePresentation = getRpsPokerCommunityPresentation(transition.community, true);
     playDelayedRpsPokerFlipAudio();
     render();
-    await waitMsWithoutToken(RPS_POKER_FLIP_DURATION_MS);
+    if (!await waitForAnimation(RPS_POKER_FLIP_DURATION_MS, signal)) return;
     stagePresentation = getRpsPokerCommunityPresentation(transition.community, false);
-    pokerTurnTransition = { from: 'center', to: next.actor };
+    pokerTurnTransition = { from: 'center', to: nextState.actor };
     render();
-    await waitMsWithoutToken(RPS_POKER_TURN_CENTER_DURATION_MS);
+    if (!await waitForAnimation(RPS_POKER_TURN_CENTER_DURATION_MS, signal)) return;
   } else if (['bet', 'raise', 'check'].includes(animationKind)) {
     if (animationKind === 'check') playOneShotAudio(RPS_POKER_CHECK_AUDIO);
     else playOneShotAudio(RPS_POKER_CHIP_AUDIO);
     stagePresentation = getRpsPokerCommunityPresentation(transition.community, false);
-    pokerTurnTransition = { from: previous.actor, to: next.actor };
+    pokerTurnTransition = { from: previous.actor, to: nextState.actor };
     render();
-    await waitMsWithoutToken(RPS_POKER_TURN_SWING_DURATION_MS);
+    if (!await waitForAnimation(RPS_POKER_TURN_SWING_DURATION_MS, signal)) return;
   } else if (animationKind === 'fold' || animationKind === 'showdown') {
     const counts = getRpsPokerPotCounts(previous);
     pokerChipTransfer = {
@@ -4329,17 +4362,18 @@ async function playOnlineRpsPokerTransition(snapshot, previousPhase) {
       };
     if (animationKind === 'showdown') playDelayedRpsPokerFlipAudio();
     render();
-    await waitMsWithoutToken(RPS_POKER_FLIP_DURATION_MS);
+    if (!await waitForAnimation(RPS_POKER_FLIP_DURATION_MS, signal)) return;
     if (pokerReadyCards) pokerReadyCards.animateReveal = false;
-    await animateOnlinePokerPayout(transition.payoutWinner);
+    await animateOnlinePokerPayout(transition.payoutWinner, signal);
+    if (signal?.aborted) return;
 
     if (transition.winner) {
       pokerChipTransfer = null;
       pokerReadyCards = null;
       stagePresentation = getRpsPokerWinnerPresentation(transition.winner);
       render();
-      await waitMsWithoutToken(2 * BEAT_MS);
-    } else if (next.phase === 'lock') {
+      if (!await waitForAnimation(2 * BEAT_MS, signal)) return;
+    } else if (nextState.phase === 'lock') {
       pokerChipTransfer = null;
       pokerReadyCards = null;
       await playRpsPokerDeal({
@@ -4349,7 +4383,7 @@ async function playOnlineRpsPokerTransition(snapshot, previousPhase) {
           render();
         },
         onDeal: () => playOneShotAudio(RPS_POKER_DEAL_AUDIO),
-        waitMilliseconds: waitMsWithoutToken,
+        waitMilliseconds: (duration) => waitForAnimation(duration, signal),
       });
       stagePresentation = getRpsPokerIdlePresentation();
     }
@@ -4361,7 +4395,7 @@ async function playOnlineRpsPokerTransition(snapshot, previousPhase) {
   render();
 }
 
-async function animateOnlinePokerPayout(winner = null) {
+async function animateOnlinePokerPayout(winner = null, signal = null) {
   if (!pokerChipTransfer) return;
   let remaining = pokerChipTransfer.counts.p1 + pokerChipTransfer.counts.p2;
   let recipient = 'p1';
@@ -4373,7 +4407,7 @@ async function animateOnlinePokerPayout(winner = null) {
     remaining -= 1;
     playOneShotAudio(RPS_POKER_CHIP_AUDIO);
     render();
-    await waitMsWithoutToken(110);
+    if (!await waitForAnimation(110, signal)) return;
   }
 }
 
@@ -4983,7 +5017,7 @@ async function resolvePlayerSelection() {
     render();
     const animation = pendingSuperAnimation;
     pendingSuperAnimation = null;
-    await gameFlowDirector.reveal({
+    await playDirectedReveal({
       variantId: getCurrentVariantId(),
       superAnimation: animation,
       roundFinished: state.status === 'finished',
@@ -4992,7 +5026,20 @@ async function resolvePlayerSelection() {
   }
 }
 
-async function resolveRpsPokerBettingSelection(token) {
+function resolveRpsPokerBettingSelection(token) {
+  gameplayAnimationRevision += 1;
+  return gameFlowDirector.play({
+    id: `local-poker-bet:${gameplayAnimationRevision}`,
+    revision: gameplayAnimationRevision,
+    variantId: VARIANT_IDS.rpsPoker,
+    events: [{ type: 'poker.bet' }],
+    before: state,
+    after: { mode: 'local', token },
+    perspective: 'p1',
+  });
+}
+
+async function playLocalRpsPokerBettingSelection(token) {
   const previousActor = state.actor;
   const action = String(localTurnController.choice?.moves?.[previousActor] ?? '').split(':')[0];
   if (previousActor === 'p2' && ['bet', 'call', 'raise'].includes(action)) {
@@ -5266,7 +5313,20 @@ async function showRpsPokerGameResult(token) {
   await showDirectedLocalResult(getLocalResultLevel());
 }
 
-async function resolveRpsPokerLockSelection(token) {
+function resolveRpsPokerLockSelection(token) {
+  gameplayAnimationRevision += 1;
+  return gameFlowDirector.play({
+    id: `local-poker-lock:${gameplayAnimationRevision}`,
+    revision: gameplayAnimationRevision,
+    variantId: VARIANT_IDS.rpsPoker,
+    events: [{ type: 'turn.locked' }],
+    before: state,
+    after: { mode: 'local', token },
+    perspective: 'p1',
+  });
+}
+
+async function playLocalRpsPokerLockSelection(token) {
   const choice = localTurnController.choice;
   if (!choice?.readyPlayerId || !choice.waitingPlayerId) return;
 
@@ -5445,9 +5505,22 @@ async function playSuperAnimation(animation, token) {
 async function playPendingSuperAnimation(token) {
   const animation = pendingSuperAnimation;
   pendingSuperAnimation = null;
-  await gameFlowDirector.reveal({
+  await playDirectedReveal({
     variantId: getCurrentVariantId(),
     superAnimation: animation,
+  });
+}
+
+function playDirectedReveal({ variantId, superAnimation = null, roundFinished = false, resultLevel = 'round' }) {
+  gameplayAnimationRevision += 1;
+  return gameFlowDirector.play({
+    id: `local:${gameplayAnimationRevision}`,
+    revision: gameplayAnimationRevision,
+    variantId,
+    events: superAnimation ? [{ type: 'super.played', animation: superAnimation }] : [],
+    before: null,
+    after: { roundFinished, resultLevel },
+    perspective: 'p1',
   });
 }
 
