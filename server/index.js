@@ -132,9 +132,13 @@ export function createPlayerStore({ env = process.env, root = DEFAULT_ROOT } = {
   }
 
   if (env.NODE_ENV === 'production') {
-    return new SupabasePlayerStore({
+    return new FallbackPlayerStore(new SupabasePlayerStore({
       url: supabaseUrl,
       secretKey: supabaseSecretKey,
+    }), localStore, {
+      onError(error) {
+        console.error('Supabase player store failed; using local ranked player store:', getErrorMessage(error));
+      },
     });
   }
 
