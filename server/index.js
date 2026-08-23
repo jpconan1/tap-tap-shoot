@@ -74,10 +74,15 @@ export function createAnalyticsStore({ env = process.env } = {}) {
 export function attachRankedConnection(connection, { rankedDuel, guestTokens, authenticationMs = 10_000 }) {
   let session = null;
   let authenticating = false;
+  let messageQueue = Promise.resolve();
   const authenticationTimer = setTimeout(() => connection.close(), authenticationMs);
   authenticationTimer.unref?.();
 
-  connection.onMessage(async (raw) => {
+  connection.onMessage((raw) => {
+    messageQueue = messageQueue.then(() => handleMessage(raw));
+  });
+
+  async function handleMessage(raw) {
     try {
       const message = JSON.parse(raw);
 
@@ -103,7 +108,8 @@ export function attachRankedConnection(connection, { rankedDuel, guestTokens, au
       }));
       connection.close(authenticationFailed ? 1013 : 1011, authenticationFailed ? 'try again later' : 'server error');
     }
-  });
+  }
+
   connection.onClose(() => {
     clearTimeout(authenticationTimer);
     if (session) {

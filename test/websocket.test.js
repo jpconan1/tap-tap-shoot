@@ -103,6 +103,45 @@ test('origin enforcement rejects unknown websites but permits native clients wit
   assert.equal(policy.check(undefined).ok, true);
 });
 
+test('messages sent immediately after hello wait for authentication to finish', async () => {
+  let messageListener;
+  const received = [];
+  const connection = {
+    close() {},
+    onClose() {},
+    onMessage(listener) {
+      messageListener = listener;
+    },
+    send(raw) {
+      const message = JSON.parse(raw);
+      if (message.type === 'hello') {
+        messageListener(JSON.stringify({ type: 'enterLobby', displayName: 'JP' }));
+      }
+    },
+  };
+  const rankedDuel = {
+    async connect(client, playerId, token) {
+      client.send(JSON.stringify({ type: 'hello' }));
+      await Promise.resolve();
+      return { playerId, token };
+    },
+    receive(session, message) {
+      received.push({ session, message });
+    },
+  };
+
+  attachRankedConnection(connection, {
+    rankedDuel,
+    guestTokens: createGuestTokenService({ secret: TOKEN_SECRET }),
+  });
+  messageListener(JSON.stringify({ type: 'authenticateGuest', token: null }));
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.equal(received.length, 1);
+  assert.equal(received[0].message.type, 'enterLobby');
+  assert.equal(received[0].message.displayName, 'JP');
+});
+
 test('WebSocket clients can connect, queue, and receive match state', async (t) => {
   const service = new RankedDuelService({
     playerStore: new MemoryPlayerStore(),
